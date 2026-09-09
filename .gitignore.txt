@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+*.db
+*.sqlite3
+
+# Node / React Native / Expo
+node_modules/
+.expo/
+npm-debug.*
+yarn-error.*
+
+# OS
+.DS_Store
+Thumbs.db
