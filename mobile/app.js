@@ -6,7 +6,7 @@ import {
 import * as Location from 'expo-location';
 
 // Use your computer's LAN IP so your phone can reach FastAPI over Wi-Fi
-const API_BASE_URL = 'http://YOUR_LOCAL_IP:8000';
+const API_BASE_URL = 'http://192.168.86.34:8000';
 
 export default function App() {
   const [rigs, setRigs] = useState([]);
