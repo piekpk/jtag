@@ -1,34 +1,14 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean
-from pydantic import BaseModel
-from database import Base
+﻿from sqlalchemy import Column, Integer, String
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.declarative import declarative_base
 
-class RigModel(Base):
-    __tablename__ = "rigs"
+Base = declarative_base()
+
+class User(Base):
+    __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    handle = Column(String, unique=True, index=True)
-    owner_name = Column(String)
-    model_gen = Column(String)       # e.g., 'JL', 'JK', 'TJ'
-    trim = Column(String)            # e.g., 'Rubicon', 'Sahara', 'Willys'
-    tire_size = Column(Integer)      # e.g., 35, 37
-    has_winch = Column(Boolean, default=False)
-    radio_channel = Column(String)   # e.g., 'GMRS 16'
-    image_url = Column(String)
-    latitude = Column(Float)
-    longitude = Column(Float)
-
-# Pydantic Schemas
-class RigResponse(BaseModel):
-    id: int
-    handle: str
-    owner_name: str
-    model_gen: str
-    trim: str
-    tire_size: int
-    has_winch: bool
-    radio_channel: str
-    image_url: str
-    distance_miles: float
-
-    class Config:
-        from_attributes = True
+    email = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
+    profile_picture_url = Column(String, nullable=True)
+    settings = Column(JSONB, server_default='{}')

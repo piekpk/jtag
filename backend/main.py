@@ -1,55 +1,66 @@
-import math
-from typing import List
-from fastapi import FastAPI, Depends, Query
-from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
-from database import get_db
-from models import RigModel, RigResponse
+﻿import shutil
+import os
+from fastapi import FastAPI, UploadFile, File, Depends, HTTPException
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, Session
+from models import Base, User
+from schemas import UserProfileUpdate, UserProfileResponse
 
-app = FastAPI(title="TrailGrid Proximity Engine")
+# --- Database Setup ---
+SQLALCHEMY_DATABASE_URL = "sqlite:///./jtap.db" 
+engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base.metadata.create_all(bind=engine)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
-def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    R = 3958.8  # Earth's radius in miles
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = (math.sin(dlat / 2) ** 2 +
-         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
-         math.sin(dlon / 2) ** 2)
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    return R * c
+# --- App Setup ---
+app = FastAPI(title="Jtap Backend")
 
-@app.get("/api/rigs/nearby", response_model=List[RigResponse])
-def get_nearby_rigs(
-    lat: float = Query(..., description="Current latitude"),
-    lon: float = Query(..., description="Current longitude"),
-    db: Session = Depends(get_db)
-):
-    rigs = db.query(RigModel).all()
-    results = []
+# Mount the static files so the mobile app can request the images
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
-    for rig in rigs:
-        dist = haversine_distance(lat, lon, rig.latitude, rig.longitude)
-        results.append({
-            "id": rig.id,
-            "handle": rig.handle,
-            "owner_name": rig.owner_name,
-            "model_gen": rig.model_gen,
-            "trim": rig.trim,
-            "tire_size": rig.tire_size,
-            "has_winch": rig.has_winch,
-            "radio_channel": rig.radio_channel,
-            "image_url": rig.image_url,
-            "distance_miles": round(dist, 1)
-        })
+# --- Profile Endpoints ---
 
-    # Sort ascending by distance (nearest first)
-    results.sort(key=lambda x: x["distance_miles"])
-    return results
+@app.get("/users/{user_id}/profile", response_model=UserProfileResponse)
+def get_profile(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+@app.patch("/users/{user_id}/profile", response_model=UserProfileResponse)
+def update_profile(user_id: int, profile_data: UserProfileUpdate, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if profile_data.settings is not None:
+        user.settings = profile_data.settings
+    
+    db.commit()
+    db.refresh(user)
+    return user
+
+@app.post("/users/{user_id}/profile-picture")
+def upload_profile_picture(user_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Save the file locally on the server
+    file_location = f"uploads/profiles/{user_id}_{file.filename}"
+    with open(file_location, "wb+") as file_object:
+        shutil.copyfileobj(file.file, file_object)
+
+    # Save the absolute URL including your specific IP so React Native can fetch it
+    user.profile_picture_url = f"http://192.168.50.158:8000/{file_location}"
+    db.commit()
+    
+    return {"message": "Profile picture updated", "url": user.profile_picture_url}
