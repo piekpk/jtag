@@ -1,6 +1,7 @@
-﻿import React, { useState } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, Modal, KeyboardAvoidingView, Platform, SafeAreaView } from 'react-native';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const NEARBY_RIGS = [
   { id: '1', name: '2023 Wrangler Rubicon', distance: '3.2 mi' },
@@ -19,10 +20,46 @@ export default function TrailChatScreen() {
   const [inputText, setInputText] = useState('');
   const [showRigsModal, setShowRigsModal] = useState(false);
   const [activeReactionId, setActiveReactionId] = useState<string | null>(null);
+  
+  // State to hold the dynamic user name
+  const [currentUserName, setCurrentUserName] = useState('Fellow Jeeper');
+
+  // Fetch the logged-in user's custom name from the backend when the chat opens
+  useEffect(() => {
+    const fetchUserName = async () => {
+      try {
+        const userId = await AsyncStorage.getItem('userId');
+        if (userId) {
+          const response = await fetch(`http://192.168.50.158:8000/users/${userId}/profile`);
+          if (response.ok) {
+            const data = await response.json();
+            // Try to use their owner name, fallback to their vehicle title if name is blank
+            if (data.settings && data.settings.ownerName) {
+              setCurrentUserName(data.settings.ownerName);
+            } else if (data.settings && data.settings.vehicleTitle) {
+              setCurrentUserName(data.settings.vehicleTitle);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load user name:", error);
+      }
+    };
+    
+    fetchUserName();
+  }, []);
 
   const sendMessage = () => {
     if (!inputText.trim()) return;
-    const newMessage = { id: Date.now().toString(), sender: 'My 4xe Sahara', text: inputText, reactions: {} };
+    
+    // Use the dynamically fetched name instead of the hardcoded one
+    const newMessage = { 
+      id: Date.now().toString(), 
+      sender: currentUserName, 
+      text: inputText, 
+      reactions: {} 
+    };
+    
     setMessages([...messages, newMessage]);
     setInputText('');
   };

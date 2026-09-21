@@ -1,21 +1,100 @@
-﻿import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image } from 'react-native';
+﻿import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, Alert, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function MyRigScreen() {
+  const [userId, setUserId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   
-  const [ownerName, setOwnerName] = useState('Paul Piekarski');
-  const [vehicleTitle, setVehicleTitle] = useState('2025 Jeep Wrangler 4xe Sahara');
-
+  // State variables for profile data
+  const [ownerName, setOwnerName] = useState('');
+  const [vehicleTitle, setVehicleTitle] = useState('');
   const [specs, setSpecs] = useState({
-    engine: '2.0L Turbocharged Hybrid',
-    wheels: '20-inch Factory',
-    interior: 'Manual Cloth Seats'
+    engine: '',
+    wheels: '',
+    interior: ''
   });
-  
-  const [mods, setMods] = useState("• Green Filter 7347 Drop-in Air Filter\n• Custom 6.5\" Rear Cargo Leveling Platform");
+  const [mods, setMods] = useState('');
   const [photos, setPhotos] = useState<string[]>(['', '', '', '']);
+
+  // 1. Load the user's profile from the database when the screen opens
+  useEffect(() => {
+    const fetchProfileData = async () => {
+      try {
+        const storedUserId = await AsyncStorage.getItem('userId');
+        if (!storedUserId) {
+          setIsLoading(false);
+          return;
+        }
+        setUserId(storedUserId);
+
+        const response = await fetch(`http://192.168.50.158:8000/users/${storedUserId}/profile`);
+        if (response.ok) {
+          const data = await response.json();
+          
+          // If the user has saved settings in the database, populate the screen
+          if (data.settings && Object.keys(data.settings).length > 0) {
+            if (data.settings.ownerName) setOwnerName(data.settings.ownerName);
+            if (data.settings.vehicleTitle) setVehicleTitle(data.settings.vehicleTitle);
+            if (data.settings.specs) setSpecs(data.settings.specs);
+            if (data.settings.mods) setMods(data.settings.mods);
+            if (data.settings.photos) setPhotos(data.settings.photos);
+          } else {
+            // Default placeholder data for brand new users
+            setOwnerName('New User');
+            setVehicleTitle('Add your rig details');
+            setSpecs({ engine: 'e.g., 2.0L Turbo', wheels: 'e.g., 35" MT', interior: 'e.g., Leather' });
+            setMods('List your active mods here...');
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load profile:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchProfileData();
+  }, []);
+
+  // 2. Save the user's profile to the database when they click "Save"
+  const handleEditToggle = async () => {
+    if (isEditing && userId) {
+      setIsSaving(true);
+      try {
+        const response = await fetch(`http://192.168.50.158:8000/users/${userId}/profile`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            settings: {
+              ownerName,
+              vehicleTitle,
+              specs,
+              mods,
+              photos
+            }
+          }),
+        });
+
+        if (!response.ok) {
+          Alert.alert("Save Failed", "Could not save your profile changes.");
+          setIsSaving(false);
+          return; // Don't exit edit mode if save failed
+        }
+      } catch (error) {
+        Alert.alert("Network Error", "Failed to connect to the server.");
+        setIsSaving(false);
+        return; // Don't exit edit mode if network failed
+      }
+      setIsSaving(false);
+    }
+    setIsEditing(!isEditing);
+  };
 
   const pickImage = async (index: number) => {
     if (!isEditing) return;
@@ -33,6 +112,14 @@ export default function MyRigScreen() {
     }
   };
 
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#4caf50" />
+      </View>
+    );
+  }
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
@@ -42,13 +129,23 @@ export default function MyRigScreen() {
               style={styles.editTitleInput}
               value={ownerName}
               onChangeText={setOwnerName}
+              placeholder="Your Name"
+              placeholderTextColor="#888"
             />
           ) : (
             <Text style={styles.title}>{ownerName}'s Rig</Text>
           )}
           
-          <TouchableOpacity onPress={() => setIsEditing(!isEditing)} style={styles.editBtn}>
-            <Text style={styles.editBtnText}>{isEditing ? 'Save' : 'Edit'}</Text>
+          <TouchableOpacity 
+            onPress={handleEditToggle} 
+            style={[styles.editBtn, isSaving && { opacity: 0.7 }]}
+            disabled={isSaving}
+          >
+            {isSaving ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.editBtnText}>{isEditing ? 'Save' : 'Edit'}</Text>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -57,6 +154,8 @@ export default function MyRigScreen() {
             style={styles.editSubtitleInput}
             value={vehicleTitle}
             onChangeText={setVehicleTitle}
+            placeholder="Vehicle Year Make & Model"
+            placeholderTextColor="#888"
           />
         ) : (
           <Text style={styles.subtitle}>{vehicleTitle}</Text>
@@ -65,7 +164,7 @@ export default function MyRigScreen() {
 
       <View style={styles.photoGrid}>
         {[0, 1, 2, 3].map((i) => (
-          <TouchableOpacity key={i} style={styles.photoBox} onPress={() => pickImage(i)}>
+          <TouchableOpacity key={i} style={styles.photoBox} onPress={() => pickImage(i)} disabled={!isEditing}>
             {photos[i] ? (
               <Image source={{ uri: photos[i] }} style={styles.photo} />
             ) : (
