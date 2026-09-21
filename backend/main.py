@@ -88,3 +88,8 @@ def upload_profile_picture(user_id: int, file: UploadFile = File(...), db: Sessi
     user.profile_picture_url = f"http://192.168.50.158:8000/{file_location}"
     db.commit()
     return {"message": "Profile picture updated", "url": user.profile_picture_url}
+
+@app.get("/users", response_model=list[UserProfileResponse])
+def get_all_users(db: Session = Depends(get_db)):
+    users = db.query(User).all()
+    return users

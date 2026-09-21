@@ -24,6 +24,15 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="browse"
+        options={{
+          title: 'Browse',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="people-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="chat"
         options={{
           title: 'Trail Chat',
