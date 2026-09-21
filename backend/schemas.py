@@ -1,6 +1,10 @@
 ﻿from pydantic import BaseModel
 from typing import Optional, Dict, Any
 
+class UserCreate(BaseModel):
+    email: str
+    password: str
+
 class UserProfileUpdate(BaseModel):
     settings: Optional[Dict[str, Any]] = None
 

@@ -9,15 +9,18 @@ import {
   Platform,
   SafeAreaView,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function SignupScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     if (!email || !password) {
       Alert.alert('Missing Fields', 'Please enter both an email and password.');
       return;
@@ -27,8 +30,43 @@ export default function SignupScreen() {
       return;
     }
 
-    // Navigate to the profile setup screen upon registration
-    router.push('/(tabs)/map');
+    setIsSubmitting(true);
+
+    // Strip hidden spaces and enforce lowercase
+    const normalizedEmail = email.trim().toLowerCase();
+
+    try {
+      const response = await fetch('http://192.168.50.158:8000/signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: normalizedEmail,
+          password: password,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        console.log("User successfully created! ID:", data.id);
+        
+        // Save the user ID locally
+        await AsyncStorage.setItem('userId', data.id.toString());
+        
+        // Navigate to the map screen upon successful registration
+        router.push('/(tabs)/map');
+      } else {
+        console.error("Sign up failed:", data.detail);
+        Alert.alert("Registration Failed", data.detail || "An error occurred during sign up.");
+      }
+    } catch (error) {
+      console.error("Network error:", error);
+      Alert.alert("Connection Error", "Failed to connect to the server. Please check your network and try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -40,7 +78,7 @@ export default function SignupScreen() {
         <View style={styles.content}>
           <View style={styles.header}>
             <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>Join Jtag to connect on the trail</Text>
+            <Text style={styles.subtitle}>Join Jtap to connect on the trail</Text>
           </View>
 
           <View style={styles.form}>
@@ -58,7 +96,7 @@ export default function SignupScreen() {
             <Text style={styles.label}>Password</Text>
             <TextInput
               style={styles.input}
-              placeholder="••••••••"
+              placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
               placeholderTextColor="#8e8e93"
               value={password}
               onChangeText={setPassword}
@@ -68,15 +106,23 @@ export default function SignupScreen() {
             <Text style={styles.label}>Confirm Password</Text>
             <TextInput
               style={styles.input}
-              placeholder="••••••••"
+              placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
               placeholderTextColor="#8e8e93"
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry
             />
 
-            <TouchableOpacity style={styles.registerButton} onPress={handleRegister}>
-              <Text style={styles.registerButtonText}>Sign Up</Text>
+            <TouchableOpacity 
+              style={[styles.registerButton, isSubmitting && styles.registerButtonDisabled]} 
+              onPress={handleRegister}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Text style={styles.registerButtonText}>Sign Up</Text>
+              )}
             </TouchableOpacity>
           </View>
 
@@ -146,6 +192,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     marginTop: 24,
+  },
+  registerButtonDisabled: {
+    backgroundColor: '#1b5e20',
+    opacity: 0.7,
   },
   registerButtonText: {
     color: '#ffffff',
