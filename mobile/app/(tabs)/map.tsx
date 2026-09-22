@@ -2,6 +2,8 @@
 import { StyleSheet, View, Text, ActivityIndicator } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL } from '../config.js';
 
 export default function RadarMapScreen() {
   const [location, setLocation] = useState(null);
@@ -10,31 +12,57 @@ export default function RadarMapScreen() {
 
   useEffect(() => {
     (async () => {
-      // 1. Get local permissions and coordinates
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setErrorMsg('Permission to access location was denied');
-        return;
-      }
-
-      let currentLocation = await Location.getCurrentPositionAsync({});
-      const currentCoords = {
-        latitude: currentLocation.coords.latitude,
-        longitude: currentLocation.coords.longitude,
-        latitudeDelta: 0.05,
-        longitudeDelta: 0.05,
-      };
-      
-      setLocation(currentCoords);
-
-      // 2. Fetch nearby users from your backend using your live coordinates
       try {
-        // Replace with your actual Jtap backend API route
+        const loggedInId = await AsyncStorage.getItem('userId');
+
+        // 1. Get local permissions and coordinates
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          setErrorMsg('Permission to access location was denied');
+          return;
+        }
+
+        let currentLocation = await Location.getCurrentPositionAsync({});
+        const currentCoords = {
+          latitude: currentLocation.coords.latitude,
+          longitude: currentLocation.coords.longitude,
+          latitudeDelta: 0.05,
+          longitudeDelta: 0.05,
+        };
+        
+        setLocation(currentCoords);
+
+        // 2. Save this user's live location to the database (Matches browse screen logic)
+        if (loggedInId) {
+          await fetch(`${API_URL}/users/${loggedInId}/location`, {
+            method: 'PUT',
+            headers: { 
+              'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true'
+            },
+            body: JSON.stringify({
+              lat: currentCoords.latitude,
+              lng: currentCoords.longitude
+            })
+          });
+        }
+
+        // 3. Fetch nearby users from your backend using your live coordinates via Ngrok
         const response = await fetch(
-  `http://192.168.50.158:8000/users/nearby?lat=${currentCoords.latitude}&lng=${currentCoords.longitude}&radiusInMeters=8000`
-);
-        const data = await response.json();
-        setNearbyUsers(data); 
+          `${API_URL}/users/nearby?lat=${currentCoords.latitude}&lng=${currentCoords.longitude}&radiusInMeters=8000`,
+          {
+            headers: {
+              'ngrok-skip-browser-warning': 'true'
+            }
+          }
+        );
+        
+        if (response.ok) {
+          const data = await response.json();
+          // Filter out the currently logged-in user so they don't overlap with your blue marker
+          const nearbyUsersFiltered = data.filter(user => user.id.toString() !== loggedInId);
+          setNearbyUsers(nearbyUsersFiltered); 
+        }
       } catch (error) {
         console.error("Failed to fetch nearby users:", error);
       }
@@ -66,15 +94,19 @@ export default function RadarMapScreen() {
         />
         
         {/* Nearby Users Markers */}
-        {nearbyUsers.map((user) => (
-          <Marker
-            key={user.id}
-            coordinate={{ latitude: user.latitude, longitude: user.longitude }}
-            title={user.vehicle_model || "Jeep Wrangler"}
-            description={`Last seen: ${new Date(user.last_login).toLocaleDateString()}`}
-            pinColor="red"
-          />
-        ))}
+        {nearbyUsers.map((user) => {
+          const ownerName = user.settings?.ownerName || 'Fellow Jeeper';
+          const vehicleTitle = user.settings?.vehicleTitle || 'Jeep Wrangler';
+          return (
+            <Marker
+              key={user.id}
+              coordinate={{ latitude: user.latitude, longitude: user.longitude }}
+              title={ownerName}
+              description={vehicleTitle}
+              pinColor="red"
+            />
+          );
+        })}
       </MapView>
     </View>
   );

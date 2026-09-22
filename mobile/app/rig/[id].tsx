@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { API_URL } from '../../config.js';
+import { API_URL } from '../config.js';
 
 // Helper function to safely format image URLs and bypass hardcoded local IPs
 const getImageUrl = (imagePath: string) => {
