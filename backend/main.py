@@ -1,10 +1,12 @@
 ﻿import shutil
 import os
+from math import radians, cos, sin, asin, sqrt
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from passlib.context import CryptContext
+from pydantic import BaseModel
 from models import Base, User
 from schemas import UserProfileUpdate, UserProfileResponse, UserCreate
 
@@ -23,6 +25,20 @@ def get_db():
         yield db
     finally:
         db.close()
+
+# --- Helper Functions ---
+def haversine(lat1, lon1, lat2, lon2):
+    R = 6371000  # Radius of Earth in meters
+    phi1 = radians(lat1)
+    phi2 = radians(lat2)
+    dphi = radians(lat2 - lat1)
+    dlambda = radians(lon2 - lon1)
+    a = sin(dphi / 2)**2 + cos(phi1) * cos(phi2) * sin(dlambda / 2)**2
+    return 2 * R * asin(sqrt(a))
+
+class LocationUpdate(BaseModel):
+    lat: float
+    lng: float
 
 # --- App Setup ---
 app = FastAPI(title="Jtap Backend")
@@ -44,6 +60,7 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
     return new_user
+
 #---user login checking and returning user profile if successful
 @app.post("/login", response_model=UserProfileResponse)
 def login(user_credentials: UserCreate, db: Session = Depends(get_db)):
@@ -58,6 +75,7 @@ def login(user_credentials: UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid email or password")
         
     return user
+
 # --- Profile Endpoints ---
 @app.get("/users/{user_id}/profile", response_model=UserProfileResponse)
 def get_profile(user_id: int, db: Session = Depends(get_db)):
@@ -93,3 +111,36 @@ def upload_profile_picture(user_id: int, file: UploadFile = File(...), db: Sessi
 def get_all_users(db: Session = Depends(get_db)):
     users = db.query(User).all()
     return users
+
+# --- Location & Map Endpoints ---
+@app.put("/users/{user_id}/location")
+def update_location(user_id: int, location: LocationUpdate, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    user.latitude = location.lat
+    user.longitude = location.lng
+    db.commit()
+    return {"message": "Location updated successfully"}
+
+@app.get("/users/nearby")
+def get_nearby_users(lat: float, lng: float, radiusInMeters: float = 8000, db: Session = Depends(get_db)):
+    users = db.query(User).filter(
+        User.latitude.isnot(None), 
+        User.longitude.isnot(None)
+    ).all()
+    
+    nearby_users = []
+    for user in users:
+        distance = haversine(lat, lng, user.latitude, user.longitude)
+        if distance <= radiusInMeters:
+            nearby_users.append({
+                "id": user.id,
+                "email": user.email, 
+                "latitude": user.latitude,
+                "longitude": user.longitude,
+                "distance_meters": distance
+            })
+            
+    return nearby_users
