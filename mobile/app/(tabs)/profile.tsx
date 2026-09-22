@@ -2,6 +2,7 @@
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, Alert, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL } from '../config.js'; //file that contains backend URL
 
 export default function MyRigScreen() {
   const [userId, setUserId] = useState<string | null>(null);
@@ -31,7 +32,12 @@ export default function MyRigScreen() {
         }
         setUserId(storedUserId);
 
-        const response = await fetch(`http://192.168.50.158:8000/users/${storedUserId}/profile`);
+        const response = await fetch(`${API_URL}/users/${storedUserId}/profile`, {
+          headers: {
+            'ngrok-skip-browser-warning': 'true'
+          }
+        });
+        
         if (response.ok) {
           const data = await response.json();
           
@@ -65,10 +71,11 @@ export default function MyRigScreen() {
     if (isEditing && userId) {
       setIsSaving(true);
       try {
-        const response = await fetch(`http://192.168.50.158:8000/users/${userId}/profile`, {
+        const response = await fetch(`${API_URL}/users/${userId}/profile`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
+            'ngrok-skip-browser-warning': 'true'
           },
           body: JSON.stringify({
             settings: {
@@ -97,7 +104,8 @@ export default function MyRigScreen() {
   };
 
   const pickImage = async (index: number) => {
-    if (!isEditing) return;
+    if (!isEditing || !userId) return;
+    
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
@@ -106,10 +114,52 @@ export default function MyRigScreen() {
     });
 
     if (!result.canceled) {
-      const newPhotos = [...photos];
-      newPhotos[index] = result.assets[0].uri;
-      setPhotos(newPhotos);
+      const localUri = result.assets[0].uri;
+      const filename = localUri.split('/').pop() || `photo_${index}.jpg`;
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : `image/jpeg`;
+
+      // 1. Format the image for the backend
+      const formData = new FormData();
+      // @ts-ignore - React Native FormData expects this specific structure
+      formData.append('file', {
+        uri: localUri,
+        name: filename,
+        type: type,
+      });
+
+      try {
+        // 2. Upload it to your backend via Ngrok
+        const response = await fetch(`${API_URL}/users/${userId}/profile-picture`, {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'ngrok-skip-browser-warning': 'true'
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          // 3. Update the state with the new network URL from the server
+          const newPhotos = [...photos];
+          newPhotos[index] = data.url; 
+          setPhotos(newPhotos);
+        } else {
+          Alert.alert("Upload Failed", "Could not upload the image to the server.");
+        }
+      } catch (error) {
+        console.error("Upload error:", error);
+        Alert.alert("Network Error", "Could not connect to the server.");
+      }
     }
+  };
+
+  // Helper function to safely format image URLs
+  const getImageUrl = (imagePath: string) => {
+    if (!imagePath) return null;
+    if (imagePath.startsWith('http')) return imagePath;
+    return `${API_URL}/${imagePath}`;
   };
 
   if (isLoading) {
@@ -166,7 +216,13 @@ export default function MyRigScreen() {
         {[0, 1, 2, 3].map((i) => (
           <TouchableOpacity key={i} style={styles.photoBox} onPress={() => pickImage(i)} disabled={!isEditing}>
             {photos[i] ? (
-              <Image source={{ uri: photos[i] }} style={styles.photo} />
+              <Image 
+                source={{ 
+                  uri: getImageUrl(photos[i]),
+                  headers: { 'ngrok-skip-browser-warning': 'true' }
+                }} 
+                style={styles.photo} 
+              />
             ) : (
               <Text style={styles.photoPlaceholder}>{isEditing ? '+ Add Photo' : 'No Photo'}</Text>
             )}
