@@ -1,9 +1,10 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, SafeAreaView } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { API_URL } from '../config.js';
+import { getAuthHeaders } from '../auth.js';
 
 // Helper function to safely format image URLs and bypass hardcoded local IPs
 const getImageUrl = (imagePath: string) => {
@@ -42,10 +43,7 @@ export default function BrowseScreen() {
         if (loggedInId) {
           await fetch(`${API_URL}/users/${loggedInId}/location`, {
             method: 'PUT',
-            headers: { 
-              'Content-Type': 'application/json',
-              'ngrok-skip-browser-warning': 'true'
-            },
+            headers: await getAuthHeaders(),
             body: JSON.stringify({
               lat: location.coords.latitude,
               lng: location.coords.longitude
@@ -57,9 +55,7 @@ export default function BrowseScreen() {
         const response = await fetch(
           `${API_URL}/users/nearby?lat=${location.coords.latitude}&lng=${location.coords.longitude}&radiusInMeters=8046.72`,
           {
-            headers: {
-              'ngrok-skip-browser-warning': 'true'
-            }
+            headers: await getAuthHeaders()
           }
         );
         

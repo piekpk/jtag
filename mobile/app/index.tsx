@@ -14,6 +14,7 @@ import {
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from './config.js';
+import { saveSession } from './auth.js';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -26,7 +27,8 @@ export default function LoginScreen() {
     const checkSession = async () => {
       try {
         const storedUserId = await AsyncStorage.getItem('userId');
-        if (storedUserId) {
+        const storedToken = await AsyncStorage.getItem('userToken');
+        if (storedUserId && storedToken) {
           router.replace('/(tabs)/profile');
         }
       } catch (error) {
@@ -63,7 +65,7 @@ export default function LoginScreen() {
       const data = await response.json();
 
       if (response.ok) {
-        await AsyncStorage.setItem('userId', data.id.toString());
+        await saveSession(data.id, data.access_token);
         router.replace('/(tabs)/profile');
       } else {
         Alert.alert("Login Failed", data.detail || "Invalid email or password.");

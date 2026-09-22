@@ -1,7 +1,8 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { API_URL } from '../config.js';
+import { getAuthHeaders } from '../auth.js';
 
 // Helper function to safely format image URLs and bypass hardcoded local IPs
 const getImageUrl = (imagePath: string) => {
@@ -27,9 +28,7 @@ export default function PublicRigScreen() {
     const fetchProfile = async () => {
       try {
         const response = await fetch(`${API_URL}/users/${id}/profile`, {
-          headers: {
-            'ngrok-skip-browser-warning': 'true'
-          }
+          headers: await getAuthHeaders()
         });
         if (response.ok) {
           const data = await response.json();
@@ -52,10 +51,7 @@ export default function PublicRigScreen() {
     try {
       const response = await fetch(`${API_URL}/users/${id}/duck`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'ngrok-skip-browser-warning': 'true'
-        }
+        headers: await getAuthHeaders()
       });
 
       if (response.ok) {

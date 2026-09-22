@@ -1,11 +1,13 @@
-﻿import shutil
+import shutil
 import os
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import uuid4
 from math import radians, cos, sin, asin, sqrt
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException
+from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Header
+from fastapi.middleware.cors import CORSMiddleware
+import jwt
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
@@ -60,10 +62,62 @@ class ReactionCreate(BaseModel):
 
 # --- App Setup ---
 app = FastAPI(title="Jtap Backend")
+
+# Allow web clients / Expo web to call the API (native apps are unaffected by CORS)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
+# --- JWT Auth Setup ---
+SECRET_KEY = os.environ.get("JTAP_SECRET_KEY", "jtap-dev-secret-change-me")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_DAYS = 30
+
+if SECRET_KEY == "jtap-dev-secret-change-me":
+    print("WARNING: JTAP_SECRET_KEY not set - using insecure dev default. Set the env var in production.")
+
+
+def create_access_token(user_id: int) -> str:
+    expire = datetime.utcnow() + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
+    return jwt.encode({"sub": str(user_id), "exp": expire}, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def get_current_user(authorization: str = Header(default=None), db: Session = Depends(get_db)) -> User:
+    """Validate the Bearer token and return the logged-in user. Used on protected routes."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+    token = authorization[len("Bearer "):]
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    user = db.query(User).filter(User.id == int(user_id)).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
+
+
+def require_self(user_id: int, current_user: User) -> User:
+    """Ensure the logged-in user can only act on their own user id."""
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized for this user")
+    return current_user
+
+
+class AuthResponse(UserProfileResponse):
+    access_token: str
+    token_type: str = "bearer"
+
 # --- Auth Endpoints ---
-@app.post("/signup", response_model=UserProfileResponse)
+@app.post("/signup", response_model=AuthResponse)
 def signup(user: UserCreate, db: Session = Depends(get_db)):
     normalized_email = user.email.strip().lower()
     
@@ -76,9 +130,15 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
-    return new_user
+    return AuthResponse(
+        id=new_user.id,
+        email=new_user.email,
+        profile_picture_url=new_user.profile_picture_url,
+        settings=new_user.settings,
+        access_token=create_access_token(new_user.id),
+    )
 
-@app.post("/login", response_model=UserProfileResponse)
+@app.post("/login", response_model=AuthResponse)
 def login(user_credentials: UserCreate, db: Session = Depends(get_db)):
     normalized_email = user_credentials.email.strip().lower()
     user = db.query(User).filter(User.email == normalized_email).first()
@@ -86,18 +146,25 @@ def login(user_credentials: UserCreate, db: Session = Depends(get_db)):
     if not user or not pwd_context.verify(user_credentials.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
         
-    return user
+    return AuthResponse(
+        id=user.id,
+        email=user.email,
+        profile_picture_url=user.profile_picture_url,
+        settings=user.settings,
+        access_token=create_access_token(user.id),
+    )
 
 # --- Profile Endpoints ---
 @app.get("/users/{user_id}/profile", response_model=UserProfileResponse)
-def get_profile(user_id: int, db: Session = Depends(get_db)):
+def get_profile(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
 @app.patch("/users/{user_id}/profile", response_model=UserProfileResponse)
-def update_profile(user_id: int, profile_data: UserProfileUpdate, db: Session = Depends(get_db)):
+def update_profile(user_id: int, profile_data: UserProfileUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    require_self(user_id, current_user)
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -108,7 +175,8 @@ def update_profile(user_id: int, profile_data: UserProfileUpdate, db: Session = 
     return user
 
 @app.post("/users/{user_id}/profile-picture")
-def upload_profile_picture(user_id: int, file: UploadFile = File(...), db: Session = Depends(get_db)):
+def upload_profile_picture(user_id: int, file: UploadFile = File(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    require_self(user_id, current_user)
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -122,13 +190,13 @@ def upload_profile_picture(user_id: int, file: UploadFile = File(...), db: Sessi
     with open(file_location, "wb+") as file_object:
         shutil.copyfileobj(file.file, file_object)
         
-    user.profile_picture_url = f"http://192.168.50.158:8000/{file_location}"
+    user.profile_picture_url = f"/{file_location}"
     db.commit()
     
     return {"message": "Profile picture updated", "url": user.profile_picture_url}
 
 @app.post("/users/{user_id}/duck")
-def duck_user_rig(user_id: int, db: Session = Depends(get_db)):
+def duck_user_rig(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -144,13 +212,14 @@ def duck_user_rig(user_id: int, db: Session = Depends(get_db)):
     return {"message": "Rig ducked successfully!", "duckCount": current_duck_count}
 
 @app.get("/users", response_model=list[UserProfileResponse])
-def get_all_users(db: Session = Depends(get_db)):
+def get_all_users(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     users = db.query(User).all()
     return users
 
 # --- Location & Map Endpoints ---
 @app.put("/users/{user_id}/location")
-def update_location(user_id: int, location: LocationUpdate, db: Session = Depends(get_db)):
+def update_location(user_id: int, location: LocationUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    require_self(user_id, current_user)
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -161,7 +230,7 @@ def update_location(user_id: int, location: LocationUpdate, db: Session = Depend
     return {"message": "Location updated successfully"}
 
 @app.get("/users/nearby")
-def get_nearby_users(lat: float, lng: float, radiusInMeters: float = 8000, db: Session = Depends(get_db)):
+def get_nearby_users(lat: float, lng: float, radiusInMeters: float = 8000, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     users = db.query(User).filter(
         User.latitude.isnot(None), 
         User.longitude.isnot(None)
@@ -185,7 +254,7 @@ def get_nearby_users(lat: float, lng: float, radiusInMeters: float = 8000, db: S
 
 # --- Chat & Reaction Endpoints ---
 @app.get("/chat")
-def get_chat_messages(channel: str = "global", lat: float = None, lng: float = None):
+def get_chat_messages(channel: str = "global", lat: float = None, lng: float = None, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     conn = get_raw_db()
     cursor = conn.cursor()
     
@@ -261,7 +330,9 @@ def get_chat_messages(channel: str = "global", lat: float = None, lng: float = N
     return messages
 
 @app.post("/chat")
-def post_chat_message(chat: ChatMessageCreate, db: Session = Depends(get_db)):
+def post_chat_message(chat: ChatMessageCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if chat.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Cannot post as another user")
     conn = get_raw_db()
     cursor = conn.cursor()
     
@@ -302,7 +373,7 @@ def post_chat_message(chat: ChatMessageCreate, db: Session = Depends(get_db)):
     return {"id": msg_id, "status": "success"}
 
 @app.post("/chat/{message_id}/react")
-def react_to_message(message_id: int, reaction: ReactionCreate):
+def react_to_message(message_id: int, reaction: ReactionCreate, current_user: User = Depends(get_current_user)):
     conn = get_raw_db()
     cursor = conn.cursor()
     

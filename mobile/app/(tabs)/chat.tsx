@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -17,6 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { API_URL } from '../config.js';
+import { getAuthHeaders } from '../auth.js';
 
 // Helper function to safely format image URLs
 const getImageUrl = (imagePath: string) => {
@@ -65,7 +66,7 @@ export default function ChatScreen() {
       }
 
       const response = await fetch(url, {
-        headers: { 'ngrok-skip-browser-warning': 'true' },
+        headers: await getAuthHeaders(),
       });
       if (response.ok) {
         const data = await response.json();
@@ -96,10 +97,7 @@ export default function ChatScreen() {
     try {
       const response = await fetch(`${API_URL}/chat`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'ngrok-skip-browser-warning': 'true',
-        },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({
           user_id: parseInt(userId),
           message: messageContent,
@@ -122,10 +120,7 @@ export default function ChatScreen() {
     try {
       await fetch(`${API_URL}/chat/${messageId}/react`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'ngrok-skip-browser-warning': 'true',
-        },
+        headers: await getAuthHeaders(),
         body: JSON.stringify({ emoji: emojiKey }),
       });
       fetchMessages(false);
@@ -140,7 +135,7 @@ export default function ChatScreen() {
     setIsModalVisible(true);
     try {
       const response = await fetch(`${API_URL}/users/${targetUserId}/profile`, {
-        headers: { 'ngrok-skip-browser-warning': 'true' },
+        headers: await getAuthHeaders(),
       });
       if (response.ok) {
         const data = await response.json();

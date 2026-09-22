@@ -1,9 +1,10 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, Alert, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { API_URL } from '../config.js'; //file that contains backend URL[cite: 9]
+import { getAuthHeaders } from '../auth.js';
 
 export default function MyRigScreen() {
   const router = useRouter();
@@ -35,9 +36,7 @@ export default function MyRigScreen() {
         setUserId(storedUserId);
 
         const response = await fetch(`${API_URL}/users/${storedUserId}/profile`, {
-          headers: {
-            'ngrok-skip-browser-warning': 'true'
-          }
+          headers: await getAuthHeaders()
         });
         
         if (response.ok) {
@@ -75,10 +74,7 @@ export default function MyRigScreen() {
       try {
         const response = await fetch(`${API_URL}/users/${userId}/profile`, {
           method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            'ngrok-skip-browser-warning': 'true'
-          },
+          headers: await getAuthHeaders(),
           body: JSON.stringify({
             settings: {
               ownerName,
@@ -145,10 +141,7 @@ export default function MyRigScreen() {
         const response = await fetch(`${API_URL}/users/${userId}/profile-picture`, {
           method: 'POST',
           body: formData,
-          headers: {
-            'Content-Type': 'multipart/form-data',
-            'ngrok-skip-browser-warning': 'true'
-          },
+          headers: await getAuthHeaders(false),
         });
 
         if (response.ok) {

@@ -1,9 +1,10 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, ActivityIndicator } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config.js';
+import { getAuthHeaders } from '../auth.js';
 
 export default function RadarMapScreen() {
   const [location, setLocation] = useState(null);
@@ -36,10 +37,7 @@ export default function RadarMapScreen() {
         if (loggedInId) {
           await fetch(`${API_URL}/users/${loggedInId}/location`, {
             method: 'PUT',
-            headers: { 
-              'Content-Type': 'application/json',
-              'ngrok-skip-browser-warning': 'true'
-            },
+            headers: await getAuthHeaders(),
             body: JSON.stringify({
               lat: currentCoords.latitude,
               lng: currentCoords.longitude
@@ -51,9 +49,7 @@ export default function RadarMapScreen() {
         const response = await fetch(
           `${API_URL}/users/nearby?lat=${currentCoords.latitude}&lng=${currentCoords.longitude}&radiusInMeters=8000`,
           {
-            headers: {
-              'ngrok-skip-browser-warning': 'true'
-            }
+            headers: await getAuthHeaders()
           }
         );
         

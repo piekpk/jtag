@@ -13,6 +13,8 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL } from './config.js';
+import { saveSession } from './auth.js';
 
 export default function SignupScreen() {
   const [email, setEmail] = useState('');
@@ -36,10 +38,11 @@ export default function SignupScreen() {
     const normalizedEmail = email.trim().toLowerCase();
 
     try {
-      const response = await fetch('http://192.168.50.158:8000/signup', {
+      const response = await fetch(`${API_URL}/signup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
         },
         body: JSON.stringify({
           email: normalizedEmail,
@@ -52,8 +55,8 @@ export default function SignupScreen() {
       if (response.ok) {
         console.log("User successfully created! ID:", data.id);
         
-        // Save the user ID locally
-        await AsyncStorage.setItem('userId', data.id.toString());
+        // Save the session (user ID + auth token) locally
+        await saveSession(data.id, data.access_token);
         
         // Navigate to the map screen upon successful registration
         router.push('/(tabs)/map');
