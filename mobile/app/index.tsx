@@ -46,7 +46,7 @@ export default function LoginScreen() {
 
       if (response.ok) {
         await AsyncStorage.setItem('userId', data.id.toString());
-        router.push('/(tabs)/map');
+        router.push('/(tabs)/profile');
       } else {
         Alert.alert("Login Failed", data.detail || "Invalid email or password.");
       }
