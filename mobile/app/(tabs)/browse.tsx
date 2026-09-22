@@ -105,7 +105,12 @@ export default function BrowseScreen() {
           <Text style={styles.userName}>{ownerName}</Text>
           <Text style={styles.vehicleName}>{vehicleTitle}</Text>
         </View>
-        <Text style={styles.viewBtn}>View</Text>
+        <TouchableOpacity 
+          style={styles.viewBtn} 
+          onPress={() => router.push(`/rig/${item.id}`)}
+        >
+          <Text style={styles.viewBtnText}>View</Text>
+        </TouchableOpacity>
       </TouchableOpacity>
     );
   };
@@ -152,6 +157,7 @@ const styles = StyleSheet.create({
   userInfo: { flex: 1 },
   userName: { fontSize: 18, fontWeight: 'bold', color: '#333' },
   vehicleName: { fontSize: 14, color: '#666', marginTop: 4 },
-  viewBtn: { color: '#4caf50', fontWeight: 'bold', fontSize: 16 },
+  viewBtn: { backgroundColor: '#4caf50', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8 },
+  viewBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
   emptyText: { fontSize: 16, color: '#888' }
 });
