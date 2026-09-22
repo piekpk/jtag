@@ -161,8 +161,8 @@ export default function PublicRigScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   header: { padding: 25, paddingTop: 50, backgroundColor: '#1a1a1a' },
-  backBtn: { marginBottom: 15 },
-  backBtnText: { color: '#4caf50', fontSize: 16, fontWeight: 'bold' },
+  backBtn: { marginBottom: 15, backgroundColor: '#4caf50', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, alignSelf: 'flex-start' },
+  backBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontSize: 26, fontWeight: '900', color: '#ffffff', letterSpacing: 1 },
   subtitle: { fontSize: 15, color: '#4caf50', marginTop: 4, fontWeight: '600' },
