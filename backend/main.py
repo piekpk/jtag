@@ -59,13 +59,13 @@ class ReactionCreate(BaseModel):
 
 # --- App Setup ---
 app = FastAPI(title="Jtap Backend")
-# This mount allows other devices to fetch images via the /uploads URL path[cite: 11, 12]
+# This mount allows other devices to fetch images via the /uploads URL path[cite: 13]
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # --- Auth Endpoints ---
 @app.post("/signup", response_model=UserProfileResponse)
 def signup(user: UserCreate, db: Session = Depends(get_db)):
-    # Force strict lowercase and remove accidental spaces on the server side[cite: 11, 12]
+    # Force strict lowercase and remove accidental spaces on the server side[cite: 13]
     normalized_email = user.email.strip().lower()
     
     db_user = db.query(User).filter(User.email == normalized_email).first()
@@ -79,16 +79,16 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
     db.refresh(new_user)
     return new_user
 
-#---user login checking and returning user profile if successful[cite: 11, 12]
+#---user login checking and returning user profile if successful[cite: 13]
 @app.post("/login", response_model=UserProfileResponse)
 def login(user_credentials: UserCreate, db: Session = Depends(get_db)):
-    # Normalize the email just like we do in signup[cite: 11, 12]
+    # Normalize the email just like we do in signup[cite: 13]
     normalized_email = user_credentials.email.strip().lower()
     
-    # Look for the user in the database[cite: 11, 12]
+    # Look for the user in the database[cite: 13]
     user = db.query(User).filter(User.email == normalized_email).first()
     
-    # If the user doesn't exist, OR the password doesn't match the hash, reject them[cite: 11, 12]
+    # If the user doesn't exist, OR the password doesn't match the hash, reject them[cite: 13]
     if not user or not pwd_context.verify(user_credentials.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
         
@@ -119,23 +119,39 @@ def upload_profile_picture(user_id: int, file: UploadFile = File(...), db: Sessi
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    # Ensure the directory exists so the server doesn't crash during the first upload[cite: 11, 12]
+    # Ensure the directory exists so the server doesn't crash during the first upload[cite: 13]
     os.makedirs("uploads/profiles", exist_ok=True)
     
-    # Generate a unique filename using UUID[cite: 11, 12]
+    # Generate a unique filename using UUID[cite: 13]
     file_extension = file.filename.split(".")[-1]
     unique_filename = f"user_{user_id}_{uuid4().hex}.{file_extension}"
     file_location = f"uploads/profiles/{unique_filename}"
     
-    # Save the file to the local directory[cite: 11, 12]
+    # Save the file to the local directory[cite: 13]
     with open(file_location, "wb+") as file_object:
         shutil.copyfileobj(file.file, file_object)
         
-    # Store the fully qualified URL in the database so the frontend can load it instantly[cite: 11, 12]
+    # Store the fully qualified URL in the database so the frontend can load it instantly[cite: 13]
     user.profile_picture_url = f"http://192.168.50.158:8000/{file_location}"
     db.commit()
     
     return {"message": "Profile picture updated", "url": user.profile_picture_url}
+
+@app.post("/users/{user_id}/duck")
+def duck_user_rig(user_id: int, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    current_settings = user.settings or {}
+    current_duck_count = current_settings.get("duckCount", 0) + 1
+    current_settings["duckCount"] = current_duck_count
+    
+    user.settings = current_settings
+    db.commit()
+    db.refresh(user)
+    
+    return {"message": "Rig ducked successfully!", "duckCount": current_duck_count}
 
 @app.get("/users", response_model=list[UserProfileResponse])
 def get_all_users(db: Session = Depends(get_db)):
@@ -183,7 +199,7 @@ def get_chat_messages():
     conn = get_raw_db()
     cursor = conn.cursor()
     
-    # Auto-initialize messages table with reactions column if it doesn't exist yet
+    # Auto-initialize messages table with reactions column if it doesn't exist yet[cite: 13]
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
