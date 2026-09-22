@@ -1,21 +1,21 @@
 export default {
   "expo": {
-    "name": "TrailGrid",
-    "slug": "trailgrid",
+    "name": "Jtap",
+    "slug": "jtap",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": false,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "TrailGrid needs your location to find rigs nearby."
+        "NSLocationWhenInUseUsageDescription": "Jtap needs your location to find rigs nearby."
       },
       "config": {
         "googleMapsApiKey": process.env.GOOGLE_MAPS_API_KEY
       }
     },
     "android": {
-      "package": "com.trailgrid.app",
+      "package": "com.jtap.app",
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION"
@@ -29,7 +29,7 @@ export default {
     "plugins": [
       "expo-router"
     ],
-    "scheme": "jtag",
+    "scheme": "jtap",
     "extra": {
       "eas": {
         "projectId": "4ea1c11e-16e9-4174-9c9d-26f0b34bbfe8"

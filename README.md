@@ -1,4 +1,4 @@
-# TrailGrid: 4x4 Proximity Community App
+# Jtap: 4x4 Proximity Community App
 
 An enthusiast mobile application designed for 4x4 and off-road vehicle owners to locate nearby rigs, compare builds, and request trail assistance.
 
