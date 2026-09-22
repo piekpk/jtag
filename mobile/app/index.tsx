@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -19,6 +19,24 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
+
+  // Check if user is already logged in on app startup
+  useEffect(() => {
+    const checkSession = async () => {
+      try {
+        const storedUserId = await AsyncStorage.getItem('userId');
+        if (storedUserId) {
+          router.replace('/(tabs)/profile');
+        }
+      } catch (error) {
+        console.error("Session check error:", error);
+      } finally {
+        setIsCheckingSession(false);
+      }
+    };
+    checkSession();
+  }, []);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -46,7 +64,7 @@ export default function LoginScreen() {
 
       if (response.ok) {
         await AsyncStorage.setItem('userId', data.id.toString());
-        router.push('/(tabs)/profile');
+        router.replace('/(tabs)/profile');
       } else {
         Alert.alert("Login Failed", data.detail || "Invalid email or password.");
       }
@@ -57,6 +75,14 @@ export default function LoginScreen() {
       setIsSubmitting(false);
     }
   };
+
+  if (isCheckingSession) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4caf50" />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -120,6 +146,12 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
+    backgroundColor: '#121212',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: '#121212',
   },
   container: {
