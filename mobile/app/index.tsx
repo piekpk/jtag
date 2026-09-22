@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL } from './config.js';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -29,10 +30,11 @@ export default function LoginScreen() {
     const normalizedEmail = email.trim().toLowerCase();
 
     try {
-      const response = await fetch('http://192.168.50.158:8000/login', {
+      const response = await fetch(`${API_URL}/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
         },
         body: JSON.stringify({
           email: normalizedEmail,
