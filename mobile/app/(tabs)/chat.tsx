@@ -12,15 +12,17 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
 import { API_URL } from '../config.js';
 
 export default function ChatScreen() {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [userId, setUserId] = useState(null);
+  const [channel, setChannel] = useState('global'); // 'global' or 'local'
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
-  const [activeMessageId, setActiveMessageId] = useState(null); // Tracks which message has the emoji picker open
+  const [activeMessageId, setActiveMessageId] = useState(null);
   const flatListRef = useRef(null);
 
   useEffect(() => {
@@ -33,7 +35,17 @@ export default function ChatScreen() {
 
   const fetchMessages = async (isInitial = false) => {
     try {
-      const response = await fetch(`${API_URL}/chat`, {
+      let url = `${API_URL}/chat?channel=${channel}`;
+      
+      if (channel === 'local') {
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          let location = await Location.getCurrentPositionAsync({});
+          url += `&lat=${location.coords.latitude}&lng=${location.coords.longitude}`;
+        }
+      }
+
+      const response = await fetch(url, {
         headers: {
           'ngrok-skip-browser-warning': 'true',
         },
@@ -50,12 +62,15 @@ export default function ChatScreen() {
   };
 
   useEffect(() => {
+    setIsLoading(true);
     fetchMessages(true);
+
     const intervalId = setInterval(() => {
       fetchMessages(false);
     }, 3000);
+
     return () => clearInterval(intervalId);
-  }, []);
+  }, [channel]);
 
   const handleSendMessage = async () => {
     if (!inputText.trim() || !userId) return;
@@ -74,6 +89,7 @@ export default function ChatScreen() {
         body: JSON.stringify({
           user_id: parseInt(userId),
           message: messageContent,
+          channel: channel,
         }),
       });
 
@@ -88,7 +104,7 @@ export default function ChatScreen() {
   };
 
   const handleReaction = async (messageId, emojiKey) => {
-    setActiveMessageId(null); // Close picker after choosing
+    setActiveMessageId(null);
     try {
       const response = await fetch(`${API_URL}/chat/${messageId}/react`, {
         method: 'POST',
@@ -120,7 +136,6 @@ export default function ChatScreen() {
           {item.message}
         </Text>
 
-        {/* Existing Reactions Display */}
         {hasReactions && (
           <View style={styles.reactionDisplayRow}>
             {reactions['duck'] > 0 && <Text style={styles.badgeText}>🦆 {reactions['duck']}</Text>}
@@ -129,7 +144,6 @@ export default function ChatScreen() {
           </View>
         )}
 
-        {/* Action Row: Single Reaction Button + Popup Picker */}
         <View style={styles.actionRow}>
           <TouchableOpacity 
             onPress={() => setActiveMessageId(isPickerOpen ? null : item.id)} 
@@ -160,55 +174,69 @@ export default function ChatScreen() {
     );
   };
 
-  if (isLoading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#4caf50" />
-      </View>
-    );
-  }
-
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Trail Chat</Text>
-      </View>
-
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardContainer}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-      >
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          keyExtractor={(item, index) => item.id?.toString() || index.toString()}
-          renderItem={renderMessageItem}
-          contentContainerStyle={styles.messageList}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-        />
-
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
-            placeholder="Broadcast to nearby trails..."
-            placeholderTextColor="#888"
-            value={inputText}
-            onChangeText={setInputText}
-          />
-          <TouchableOpacity
-            style={[styles.sendButton, (!inputText.trim() || isSending) && styles.sendButtonDisabled]}
-            onPress={handleSendMessage}
-            disabled={!inputText.trim() || isSending}
+        
+        {/* Channel Segment Tabs */}
+        <View style={styles.tabContainer}>
+          <TouchableOpacity 
+            style={[styles.tabButton, channel === 'global' && styles.activeTab]}
+            onPress={() => setChannel('global')}
           >
-            {isSending ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.sendButtonText}>Send</Text>
-            )}
+            <Text style={[styles.tabText, channel === 'global' && styles.activeTabText]}>Global</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.tabButton, channel === 'local' && styles.activeTab]}
+            onPress={() => setChannel('local')}
+          >
+            <Text style={[styles.tabText, channel === 'local' && styles.activeTabText]}>Local (10 mi)</Text>
           </TouchableOpacity>
         </View>
-      </KeyboardAvoidingView>
+      </View>
+
+      {isLoading ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#4caf50" />
+        </View>
+      ) : (
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.keyboardContainer}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        >
+          <FlatList
+            ref={flatListRef}
+            data={messages}
+            keyExtractor={(item, index) => item.id?.toString() || index.toString()}
+            renderItem={renderMessageItem}
+            contentContainerStyle={styles.messageList}
+            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          />
+
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={styles.input}
+              placeholder={channel === 'local' ? "Broadcast to local trail (10mi)..." : "Broadcast globally..."}
+              placeholderTextColor="#888"
+              value={inputText}
+              onChangeText={setInputText}
+            />
+            <TouchableOpacity
+              style={[styles.sendButton, (!inputText.trim() || isSending) && styles.sendButtonDisabled]}
+              onPress={handleSendMessage}
+              disabled={!inputText.trim() || isSending}
+            >
+              {isSending ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.sendButtonText}>Send</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      )}
     </SafeAreaView>
   );
 }
@@ -217,7 +245,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#121212' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#121212' },
   header: { padding: 20, backgroundColor: '#1a1a1a', borderBottomWidth: 1, borderBottomColor: '#2c2c2e' },
-  headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
+  headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#fff', marginBottom: 12 },
+  tabContainer: { flexDirection: 'row', backgroundColor: '#2c2c2e', borderRadius: 8, padding: 4 },
+  tabButton: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 6 },
+  activeTab: { backgroundColor: '#4caf50' },
+  tabText: { color: '#aaa', fontWeight: 'bold', fontSize: 14 },
+  activeTabText: { color: '#fff' },
   keyboardContainer: { flex: 1 },
   messageList: { padding: 15, paddingBottom: 20 },
   messageBubble: { maxWidth: '85%', padding: 12, borderRadius: 12, marginBottom: 12 },
