@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { API_URL } from '../config.js';
 
@@ -19,7 +19,9 @@ export default function PublicRigScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const [profile, setProfile] = useState(null);
+  const [duckCount, setDuckCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [isDucking, setIsDucking] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -32,6 +34,7 @@ export default function PublicRigScreen() {
         if (response.ok) {
           const data = await response.json();
           setProfile(data);
+          setDuckCount(data.settings?.duckCount || 0);
         }
       } catch (error) {
         console.error("Failed to load profile:", error);
@@ -42,6 +45,32 @@ export default function PublicRigScreen() {
 
     if (id) fetchProfile();
   }, [id]);
+
+  const handleDuckRig = async () => {
+    if (isDucking) return;
+    setIsDucking(true);
+    try {
+      const response = await fetch(`${API_URL}/users/${id}/duck`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setDuckCount(data.duckCount);
+      } else {
+        Alert.alert("Error", "Could not duck this rig.");
+      }
+    } catch (error) {
+      console.error("Duck error:", error);
+      Alert.alert("Network Error", "Failed to connect to the server.");
+    } finally {
+      setIsDucking(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -75,8 +104,23 @@ export default function PublicRigScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Text style={styles.backBtnText}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>{ownerName}'s Rig</Text>
-        <Text style={styles.subtitle}>{vehicleTitle}</Text>
+        
+        <View style={styles.headerRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title}>{ownerName}'s Rig</Text>
+            <Text style={styles.subtitle}>{vehicleTitle}</Text>
+          </View>
+
+          {/* Duck Button */}
+          <TouchableOpacity 
+            style={[styles.duckBtn, isDucking && { opacity: 0.6 }]} 
+            onPress={handleDuckRig}
+            disabled={isDucking}
+          >
+            <Text style={styles.duckBtnIcon}>🦆</Text>
+            <Text style={styles.duckBtnCount}>{duckCount}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.photoGrid}>
@@ -123,8 +167,21 @@ const styles = StyleSheet.create({
   header: { padding: 25, paddingTop: 50, backgroundColor: '#1a1a1a' },
   backBtn: { marginBottom: 15 },
   backBtnText: { color: '#4caf50', fontSize: 16, fontWeight: 'bold' },
-  title: { fontSize: 28, fontWeight: '900', color: '#ffffff', letterSpacing: 1 },
-  subtitle: { fontSize: 16, color: '#4caf50', marginTop: 8, fontWeight: '600' },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  title: { fontSize: 26, fontWeight: '900', color: '#ffffff', letterSpacing: 1 },
+  subtitle: { fontSize: 15, color: '#4caf50', marginTop: 4, fontWeight: '600' },
+  duckBtn: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: '#333333', 
+    paddingHorizontal: 12, 
+    paddingVertical: 8, 
+    borderRadius: 20, 
+    borderWidth: 1, 
+    borderColor: '#ffeb3b' 
+  },
+  duckBtnIcon: { fontSize: 20, marginRight: 6 },
+  duckBtnCount: { color: '#ffeb3b', fontWeight: 'bold', fontSize: 16 },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', padding: 10, justifyContent: 'space-between' },
   photoBox: { width: '48%', height: 120, backgroundColor: '#e0e0e0', marginBottom: 10, borderRadius: 8, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   photoPlaceholder: { color: '#757575', fontWeight: '600' },
