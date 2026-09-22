@@ -32,3 +32,14 @@ run ngrok to have a public url for local database
  url is moved to config.js
  
 gitignore file was updated to ignore database backend
+
+
+
+the apk is standalone and will need to be installed on each users phone
+the backend server needs to be running locally on a laptop 
+two terminal windows are requiered to run the backend server
+both terminals need to be in the C:\jeep-proximity-app\jtag\backend> directory
+1 terminal will need to run ngrok
+ ngrok http 8000 --url https://unknowing-dropper-starfish.ngrok-free.dev 
+ 2 terminal will need to run the lightSQL
+ python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
