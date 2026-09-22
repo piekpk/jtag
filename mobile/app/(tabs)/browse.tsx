@@ -3,6 +3,19 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndi
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+import { API_URL } from '../config.js';
+
+// Helper function to safely format image URLs and bypass hardcoded local IPs
+const getImageUrl = (imagePath: string) => {
+  if (!imagePath) return null;
+  
+  if (imagePath.includes('http://192.168.')) {
+    return imagePath.replace(/http:\/\/192\.168\.\d+\.\d+:\d+/, API_URL);
+  }
+  
+  if (imagePath.startsWith('http')) return imagePath;
+  return `${API_URL}/${imagePath.startsWith('/') ? imagePath.slice(1) : imagePath}`;
+};
 
 export default function BrowseScreen() {
   const router = useRouter();
@@ -27,9 +40,12 @@ export default function BrowseScreen() {
 
         // 2. Save this user's live location to the database
         if (loggedInId) {
-          await fetch(`http://192.168.50.158:8000/users/${loggedInId}/location`, {
+          await fetch(`${API_URL}/users/${loggedInId}/location`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+              'Content-Type': 'application/json',
+              'ngrok-skip-browser-warning': 'true'
+            },
             body: JSON.stringify({
               lat: location.coords.latitude,
               lng: location.coords.longitude
@@ -39,7 +55,12 @@ export default function BrowseScreen() {
 
         // 3. Fetch nearby users (8046.72 meters = 5 miles)
         const response = await fetch(
-          `http://192.168.50.158:8000/users/nearby?lat=${location.coords.latitude}&lng=${location.coords.longitude}&radiusInMeters=8046.72`
+          `${API_URL}/users/nearby?lat=${location.coords.latitude}&lng=${location.coords.longitude}&radiusInMeters=8046.72`,
+          {
+            headers: {
+              'ngrok-skip-browser-warning': 'true'
+            }
+          }
         );
         
         if (response.ok) {
@@ -70,7 +91,16 @@ export default function BrowseScreen() {
       >
         <View style={styles.avatarContainer}>
           {profilePic ? (
-            <Image source={{ uri: profilePic }} style={styles.avatar} />
+            <Image 
+              source={{ 
+                uri: getImageUrl(profilePic),
+                headers: { 
+                  'ngrok-skip-browser-warning': 'true',
+                  'User-Agent': 'JtapApp/1.0'
+                }
+              }} 
+              style={styles.avatar} 
+            />
           ) : (
             <Text style={styles.avatarPlaceholder}>🚙</Text>
           )}
