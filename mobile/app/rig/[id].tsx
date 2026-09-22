@@ -1,6 +1,19 @@
 ﻿import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { API_URL } from '../../config.js';
+
+// Helper function to safely format image URLs and bypass hardcoded local IPs
+const getImageUrl = (imagePath: string) => {
+  if (!imagePath) return null;
+  
+  if (imagePath.includes('http://192.168.')) {
+    return imagePath.replace(/http:\/\/192\.168\.\d+\.\d+:\d+/, API_URL);
+  }
+  
+  if (imagePath.startsWith('http')) return imagePath;
+  return `${API_URL}/${imagePath.startsWith('/') ? imagePath.slice(1) : imagePath}`;
+};
 
 export default function PublicRigScreen() {
   const { id } = useLocalSearchParams();
@@ -11,7 +24,11 @@ export default function PublicRigScreen() {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const response = await fetch(`http://192.168.50.158:8000/users/${id}/profile`);
+        const response = await fetch(`${API_URL}/users/${id}/profile`, {
+          headers: {
+            'ngrok-skip-browser-warning': 'true'
+          }
+        });
         if (response.ok) {
           const data = await response.json();
           setProfile(data);
@@ -66,7 +83,16 @@ export default function PublicRigScreen() {
         {[0, 1, 2, 3].map((i) => (
           <View key={i} style={styles.photoBox}>
             {photos[i] ? (
-              <Image source={{ uri: photos[i] }} style={styles.photo} />
+              <Image 
+                source={{ 
+                  uri: getImageUrl(photos[i]),
+                  headers: { 
+                    'ngrok-skip-browser-warning': 'true',
+                    'User-Agent': 'JtapApp/1.0'
+                  }
+                }} 
+                style={styles.photo} 
+              />
             ) : (
               <Text style={styles.photoPlaceholder}>No Photo</Text>
             )}
