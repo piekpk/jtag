@@ -31,8 +31,8 @@ export default function RadarMapScreen() {
       try {
         // Replace with your actual Jtap backend API route
         const response = await fetch(
-          `https://your-backend-api.com/users/nearby?lat=${currentCoords.latitude}&lng=${currentCoords.longitude}&radiusInMeters=8000`
-        );
+  `http://10.0.2.2:8000/users/nearby?lat=${currentCoords.latitude}&lng=${currentCoords.longitude}&radiusInMeters=8000`
+);
         const data = await response.json();
         setNearbyUsers(data); 
       } catch (error) {

@@ -140,7 +140,9 @@ def get_nearby_users(lat: float, lng: float, radiusInMeters: float = 8000, db: S
                 "email": user.email, 
                 "latitude": user.latitude,
                 "longitude": user.longitude,
-                "distance_meters": distance
+                "distance_meters": distance,
+                "settings": user.settings,
+                "profile_picture_url": user.profile_picture_url
             })
             
     return nearby_users

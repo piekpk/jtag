@@ -2,6 +2,7 @@
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, SafeAreaView } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
 
 export default function BrowseScreen() {
   const router = useRouter();
@@ -15,10 +16,23 @@ export default function BrowseScreen() {
         const loggedInId = await AsyncStorage.getItem('userId');
         setCurrentUserId(loggedInId);
 
-        const response = await fetch('http://192.168.50.158:8000/users');
+        // 1. Get the current location
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          console.error("Permission to access location was denied");
+          setIsLoading(false);
+          return;
+        }
+        let location = await Location.getCurrentPositionAsync({});
+
+        // 2. Fetch nearby users (8046.72 meters = 5 miles)
+        const response = await fetch(
+          `http://192.168.50.158:8000/users/nearby?lat=${location.coords.latitude}&lng=${location.coords.longitude}&radiusInMeters=8046.72`
+        );
+        
         if (response.ok) {
           const data = await response.json();
-          // Filter out the currently logged-in user so they don't see themselves in the "nearby" list
+          // Filter out the currently logged-in user so they don't see themselves
           const nearbyUsers = data.filter(user => user.id.toString() !== loggedInId);
           setUsers(nearbyUsers);
         }
@@ -40,7 +54,7 @@ export default function BrowseScreen() {
     return (
       <TouchableOpacity 
         style={styles.userCard} 
-        onPress={() => router.push(/rig/ + item.id)}
+        onPress={() => router.push(`/rig/${item.id}`)}
       >
         <View style={styles.avatarContainer}>
           {profilePic ? (
