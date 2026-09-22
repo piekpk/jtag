@@ -95,8 +95,29 @@ export default function ChatScreen() {
     }
   };
 
+  // 5. Handle reaction tap
+  const handleReaction = async (messageId, emojiKey) => {
+    try {
+      const response = await fetch(`${API_URL}/chat/${messageId}/react`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: JSON.stringify({ emoji: emojiKey }),
+      });
+
+      if (response.ok) {
+        fetchMessages(false);
+      }
+    } catch (error) {
+      console.error('Error reacting to message:', error);
+    }
+  };
+
   const renderMessageItem = ({ item }) => {
     const isMe = item.user_id?.toString() === userId?.toString();
+    const reactions = item.reactions || {};
 
     return (
       <View style={[styles.messageBubble, isMe ? styles.myMessage : styles.theirMessage]}>
@@ -104,6 +125,20 @@ export default function ChatScreen() {
         <Text style={[styles.messageText, isMe ? styles.myMessageText : styles.theirMessageText]}>
           {item.message}
         </Text>
+
+        {/* Reaction Buttons Row */}
+        <View style={styles.reactionContainer}>
+          <TouchableOpacity onPress={() => handleReaction(item.id, 'duck')} style={styles.reactionButton}>
+            <Text style={styles.reactionText}>🦆 {reactions['duck'] || 0}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => handleReaction(item.id, 'jeep')} style={styles.reactionButton}>
+            <Text style={styles.reactionText}>🚙 {reactions['jeep'] || 0}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => handleReaction(item.id, 'wave')} style={styles.reactionButton}>
+            <Text style={styles.reactionText}>👋 {reactions['wave'] || 0}</Text>
+          </TouchableOpacity>
+        </View>
+
         <Text style={[styles.timestamp, isMe ? styles.myTimestamp : styles.theirTimestamp]}>
           {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </Text>
@@ -171,13 +206,16 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
   keyboardContainer: { flex: 1 },
   messageList: { padding: 15, paddingBottom: 20 },
-  messageBubble: { maxWidth: '80%', padding: 12, borderRadius: 12, marginBottom: 10 },
+  messageBubble: { maxWidth: '85%', padding: 12, borderRadius: 12, marginBottom: 10 },
   myMessage: { alignSelf: 'flex-end', backgroundColor: '#2e7d32' },
   theirMessage: { alignSelf: 'flex-start', backgroundColor: '#1e1e1e', borderWidth: 1, borderColor: '#333' },
   senderName: { fontSize: 12, fontWeight: 'bold', color: '#4caf50', marginBottom: 4 },
   messageText: { fontSize: 16 },
   myMessageText: { color: '#ffffff' },
   theirMessageText: { color: '#e0e0e0' },
+  reactionContainer: { flexDirection: 'row', marginTop: 8, backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 8, padding: 4, alignSelf: 'flex-start' },
+  reactionButton: { marginRight: 12, paddingHorizontal: 4, paddingVertical: 2 },
+  reactionText: { fontSize: 13, color: '#fff' },
   timestamp: { fontSize: 10, marginTop: 4, alignSelf: 'flex-end' },
   myTimestamp: { color: 'rgba(255, 255, 255, 0.7)' },
   theirTimestamp: { color: '#888' },

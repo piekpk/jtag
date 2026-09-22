@@ -54,15 +54,18 @@ class ChatMessageCreate(BaseModel):
     user_id: int
     message: str
 
+class ReactionCreate(BaseModel):
+    emoji: str # 'duck', 'jeep', or 'wave'
+
 # --- App Setup ---
 app = FastAPI(title="Jtap Backend")
-# This mount allows other devices to fetch images via the /uploads URL path[cite: 11]
+# This mount allows other devices to fetch images via the /uploads URL path[cite: 11, 12]
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # --- Auth Endpoints ---
 @app.post("/signup", response_model=UserProfileResponse)
 def signup(user: UserCreate, db: Session = Depends(get_db)):
-    # Force strict lowercase and remove accidental spaces on the server side[cite: 11]
+    # Force strict lowercase and remove accidental spaces on the server side[cite: 11, 12]
     normalized_email = user.email.strip().lower()
     
     db_user = db.query(User).filter(User.email == normalized_email).first()
@@ -76,16 +79,16 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
     db.refresh(new_user)
     return new_user
 
-#---user login checking and returning user profile if successful[cite: 11]
+#---user login checking and returning user profile if successful[cite: 11, 12]
 @app.post("/login", response_model=UserProfileResponse)
 def login(user_credentials: UserCreate, db: Session = Depends(get_db)):
-    # Normalize the email just like we do in signup[cite: 11]
+    # Normalize the email just like we do in signup[cite: 11, 12]
     normalized_email = user_credentials.email.strip().lower()
     
-    # Look for the user in the database[cite: 11]
+    # Look for the user in the database[cite: 11, 12]
     user = db.query(User).filter(User.email == normalized_email).first()
     
-    # If the user doesn't exist, OR the password doesn't match the hash, reject them[cite: 11]
+    # If the user doesn't exist, OR the password doesn't match the hash, reject them[cite: 11, 12]
     if not user or not pwd_context.verify(user_credentials.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
         
@@ -116,19 +119,19 @@ def upload_profile_picture(user_id: int, file: UploadFile = File(...), db: Sessi
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    # Ensure the directory exists so the server doesn't crash during the first upload[cite: 11]
+    # Ensure the directory exists so the server doesn't crash during the first upload[cite: 11, 12]
     os.makedirs("uploads/profiles", exist_ok=True)
     
-    # Generate a unique filename using UUID[cite: 11]
+    # Generate a unique filename using UUID[cite: 11, 12]
     file_extension = file.filename.split(".")[-1]
     unique_filename = f"user_{user_id}_{uuid4().hex}.{file_extension}"
     file_location = f"uploads/profiles/{unique_filename}"
     
-    # Save the file to the local directory[cite: 11]
+    # Save the file to the local directory[cite: 11, 12]
     with open(file_location, "wb+") as file_object:
         shutil.copyfileobj(file.file, file_object)
         
-    # Store the fully qualified URL in the database so the frontend can load it instantly[cite: 11]
+    # Store the fully qualified URL in the database so the frontend can load it instantly[cite: 11, 12]
     user.profile_picture_url = f"http://192.168.50.158:8000/{file_location}"
     db.commit()
     
@@ -174,24 +177,25 @@ def get_nearby_users(lat: float, lng: float, radiusInMeters: float = 8000, db: S
             
     return nearby_users
 
-# --- Chat Endpoints ---
+# --- Chat & Reaction Endpoints ---
 @app.get("/chat")
 def get_chat_messages():
     conn = get_raw_db()
     cursor = conn.cursor()
     
-    # Auto-initialize messages table if it doesn't exist yet
+    # Auto-initialize messages table with reactions column if it doesn't exist yet
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
             message TEXT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            reactions TEXT DEFAULT '{}'
         )
     ''')
     
     cursor.execute('''
-        SELECT m.id, m.user_id, m.message, m.timestamp, u.settings 
+        SELECT m.id, m.user_id, m.message, m.timestamp, m.reactions, u.settings 
         FROM messages m
         LEFT JOIN users u ON m.user_id = u.id
         ORDER BY m.timestamp ASC
@@ -210,12 +214,18 @@ def get_chat_messages():
             except:
                 pass
                 
+        try:
+            reactions_dict = json.loads(row["reactions"] or "{}")
+        except:
+            reactions_dict = {}
+                
         messages.append({
             "id": row["id"],
             "user_id": row["user_id"],
             "owner_name": owner_name,
             "message": row["message"],
-            "timestamp": row["timestamp"]
+            "timestamp": row["timestamp"],
+            "reactions": reactions_dict
         })
         
     return messages
@@ -230,16 +240,45 @@ def post_chat_message(chat: ChatMessageCreate):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
             message TEXT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            reactions TEXT DEFAULT '{}'
         )
     ''')
     
     cursor.execute(
-        "INSERT INTO messages (user_id, message, timestamp) VALUES (?, ?, ?)",
-        (chat.user_id, chat.message, datetime.utcnow())
+        "INSERT INTO messages (user_id, message, timestamp, reactions) VALUES (?, ?, ?, ?)",
+        (chat.user_id, chat.message, datetime.utcnow(), "{}")
     )
     conn.commit()
     msg_id = cursor.lastrowid
     conn.close()
     
     return {"id": msg_id, "status": "success"}
+
+@app.post("/chat/{message_id}/react")
+def react_to_message(message_id: int, reaction: ReactionCreate):
+    conn = get_raw_db()
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT reactions FROM messages WHERE id = ?", (message_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Message not found")
+        
+    try:
+        reactions_dict = json.loads(row["reactions"] or "{}")
+    except:
+        reactions_dict = {}
+        
+    emoji_key = reaction.emoji
+    reactions_dict[emoji_key] = reactions_dict.get(emoji_key, 0) + 1
+    
+    cursor.execute(
+        "UPDATE messages SET reactions = ? WHERE id = ?",
+        (json.dumps(reactions_dict), message_id)
+    )
+    conn.commit()
+    conn.close()
+    
+    return {"status": "success", "reactions": reactions_dict}
