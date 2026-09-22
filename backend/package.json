@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.2",
+    "expo": "^57.0.24",
+    "expo-image-picker": "~57.0.19",
+    "express": "^5.2.1",
+    "pg": "^8.23.0"
+  }
+}
