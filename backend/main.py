@@ -143,7 +143,8 @@ def duck_user_rig(user_id: int, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    current_settings = user.settings or {}
+    # Create a new dictionary copy to force SQLAlchemy to detect the change and persist it
+    current_settings = dict(user.settings or {})
     current_duck_count = current_settings.get("duckCount", 0) + 1
     current_settings["duckCount"] = current_duck_count
     
