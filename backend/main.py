@@ -1,5 +1,6 @@
 ﻿import shutil
 import os
+from uuid import uuid4
 from math import radians, cos, sin, asin, sqrt
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -42,6 +43,7 @@ class LocationUpdate(BaseModel):
 
 # --- App Setup ---
 app = FastAPI(title="Jtap Backend")
+# This mount allows other devices to fetch images via the /uploads URL path
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # --- Auth Endpoints ---
@@ -100,11 +102,23 @@ def upload_profile_picture(user_id: int, file: UploadFile = File(...), db: Sessi
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    file_location = f"uploads/profiles/{user_id}_{file.filename}"
+    
+    # Ensure the directory exists so the server doesn't crash during the first upload
+    os.makedirs("uploads/profiles", exist_ok=True)
+    
+    # Generate a unique filename using UUID
+    file_extension = file.filename.split(".")[-1]
+    unique_filename = f"user_{user_id}_{uuid4().hex}.{file_extension}"
+    file_location = f"uploads/profiles/{unique_filename}"
+    
+    # Save the file to the local directory
     with open(file_location, "wb+") as file_object:
         shutil.copyfileobj(file.file, file_object)
+        
+    # Store the fully qualified URL in the database so the frontend can load it instantly
     user.profile_picture_url = f"http://192.168.50.158:8000/{file_location}"
     db.commit()
+    
     return {"message": "Profile picture updated", "url": user.profile_picture_url}
 
 @app.get("/users", response_model=list[UserProfileResponse])
