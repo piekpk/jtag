@@ -1,177 +1,189 @@
-﻿import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, Modal, KeyboardAvoidingView, Platform, SafeAreaView } from 'react-native';
-import { useRouter } from 'expo-router';
+﻿import React, { useState, useEffect, useRef } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  TextInput,
+  TouchableOpacity,
+  FlatList,
+  SafeAreaView,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL } from '../config.js';
 
-const NEARBY_RIGS = [
-  { id: '1', name: '2023 Wrangler Rubicon', distance: '3.2 mi' },
-  { id: '2', name: '2021 Gladiator Mojave', distance: '7.8 mi' },
-  { id: '3', name: '2015 Wrangler Sahara', distance: '12.1 mi' },
-];
-
-const INITIAL_MESSAGES = [
-  { id: '1', sender: 'TrailBoss99', text: 'Anyone hitting the trails this weekend?', reactions: {} },
-  { id: '2', sender: 'MudCrawler', text: 'Thinking about heading up north.', reactions: { '🦆': 1 } },
-];
-
-export default function TrailChatScreen() {
-  const router = useRouter();
-  const [messages, setMessages] = useState(INITIAL_MESSAGES);
+export default function ChatScreen() {
+  const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
-  const [showRigsModal, setShowRigsModal] = useState(false);
-  const [activeReactionId, setActiveReactionId] = useState<string | null>(null);
-  
-  // State to hold the dynamic user name
-  const [currentUserName, setCurrentUserName] = useState('Fellow Jeeper');
+  const [userId, setUserId] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
+  const flatListRef = useRef(null);
 
-  // Fetch the logged-in user's custom name from the backend when the chat opens
+  // 1. Get logged-in user ID on mount
   useEffect(() => {
-    const fetchUserName = async () => {
-      try {
-        const userId = await AsyncStorage.getItem('userId');
-        if (userId) {
-          const response = await fetch(`http://192.168.50.158:8000/users/${userId}/profile`);
-          if (response.ok) {
-            const data = await response.json();
-            // Try to use their owner name, fallback to their vehicle title if name is blank
-            if (data.settings && data.settings.ownerName) {
-              setCurrentUserName(data.settings.ownerName);
-            } else if (data.settings && data.settings.vehicleTitle) {
-              setCurrentUserName(data.settings.vehicleTitle);
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Failed to load user name:", error);
-      }
+    const getUser = async () => {
+      const storedId = await AsyncStorage.getItem('userId');
+      setUserId(storedId);
     };
-    
-    fetchUserName();
+    getUser();
   }, []);
 
-  const sendMessage = () => {
-    if (!inputText.trim()) return;
-    
-    // Use the dynamically fetched name instead of the hardcoded one
-    const newMessage = { 
-      id: Date.now().toString(), 
-      sender: currentUserName, 
-      text: inputText, 
-      reactions: {} 
-    };
-    
-    setMessages([...messages, newMessage]);
-    setInputText('');
-  };
-
-  const addReaction = (messageId: string, emoji: string) => {
-    setMessages(messages.map(msg => {
-      if (msg.id === messageId) {
-        const currentCount = msg.reactions[emoji as keyof typeof msg.reactions] || 0;
-        return { ...msg, reactions: { ...msg.reactions, [emoji]: currentCount + 1 } };
+  // 2. Fetch messages function
+  const fetchMessages = async (isInitial = false) => {
+    try {
+      const response = await fetch(`${API_URL}/chat`, {
+        headers: {
+          'ngrok-skip-browser-warning': 'true',
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setMessages(data);
       }
-      return msg;
-    }));
-    setActiveReactionId(null);
+    } catch (error) {
+      console.error('Failed to fetch messages:', error);
+    } finally {
+      if (isInitial) setIsLoading(false);
+    }
   };
 
-  const renderMessage = ({ item }: { item: typeof INITIAL_MESSAGES[0] }) => (
-    <View style={styles.messageCard}>
-      <Text style={styles.sender}>{item.sender}</Text>
-      <Text style={styles.messageText}>{item.text}</Text>
-      <View style={styles.reactionsContainer}>
-        {Object.entries(item.reactions).map(([emoji, count]) => (
-          <View key={emoji} style={styles.reactionBadge}><Text style={styles.reactionText}>{emoji} {count as number}</Text></View>
-        ))}
+  // 3. Set up HTTP Polling loop (fetches new messages every 3 seconds)
+  useEffect(() => {
+    fetchMessages(true); // Initial load with loader
+
+    const intervalId = setInterval(() => {
+      fetchMessages(false); // Background poll without loader
+    }, 3000);
+
+    return () => clearInterval(intervalId); // Cleanup interval on unmount
+  }, []);
+
+  // 4. Send message handler
+  const handleSendMessage = async () => {
+    if (!inputText.trim() || !userId) return;
+
+    const messageContent = inputText.trim();
+    setInputText('');
+    setIsSending(true);
+
+    try {
+      const response = await fetch(`${API_URL}/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: JSON.stringify({
+          user_id: parseInt(userId),
+          message: messageContent,
+        }),
+      });
+
+      if (response.ok) {
+        // Immediately fetch to update chat window with the new message
+        fetchMessages(false);
+      } else {
+        console.error('Failed to send message');
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const renderMessageItem = ({ item }) => {
+    const isMe = item.user_id?.toString() === userId?.toString();
+
+    return (
+      <View style={[styles.messageBubble, isMe ? styles.myMessage : styles.theirMessage]}>
+        {!isMe && <Text style={styles.senderName}>{item.owner_name || 'Fellow Jeeper'}</Text>}
+        <Text style={[styles.messageText, isMe ? styles.myMessageText : styles.theirMessageText]}>
+          {item.message}
+        </Text>
+        <Text style={[styles.timestamp, isMe ? styles.myTimestamp : styles.theirTimestamp]}>
+          {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </Text>
       </View>
-      <View style={styles.reactionActions}>
-        <TouchableOpacity onPress={() => setActiveReactionId(activeReactionId === item.id ? null : item.id)}>
-          <Text style={styles.reactButton}>+ React</Text>
-        </TouchableOpacity>
-        {activeReactionId === item.id && (
-          <View style={styles.emojiMenu}>
-            <TouchableOpacity onPress={() => addReaction(item.id, '🦆')}><Text style={styles.emoji}>🦆</Text></TouchableOpacity>
-            <TouchableOpacity onPress={() => addReaction(item.id, '🚙')}><Text style={styles.emoji}>🚙</Text></TouchableOpacity>
-            <TouchableOpacity onPress={() => addReaction(item.id, '👋')}><Text style={styles.emoji}>👋</Text></TouchableOpacity>
-            <TouchableOpacity onPress={() => alert('Full emoji picker library will be integrated here!')}><Text style={styles.emoji}>...</Text></TouchableOpacity>
-          </View>
-        )}
+    );
+  };
+
+  if (isLoading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#4caf50" />
       </View>
-    </View>
-  );
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Trail Chat</Text>
-        <TouchableOpacity style={styles.nearbyButton} onPress={() => setShowRigsModal(true)}>
-          <Text style={styles.nearbyButtonText}>📍 Nearby (15mi)</Text>
-        </TouchableOpacity>
       </View>
 
-      <FlatList data={messages} keyExtractor={item => item.id} renderItem={renderMessage} contentContainerStyle={styles.chatList} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardContainer}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          keyExtractor={(item, index) => item.id?.toString() || index.toString()}
+          renderItem={renderMessageItem}
+          contentContainerStyle={styles.messageList}
+          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+        />
 
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.inputContainer}>
-          <TextInput style={styles.input} placeholder="Message the trail..." value={inputText} onChangeText={setInputText} />
-          <TouchableOpacity style={styles.sendButton} onPress={sendMessage}><Text style={styles.sendButtonText}>Send</Text></TouchableOpacity>
+          <TextInput
+            style={styles.input}
+            placeholder="Broadcast to nearby trails..."
+            placeholderTextColor="#888"
+            value={inputText}
+            onChangeText={setInputText}
+          />
+          <TouchableOpacity
+            style={[styles.sendButton, (!inputText.trim() || isSending) && styles.sendButtonDisabled]}
+            onPress={handleSendMessage}
+            disabled={!inputText.trim() || isSending}
+          >
+            {isSending ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.sendButtonText}>Send</Text>
+            )}
+          </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
-
-      <Modal visible={showRigsModal} animationType="slide" transparent={true}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Rigs within 15 Miles</Text>
-            {NEARBY_RIGS.map(rig => (
-              <TouchableOpacity 
-                key={rig.id} 
-                style={styles.rigRow} 
-                onPress={() => {
-                  setShowRigsModal(false);
-                  router.push(`/rig/${rig.id}`);
-                }}
-              >
-                <Text style={styles.rigName}>{rig.name}</Text>
-                <Text style={styles.rigDistance}>{rig.distance}</Text>
-              </TouchableOpacity>
-            ))}
-            <TouchableOpacity style={styles.closeModalBtn} onPress={() => setShowRigsModal(false)}>
-              <Text style={styles.closeModalText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, backgroundColor: '#1a1a1a' },
+  container: { flex: 1, backgroundColor: '#121212' },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#121212' },
+  header: { padding: 20, backgroundColor: '#1a1a1a', borderBottomWidth: 1, borderBottomColor: '#2c2c2e' },
   headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
-  nearbyButton: { backgroundColor: '#4caf50', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20 },
-  nearbyButtonText: { color: '#fff', fontWeight: 'bold' },
-  chatList: { padding: 15 },
-  messageCard: { backgroundColor: '#fff', padding: 15, borderRadius: 10, marginBottom: 12, elevation: 2 },
-  sender: { fontWeight: 'bold', color: '#4caf50', marginBottom: 5 },
-  messageText: { fontSize: 16, color: '#333' },
-  reactionsContainer: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8 },
-  reactionBadge: { backgroundColor: '#e0e0e0', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4, marginRight: 6, marginBottom: 6 },
-  reactionText: { fontSize: 12 },
-  reactionActions: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
-  reactButton: { color: '#757575', fontSize: 14, fontWeight: '600', marginRight: 10 },
-  emojiMenu: { flexDirection: 'row', backgroundColor: '#eeeeee', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
-  emoji: { fontSize: 20, marginHorizontal: 8 },
-  inputContainer: { flexDirection: 'row', padding: 10, backgroundColor: '#fff', borderTopWidth: 1, borderColor: '#ddd' },
-  input: { flex: 1, backgroundColor: '#f0f0f0', borderRadius: 20, paddingHorizontal: 15, fontSize: 16, marginRight: 10 },
-  sendButton: { backgroundColor: '#1a1a1a', borderRadius: 20, paddingHorizontal: 20, justifyContent: 'center' },
-  sendButtonText: { color: '#fff', fontWeight: 'bold' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 25, minHeight: 350 },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
-  rigRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  rigName: { fontSize: 16, fontWeight: '600', color: '#333' },
-  rigDistance: { fontSize: 16, color: '#4caf50', fontWeight: 'bold' },
-  closeModalBtn: { marginTop: 30, backgroundColor: '#1a1a1a', padding: 15, borderRadius: 10, alignItems: 'center' },
-  closeModalText: { color: '#fff', fontSize: 16, fontWeight: 'bold' }
+  keyboardContainer: { flex: 1 },
+  messageList: { padding: 15, paddingBottom: 20 },
+  messageBubble: { maxWidth: '80%', padding: 12, borderRadius: 12, marginBottom: 10 },
+  myMessage: { alignSelf: 'flex-end', backgroundColor: '#2e7d32' },
+  theirMessage: { alignSelf: 'flex-start', backgroundColor: '#1e1e1e', borderWidth: 1, borderColor: '#333' },
+  senderName: { fontSize: 12, fontWeight: 'bold', color: '#4caf50', marginBottom: 4 },
+  messageText: { fontSize: 16 },
+  myMessageText: { color: '#ffffff' },
+  theirMessageText: { color: '#e0e0e0' },
+  timestamp: { fontSize: 10, marginTop: 4, alignSelf: 'flex-end' },
+  myTimestamp: { color: 'rgba(255, 255, 255, 0.7)' },
+  theirTimestamp: { color: '#888' },
+  inputContainer: { flexDirection: 'row', padding: 12, backgroundColor: '#1a1a1a', borderTopWidth: 1, borderTopColor: '#2c2c2e', alignItems: 'center' },
+  input: { flex: 1, backgroundColor: '#2c2c2e', color: '#fff', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, fontSize: 16, marginRight: 10 },
+  sendButton: { backgroundColor: '#4caf50', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  sendButtonDisabled: { backgroundColor: '#1b5e20', opacity: 0.5 },
+  sendButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
 });
