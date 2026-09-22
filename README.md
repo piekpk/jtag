@@ -31,3 +31,4 @@ run ngrok to have a public url for local database
  ngrok http 8000 --url https://unknowing-dropper-starfish.ngrok-free.dev
  url is moved to config.js
  
+gitignore file was updated to ignore database backend
