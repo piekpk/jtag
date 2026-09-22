@@ -25,7 +25,19 @@ export default function BrowseScreen() {
         }
         let location = await Location.getCurrentPositionAsync({});
 
-        // 2. Fetch nearby users (8046.72 meters = 5 miles)
+        // 2. Save this user's live location to the database
+        if (loggedInId) {
+          await fetch(`http://192.168.50.158:8000/users/${loggedInId}/location`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              lat: location.coords.latitude,
+              lng: location.coords.longitude
+            })
+          });
+        }
+
+        // 3. Fetch nearby users (8046.72 meters = 5 miles)
         const response = await fetch(
           `http://192.168.50.158:8000/users/nearby?lat=${location.coords.latitude}&lng=${location.coords.longitude}&radiusInMeters=8046.72`
         );
