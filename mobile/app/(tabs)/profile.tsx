@@ -158,8 +158,14 @@ export default function MyRigScreen() {
   // Helper function to safely format image URLs
   const getImageUrl = (imagePath: string) => {
     if (!imagePath) return null;
+    
+    // Swap hardcoded local IPs from the backend with the active Ngrok tunnel
+    if (imagePath.includes('http://192.168.')) {
+      return imagePath.replace(/http:\/\/192\.168\.\d+\.\d+:\d+/, API_URL);
+    }
+    
     if (imagePath.startsWith('http')) return imagePath;
-    return `${API_URL}/${imagePath}`;
+    return `${API_URL}/${imagePath.startsWith('/') ? imagePath.slice(1) : imagePath}`;
   };
 
   if (isLoading) {
@@ -219,7 +225,10 @@ export default function MyRigScreen() {
               <Image 
                 source={{ 
                   uri: getImageUrl(photos[i]),
-                  headers: { 'ngrok-skip-browser-warning': 'true' }
+                  headers: { 
+                    'ngrok-skip-browser-warning': 'true',
+                    'User-Agent': 'JtapApp/1.0'
+                  }
                 }} 
                 style={styles.photo} 
               />
