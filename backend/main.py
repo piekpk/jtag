@@ -1,5 +1,8 @@
 ﻿import shutil
 import os
+import json
+import sqlite3
+from datetime import datetime
 from uuid import uuid4
 from math import radians, cos, sin, asin, sqrt
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException
@@ -27,6 +30,12 @@ def get_db():
     finally:
         db.close()
 
+# Raw SQLite helper for chat messages to seamlessly join with user settings
+def get_raw_db():
+    conn = sqlite3.connect('jtap.db')
+    conn.row_factory = sqlite3.Row
+    return conn
+
 # --- Helper Functions ---
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371000  # Radius of Earth in meters
@@ -41,15 +50,19 @@ class LocationUpdate(BaseModel):
     lat: float
     lng: float
 
+class ChatMessageCreate(BaseModel):
+    user_id: int
+    message: str
+
 # --- App Setup ---
 app = FastAPI(title="Jtap Backend")
-# This mount allows other devices to fetch images via the /uploads URL path
+# This mount allows other devices to fetch images via the /uploads URL path[cite: 11]
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # --- Auth Endpoints ---
 @app.post("/signup", response_model=UserProfileResponse)
 def signup(user: UserCreate, db: Session = Depends(get_db)):
-    # Force strict lowercase and remove accidental spaces on the server side
+    # Force strict lowercase and remove accidental spaces on the server side[cite: 11]
     normalized_email = user.email.strip().lower()
     
     db_user = db.query(User).filter(User.email == normalized_email).first()
@@ -63,16 +76,16 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
     db.refresh(new_user)
     return new_user
 
-#---user login checking and returning user profile if successful
+#---user login checking and returning user profile if successful[cite: 11]
 @app.post("/login", response_model=UserProfileResponse)
 def login(user_credentials: UserCreate, db: Session = Depends(get_db)):
-    # Normalize the email just like we do in signup
+    # Normalize the email just like we do in signup[cite: 11]
     normalized_email = user_credentials.email.strip().lower()
     
-    # Look for the user in the database
+    # Look for the user in the database[cite: 11]
     user = db.query(User).filter(User.email == normalized_email).first()
     
-    # If the user doesn't exist, OR the password doesn't match the hash, reject them
+    # If the user doesn't exist, OR the password doesn't match the hash, reject them[cite: 11]
     if not user or not pwd_context.verify(user_credentials.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
         
@@ -103,19 +116,19 @@ def upload_profile_picture(user_id: int, file: UploadFile = File(...), db: Sessi
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    # Ensure the directory exists so the server doesn't crash during the first upload
+    # Ensure the directory exists so the server doesn't crash during the first upload[cite: 11]
     os.makedirs("uploads/profiles", exist_ok=True)
     
-    # Generate a unique filename using UUID
+    # Generate a unique filename using UUID[cite: 11]
     file_extension = file.filename.split(".")[-1]
     unique_filename = f"user_{user_id}_{uuid4().hex}.{file_extension}"
     file_location = f"uploads/profiles/{unique_filename}"
     
-    # Save the file to the local directory
+    # Save the file to the local directory[cite: 11]
     with open(file_location, "wb+") as file_object:
         shutil.copyfileobj(file.file, file_object)
         
-    # Store the fully qualified URL in the database so the frontend can load it instantly
+    # Store the fully qualified URL in the database so the frontend can load it instantly[cite: 11]
     user.profile_picture_url = f"http://192.168.50.158:8000/{file_location}"
     db.commit()
     
@@ -160,3 +173,73 @@ def get_nearby_users(lat: float, lng: float, radiusInMeters: float = 8000, db: S
             })
             
     return nearby_users
+
+# --- Chat Endpoints ---
+@app.get("/chat")
+def get_chat_messages():
+    conn = get_raw_db()
+    cursor = conn.cursor()
+    
+    # Auto-initialize messages table if it doesn't exist yet
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            message TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    cursor.execute('''
+        SELECT m.id, m.user_id, m.message, m.timestamp, u.settings 
+        FROM messages m
+        LEFT JOIN users u ON m.user_id = u.id
+        ORDER BY m.timestamp ASC
+        LIMIT 100
+    ''')
+    rows = cursor.fetchall()
+    conn.close()
+    
+    messages = []
+    for row in rows:
+        owner_name = "Fellow Jeeper"
+        if row["settings"]:
+            try:
+                settings_dict = json.loads(row["settings"])
+                owner_name = settings_dict.get("ownerName", "Fellow Jeeper")
+            except:
+                pass
+                
+        messages.append({
+            "id": row["id"],
+            "user_id": row["user_id"],
+            "owner_name": owner_name,
+            "message": row["message"],
+            "timestamp": row["timestamp"]
+        })
+        
+    return messages
+
+@app.post("/chat")
+def post_chat_message(chat: ChatMessageCreate):
+    conn = get_raw_db()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            message TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    cursor.execute(
+        "INSERT INTO messages (user_id, message, timestamp) VALUES (?, ?, ?)",
+        (chat.user_id, chat.message, datetime.utcnow())
+    )
+    conn.commit()
+    msg_id = cursor.lastrowid
+    conn.close()
+    
+    return {"id": msg_id, "status": "success"}
