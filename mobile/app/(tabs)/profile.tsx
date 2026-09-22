@@ -2,9 +2,11 @@
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, Alert, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_URL } from '../config.js'; //file that contains backend URL
+import { useRouter } from 'expo-router';
+import { API_URL } from '../config.js'; //file that contains backend URL[cite: 9]
 
 export default function MyRigScreen() {
+  const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -21,7 +23,7 @@ export default function MyRigScreen() {
   const [mods, setMods] = useState('');
   const [photos, setPhotos] = useState<string[]>(['', '', '', '']);
 
-  // 1. Load the user's profile from the database when the screen opens
+  // 1. Load the user's profile from the database when the screen opens[cite: 9]
   useEffect(() => {
     const fetchProfileData = async () => {
       try {
@@ -41,7 +43,7 @@ export default function MyRigScreen() {
         if (response.ok) {
           const data = await response.json();
           
-          // If the user has saved settings in the database, populate the screen
+          // If the user has saved settings in the database, populate the screen[cite: 9]
           if (data.settings && Object.keys(data.settings).length > 0) {
             if (data.settings.ownerName) setOwnerName(data.settings.ownerName);
             if (data.settings.vehicleTitle) setVehicleTitle(data.settings.vehicleTitle);
@@ -49,7 +51,7 @@ export default function MyRigScreen() {
             if (data.settings.mods) setMods(data.settings.mods);
             if (data.settings.photos) setPhotos(data.settings.photos);
           } else {
-            // Default placeholder data for brand new users
+            // Default placeholder data for brand new users[cite: 9]
             setOwnerName('New User');
             setVehicleTitle('Add your rig details');
             setSpecs({ engine: 'e.g., 2.0L Turbo', wheels: 'e.g., 35" MT', interior: 'e.g., Leather' });
@@ -66,7 +68,7 @@ export default function MyRigScreen() {
     fetchProfileData();
   }, []);
 
-  // 2. Save the user's profile to the database when they click "Save"
+  // 2. Save the user's profile to the database when they click "Save"[cite: 9]
   const handleEditToggle = async () => {
     if (isEditing && userId) {
       setIsSaving(true);
@@ -91,16 +93,26 @@ export default function MyRigScreen() {
         if (!response.ok) {
           Alert.alert("Save Failed", "Could not save your profile changes.");
           setIsSaving(false);
-          return; // Don't exit edit mode if save failed
+          return; // Don't exit edit mode if save failed[cite: 9]
         }
       } catch (error) {
         Alert.alert("Network Error", "Failed to connect to the server.");
         setIsSaving(false);
-        return; // Don't exit edit mode if network failed
+        return; // Don't exit edit mode if network failed[cite: 9]
       }
       setIsSaving(false);
     }
     setIsEditing(!isEditing);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await AsyncStorage.removeItem('userId');
+      router.replace('/');
+    } catch (error) {
+      console.error("Failed to log out:", error);
+      Alert.alert("Error", "Could not log out.");
+    }
   };
 
   const pickImage = async (index: number) => {
@@ -119,9 +131,9 @@ export default function MyRigScreen() {
       const match = /\.(\w+)$/.exec(filename);
       const type = match ? `image/${match[1]}` : `image/jpeg`;
 
-      // 1. Format the image for the backend
+      // 1. Format the image for the backend[cite: 9]
       const formData = new FormData();
-      // @ts-ignore - React Native FormData expects this specific structure
+      // @ts-ignore - React Native FormData expects this specific structure[cite: 9]
       formData.append('file', {
         uri: localUri,
         name: filename,
@@ -129,7 +141,7 @@ export default function MyRigScreen() {
       });
 
       try {
-        // 2. Upload it to your backend via Ngrok
+        // 2. Upload it to your backend via Ngrok[cite: 9]
         const response = await fetch(`${API_URL}/users/${userId}/profile-picture`, {
           method: 'POST',
           body: formData,
@@ -141,7 +153,7 @@ export default function MyRigScreen() {
 
         if (response.ok) {
           const data = await response.json();
-          // 3. Update the state with the new network URL from the server
+          // 3. Update the state with the new network URL from the server[cite: 9]
           const newPhotos = [...photos];
           newPhotos[index] = data.url; 
           setPhotos(newPhotos);
@@ -155,11 +167,11 @@ export default function MyRigScreen() {
     }
   };
 
-  // Helper function to safely format image URLs
+  // Helper function to safely format image URLs[cite: 9]
   const getImageUrl = (imagePath: string) => {
     if (!imagePath) return null;
     
-    // Swap hardcoded local IPs from the backend with the active Ngrok tunnel
+    // Swap hardcoded local IPs from the backend with the active Ngrok tunnel[cite: 9]
     if (imagePath.includes('http://192.168.')) {
       return imagePath.replace(/http:\/\/192\.168\.\d+\.\d+:\d+/, API_URL);
     }
@@ -270,6 +282,13 @@ export default function MyRigScreen() {
           <Text style={styles.modText}>{mods}</Text>
         )}
       </View>
+
+      {/* Log Out Button Section */}
+      <View style={styles.logoutContainer}>
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <Text style={styles.logoutButtonText}>Log Out</Text>
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 }
@@ -295,5 +314,8 @@ const styles = StyleSheet.create({
   specValue: { fontSize: 16, fontWeight: '600', color: '#333333', flex: 2, textAlign: 'right' },
   input: { flex: 2, backgroundColor: '#f0f0f0', padding: 8, borderRadius: 6, fontSize: 16, color: '#333', textAlign: 'right' },
   multiline: { textAlign: 'left', minHeight: 80, textAlignVertical: 'top' },
-  modText: { fontSize: 16, paddingVertical: 6, color: '#444444', lineHeight: 24 }
+  modText: { fontSize: 16, paddingVertical: 6, color: '#444444', lineHeight: 24 },
+  logoutContainer: { marginHorizontal: 15, marginBottom: 30, alignItems: 'center' },
+  logoutButton: { backgroundColor: '#d32f2f', width: '100%', padding: 15, borderRadius: 8, alignItems: 'center' },
+  logoutButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' }
 });
