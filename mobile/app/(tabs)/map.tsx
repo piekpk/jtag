@@ -31,6 +31,39 @@ export default function RadarMapScreen() {
   const [dropDuration, setDropDuration] = useState(6);
   const [dropLabel, setDropLabel] = useState('');
   const [isDropping, setIsDropping] = useState(false);
+  // Weather widget (Open-Meteo: free, no API key)
+  const [weather, setWeather] = useState(null);
+  const [weatherExpanded, setWeatherExpanded] = useState(false);
+
+  // WMO weather code -> [emoji, label]
+  const wmoInfo = (code) => ({
+    0: ['☀️', 'Clear'], 1: ['🌤️', 'Mostly clear'], 2: ['⛅', 'Partly cloudy'], 3: ['☁️', 'Overcast'],
+    45: ['🌫️', 'Fog'], 48: ['🌫️', 'Icy fog'],
+    51: ['🌦️', 'Light drizzle'], 53: ['🌦️', 'Drizzle'], 55: ['🌦️', 'Heavy drizzle'],
+    56: ['🌧️', 'Freezing drizzle'], 57: ['🌧️', 'Freezing drizzle'],
+    61: ['🌧️', 'Light rain'], 63: ['🌧️', 'Rain'], 65: ['🌧️', 'Heavy rain'],
+    66: ['🌧️', 'Freezing rain'], 67: ['🌧️', 'Freezing rain'],
+    71: ['❄️', 'Light snow'], 73: ['❄️', 'Snow'], 75: ['❄️', 'Heavy snow'], 77: ['❄️', 'Snow grains'],
+    80: ['🌧️', 'Light showers'], 81: ['🌧️', 'Showers'], 82: ['🌧️', 'Heavy showers'],
+    85: ['❄️', 'Snow showers'], 86: ['❄️', 'Snow showers'],
+    95: ['⛈️', 'Thunderstorm'], 96: ['⛈️', 'Storm + hail'], 99: ['⛈️', 'Storm + hail'],
+  }[code] || ['🌡️', '']);
+
+  const fetchWeather = async (lat, lng) => {
+    try {
+      const res = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
+        `&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m` +
+        `&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data.current) setWeather(data.current);
+      }
+    } catch (e) {
+      console.error('Weather fetch failed:', e);
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -53,6 +86,7 @@ export default function RadarMapScreen() {
         };
         
         setLocation(currentCoords);
+        fetchWeather(currentCoords.latitude, currentCoords.longitude);
 
         // 2. Save this user's live location to the database (Matches browse screen logic)
         if (loggedInId) {
@@ -215,6 +249,33 @@ export default function RadarMapScreen() {
         ))}
       </MapView>
 
+      {/* Weather widget */}
+      {weather && (
+        <TouchableOpacity
+          style={styles.weatherBox}
+          onPress={() => setWeatherExpanded(!weatherExpanded)}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.weatherMain}>
+            {wmoInfo(weather.weather_code)[0]} {Math.round(weather.temperature_2m)}°
+          </Text>
+          <Text style={styles.weatherCond}>{wmoInfo(weather.weather_code)[1]}</Text>
+          {weatherExpanded && (
+            <View style={styles.weatherDetails}>
+              <Text style={styles.weatherDetail}>
+                Feels like {Math.round(weather.apparent_temperature)}°F
+              </Text>
+              <Text style={styles.weatherDetail}>
+                💧 {weather.relative_humidity_2m}% humidity
+              </Text>
+              <Text style={styles.weatherDetail}>
+                💨 {Math.round(weather.wind_speed_10m)} mph wind
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      )}
+
       {/* Selected drop detail card */}
       {selectedDrop && (
         <View style={styles.dropCard}>
@@ -346,6 +407,17 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: '#121212',
   },
   dropEmoji: { fontSize: 24 },
+  weatherBox: {
+    position: 'absolute', top: 12, left: 12,
+    backgroundColor: 'rgba(18,18,18,0.88)', borderRadius: 12, padding: 10,
+    borderWidth: 1, borderColor: '#d4af37', minWidth: 108,
+  },
+  weatherMain: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  weatherCond: { color: '#d4af37', fontSize: 11, fontWeight: '600', marginTop: 2 },
+  weatherDetails: {
+    marginTop: 6, borderTopWidth: 1, borderTopColor: '#2c2c2e', paddingTop: 6,
+  },
+  weatherDetail: { color: '#ccc', fontSize: 11, marginTop: 2 },
   dropCard: {
     position: 'absolute', bottom: 20, left: 15, right: 15,
     backgroundColor: '#1e1e1e', borderRadius: 14, padding: 15,
