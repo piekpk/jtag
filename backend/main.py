@@ -645,7 +645,7 @@ class DropCreate(BaseModel):
     longitude: float
     radius_m: float = 200.0
     duration_hours: float = 2.0
-    max_claims: int = 50
+    max_claims: int = 5
     label: str = None
 
 
@@ -664,13 +664,18 @@ def create_drop(payload: DropCreate, db: Session = Depends(get_db), current_user
         DuckDrop.claims_count < DuckDrop.max_claims).count()
     if active >= MAX_ACTIVE_DROPS_PER_USER:
         raise HTTPException(status_code=400, detail="You already have 3 active drops")
+    claims = max(1, min(payload.max_claims, 500))
+    # Drops are stocked from the creator's inventory: 1 duck per claim.
+    # No minting — a legendary drop costs legendary ducks.
+    _ensure_starter_ducks(db, current_user.id)
+    _spend_duck(db, current_user.id, payload.duck_type_id, claims)
     drop = DuckDrop(
         duck_type_id=payload.duck_type_id,
         latitude=payload.latitude, longitude=payload.longitude,
         radius_m=max(50.0, payload.radius_m),
         starts_at=now,
         expires_at=now + timedelta(hours=max(0.25, min(payload.duration_hours, 72))),
-        max_claims=max(1, min(payload.max_claims, 500)),
+        max_claims=claims,
         created_by=current_user.id, label=payload.label)
     db.add(drop)
     db.commit()
