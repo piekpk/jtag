@@ -32,6 +32,7 @@ export default function PublicRigScreen() {
   const [tradeOffer, setTradeOffer] = useState(null);
   const [tradeRequest, setTradeRequest] = useState(null);
   const [isTrading, setIsTrading] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(null); // index into availablePhotos, null = closed
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -145,6 +146,12 @@ export default function PublicRigScreen() {
   const specs = settings.specs || { engine: 'N/A', wheels: 'N/A', interior: 'N/A' };
   const mods = settings.mods || 'No mods listed.';
   const photos = settings.photos || [];
+  const availablePhotos = photos.filter(Boolean); // non-empty slots only, for the lightbox
+
+  const openLightbox = (slotIndex) => {
+    const idx = availablePhotos.indexOf(photos[slotIndex]);
+    if (idx >= 0) setLightboxIndex(idx);
+  };
 
   return (
     <View style={styles.container}>
@@ -181,22 +188,74 @@ export default function PublicRigScreen() {
         {[0, 1, 2, 3].map((i) => (
           <View key={i} style={styles.photoBox}>
             {photos[i] ? (
-              <Image 
-                source={{ 
-                  uri: getImageUrl(photos[i]),
-                  headers: { 
-                    'ngrok-skip-browser-warning': 'true',
-                    'User-Agent': 'JtapApp/1.0'
-                  }
-                }} 
-                style={styles.photo} 
-              />
+              <TouchableOpacity onPress={() => openLightbox(i)} activeOpacity={0.85} style={{ width: '100%', height: '100%' }}>
+                <Image 
+                  source={{ 
+                    uri: getImageUrl(photos[i]),
+                    headers: { 
+                      'ngrok-skip-browser-warning': 'true',
+                      'User-Agent': 'JtapApp/1.0'
+                    }
+                  }} 
+                  style={styles.photo} 
+                />
+              </TouchableOpacity>
             ) : (
               <Text style={styles.photoPlaceholder}>No Photo</Text>
             )}
           </View>
         ))}
       </View>
+
+      {/* Fullscreen photo lightbox */}
+      <Modal
+        visible={lightboxIndex !== null}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setLightboxIndex(null)}
+      >
+        <TouchableOpacity
+          style={styles.lightboxBackdrop}
+          activeOpacity={1}
+          onPress={() => setLightboxIndex(null)}
+        >
+          <TouchableOpacity style={styles.lightboxClose} onPress={() => setLightboxIndex(null)}>
+            <Text style={styles.lightboxCloseText}>✕</Text>
+          </TouchableOpacity>
+          {lightboxIndex !== null && availablePhotos[lightboxIndex] && (
+            <Image
+              source={{
+                uri: getImageUrl(availablePhotos[lightboxIndex]),
+                headers: {
+                  'ngrok-skip-browser-warning': 'true',
+                  'User-Agent': 'JtapApp/1.0'
+                }
+              }}
+              style={styles.lightboxImage}
+              resizeMode="contain"
+            />
+          )}
+          <Text style={styles.lightboxCounter}>
+            {(lightboxIndex ?? 0) + 1} / {availablePhotos.length}
+          </Text>
+          {availablePhotos.length > 1 && (
+            <>
+              <TouchableOpacity
+                style={[styles.lightboxNav, styles.lightboxPrev]}
+                onPress={() => setLightboxIndex((lightboxIndex + availablePhotos.length - 1) % availablePhotos.length)}
+              >
+                <Text style={styles.lightboxNavText}>‹</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.lightboxNav, styles.lightboxNext]}
+                onPress={() => setLightboxIndex((lightboxIndex + 1) % availablePhotos.length)}
+              >
+                <Text style={styles.lightboxNavText}>›</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </TouchableOpacity>
+      </Modal>
       
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Vehicle Specs</Text>
@@ -323,6 +382,30 @@ const styles = StyleSheet.create({
   photoBox: { width: '48%', height: 120, backgroundColor: '#2c2c2e', marginBottom: 10, borderRadius: 8, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   photoPlaceholder: { color: '#757575', fontWeight: '600' },
   photo: { width: '100%', height: '100%' },
+  lightboxBackdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.92)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  lightboxImage: { width: '94%', height: '75%' },
+  lightboxClose: {
+    position: 'absolute', top: 50, right: 20, zIndex: 2,
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: 'rgba(212,175,55,0.9)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  lightboxCloseText: { color: '#121212', fontSize: 18, fontWeight: 'bold' },
+  lightboxCounter: {
+    position: 'absolute', bottom: 50, color: '#d4af37',
+    fontSize: 14, fontWeight: '600',
+  },
+  lightboxNav: {
+    position: 'absolute', top: '45%', zIndex: 2,
+    width: 48, height: 64, justifyContent: 'center', alignItems: 'center',
+    backgroundColor: 'rgba(30,30,30,0.7)', borderRadius: 10,
+  },
+  lightboxPrev: { left: 10 },
+  lightboxNext: { right: 10 },
+  lightboxNavText: { color: '#d4af37', fontSize: 36, fontWeight: 'bold', lineHeight: 40 },
   section: { marginHorizontal: 15, marginBottom: 15, padding: 20, backgroundColor: '#1e1e1e', borderRadius: 12, elevation: 3 },
   sectionTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff', marginBottom: 15, borderBottomWidth: 1, borderBottomColor: '#2c2c2e', paddingBottom: 8 },
   specRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 },
