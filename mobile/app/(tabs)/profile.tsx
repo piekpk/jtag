@@ -176,7 +176,7 @@ export default function MyRigScreen() {
   if (isLoading) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color="#4caf50" />
+        <ActivityIndicator size="large" color="#d4af37" />
       </View>
     );
   }
@@ -287,27 +287,27 @@ export default function MyRigScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, backgroundColor: '#121212' },
   header: { padding: 25, backgroundColor: '#1a1a1a' },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   title: { fontSize: 28, fontWeight: '900', color: '#ffffff', letterSpacing: 1, flex: 1 },
   editTitleInput: { fontSize: 24, fontWeight: '900', color: '#ffffff', backgroundColor: '#333', padding: 5, borderRadius: 6, flex: 1, marginRight: 10 },
-  editBtn: { backgroundColor: '#4caf50', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20 },
-  editBtnText: { color: '#fff', fontWeight: 'bold' },
-  subtitle: { fontSize: 16, color: '#4caf50', marginTop: 8, fontWeight: '600' },
-  editSubtitleInput: { fontSize: 16, color: '#4caf50', marginTop: 8, fontWeight: '600', backgroundColor: '#333', padding: 5, borderRadius: 6 },
+  editBtn: { backgroundColor: '#d4af37', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20 },
+  editBtnText: { color: '#121212', fontWeight: 'bold' },
+  subtitle: { fontSize: 16, color: '#d4af37', marginTop: 8, fontWeight: '600' },
+  editSubtitleInput: { fontSize: 16, color: '#d4af37', marginTop: 8, fontWeight: '600', backgroundColor: '#333', padding: 5, borderRadius: 6 },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', padding: 10, justifyContent: 'space-between' },
-  photoBox: { width: '48%', height: 120, backgroundColor: '#e0e0e0', marginBottom: 10, borderRadius: 8, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  photoBox: { width: '48%', height: 120, backgroundColor: '#2c2c2e', marginBottom: 10, borderRadius: 8, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   photoPlaceholder: { color: '#757575', fontWeight: '600' },
   photo: { width: '100%', height: '100%' },
-  section: { marginHorizontal: 15, marginBottom: 15, padding: 20, backgroundColor: '#ffffff', borderRadius: 12, elevation: 3 },
-  sectionTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 15, borderBottomWidth: 1, borderBottomColor: '#eeeeee', paddingBottom: 8 },
+  section: { marginHorizontal: 15, marginBottom: 15, padding: 20, backgroundColor: '#1e1e1e', borderRadius: 12, elevation: 3 },
+  sectionTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff', marginBottom: 15, borderBottomWidth: 1, borderBottomColor: '#2c2c2e', paddingBottom: 8 },
   specRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 },
-  specLabel: { fontSize: 16, color: '#666666', flex: 1 },
-  specValue: { fontSize: 16, fontWeight: '600', color: '#333333', flex: 2, textAlign: 'right' },
-  input: { flex: 2, backgroundColor: '#f0f0f0', padding: 8, borderRadius: 6, fontSize: 16, color: '#333', textAlign: 'right' },
+  specLabel: { fontSize: 16, color: '#aaa', flex: 1 },
+  specValue: { fontSize: 16, fontWeight: '600', color: '#fff', flex: 2, textAlign: 'right' },
+  input: { flex: 2, backgroundColor: '#2c2c2e', padding: 8, borderRadius: 6, fontSize: 16, color: '#fff', textAlign: 'right' },
   multiline: { textAlign: 'left', minHeight: 80, textAlignVertical: 'top' },
-  modText: { fontSize: 16, paddingVertical: 6, color: '#444444', lineHeight: 24 },
+  modText: { fontSize: 16, paddingVertical: 6, color: '#ccc', lineHeight: 24 },
   logoutContainer: { marginHorizontal: 15, marginBottom: 30, alignItems: 'center' },
   logoutButton: { backgroundColor: '#d32f2f', width: '100%', padding: 15, borderRadius: 8, alignItems: 'center' },
   logoutButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' }

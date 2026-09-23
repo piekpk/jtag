@@ -118,7 +118,7 @@ export default function BrowseScreen() {
   if (isLoading) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color="#4caf50" />
+        <ActivityIndicator size="large" color="#d4af37" />
       </View>
     );
   }
@@ -145,19 +145,19 @@ export default function BrowseScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, backgroundColor: '#121212' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { padding: 20, backgroundColor: '#1a1a1a' },
   headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#fff' },
   list: { padding: 15 },
-  userCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 15, borderRadius: 12, marginBottom: 12, elevation: 2 },
-  avatarContainer: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#e0e0e0', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', marginRight: 15 },
+  userCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1e1e1e', padding: 15, borderRadius: 12, marginBottom: 12, elevation: 2 },
+  avatarContainer: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#2c2c2e', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', marginRight: 15 },
   avatar: { width: '100%', height: '100%' },
   avatarPlaceholder: { fontSize: 24 },
   userInfo: { flex: 1 },
-  userName: { fontSize: 18, fontWeight: 'bold', color: '#333' },
-  vehicleName: { fontSize: 14, color: '#666', marginTop: 4 },
-  viewBtn: { backgroundColor: '#4caf50', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8 },
-  viewBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  userName: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
+  vehicleName: { fontSize: 14, color: '#aaa', marginTop: 4 },
+  viewBtn: { backgroundColor: '#d4af37', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8 },
+  viewBtnText: { color: '#121212', fontWeight: 'bold', fontSize: 16 },
   emptyText: { fontSize: 16, color: '#888' }
 });

@@ -190,18 +190,18 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   registerButton: {
-    backgroundColor: '#2e7d32',
+    backgroundColor: '#d4af37',
     paddingVertical: 14,
     borderRadius: 8,
     alignItems: 'center',
     marginTop: 24,
   },
   registerButtonDisabled: {
-    backgroundColor: '#1b5e20',
+    backgroundColor: '#5c4a12',
     opacity: 0.7,
   },
   registerButtonText: {
-    color: '#ffffff',
+    color: '#121212',
     fontSize: 16,
     fontWeight: '700',
   },
@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   signinText: {
-    color: '#4caf50',
+    color: '#d4af37',
     fontSize: 14,
     fontWeight: '600',
   },

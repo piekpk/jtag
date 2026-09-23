@@ -70,7 +70,7 @@ export default function RadarMapScreen() {
   }
 
   if (!location) {
-    return <View style={styles.centerContainer}><ActivityIndicator size="large" color="#0000ff" /></View>;
+    return <View style={styles.centerContainer}><ActivityIndicator size="large" color="#d4af37" /></View>;
   }
 
   return (

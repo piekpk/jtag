@@ -81,7 +81,7 @@ export default function LoginScreen() {
   if (isCheckingSession) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4caf50" />
+        <ActivityIndicator size="large" color="#d4af37" />
       </View>
     );
   }
@@ -201,18 +201,18 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   loginButton: {
-    backgroundColor: '#2e7d32',
+    backgroundColor: '#d4af37',
     paddingVertical: 14,
     borderRadius: 8,
     alignItems: 'center',
     marginTop: 24,
   },
   loginButtonDisabled: {
-    backgroundColor: '#1b5e20',
+    backgroundColor: '#5c4a12',
     opacity: 0.7,
   },
   loginButtonText: {
-    color: '#ffffff',
+    color: '#121212',
     fontSize: 16,
     fontWeight: '700',
   },
@@ -226,7 +226,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   signupText: {
-    color: '#4caf50',
+    color: '#d4af37',
     fontSize: 14,
     fontWeight: '600',
   },

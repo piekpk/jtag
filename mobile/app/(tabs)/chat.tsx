@@ -226,7 +226,7 @@ export default function ChatScreen() {
 
       {isLoading ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#4caf50" />
+          <ActivityIndicator size="large" color="#d4af37" />
         </View>
       ) : (
         <KeyboardAvoidingView
@@ -276,7 +276,7 @@ export default function ChatScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             {isProfileLoading || !selectedProfile ? (
-              <ActivityIndicator size="large" color="#4caf50" style={{ padding: 40 }} />
+              <ActivityIndicator size="large" color="#d4af37" style={{ padding: 40 }} />
             ) : (
               <>
                 <View style={styles.modalHeaderRow}>
@@ -334,15 +334,15 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#fff', marginBottom: 12 },
   tabContainer: { flexDirection: 'row', backgroundColor: '#2c2c2e', borderRadius: 8, padding: 4 },
   tabButton: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 6 },
-  activeTab: { backgroundColor: '#4caf50' },
+  activeTab: { backgroundColor: '#d4af37' },
   tabText: { color: '#aaa', fontWeight: 'bold', fontSize: 14 },
-  activeTabText: { color: '#fff' },
+  activeTabText: { color: '#121212' },
   keyboardContainer: { flex: 1 },
   messageList: { padding: 15, paddingBottom: 20 },
   messageBubble: { maxWidth: '85%', padding: 12, borderRadius: 12, marginBottom: 12 },
-  myMessage: { alignSelf: 'flex-end', backgroundColor: '#2e7d32' },
+  myMessage: { alignSelf: 'flex-end', backgroundColor: '#8a6d1f' },
   theirMessage: { alignSelf: 'flex-start', backgroundColor: '#1e1e1e', borderWidth: 1, borderColor: '#333' },
-  senderName: { fontSize: 12, fontWeight: 'bold', color: '#4caf50', marginBottom: 4 },
+  senderName: { fontSize: 12, fontWeight: 'bold', color: '#d4af37', marginBottom: 4 },
   messageText: { fontSize: 16 },
   myMessageText: { color: '#ffffff' },
   theirMessageText: { color: '#e0e0e0' },
@@ -359,22 +359,22 @@ const styles = StyleSheet.create({
   theirTimestamp: { color: '#888' },
   inputContainer: { flexDirection: 'row', padding: 12, backgroundColor: '#1a1a1a', borderTopWidth: 1, borderTopColor: '#2c2c2e', alignItems: 'center' },
   input: { flex: 1, backgroundColor: '#2c2c2e', color: '#fff', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, fontSize: 16, marginRight: 10 },
-  sendButton: { backgroundColor: '#4caf50', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  sendButtonDisabled: { backgroundColor: '#1b5e20', opacity: 0.5 },
-  sendButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
+  sendButton: { backgroundColor: '#d4af37', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  sendButtonDisabled: { backgroundColor: '#5c4a12', opacity: 0.5 },
+  sendButtonText: { color: '#121212', fontWeight: 'bold', fontSize: 14 },
   // Modal Styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
   modalContent: { width: '85%', backgroundColor: '#1e1e1e', borderRadius: 16, padding: 20, borderWidth: 1, borderColor: '#333' },
   modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
   modalCloseText: { fontSize: 20, color: '#aaa', fontWeight: 'bold' },
-  modalSubtitle: { fontSize: 14, color: '#4caf50', marginTop: 2, marginBottom: 15 },
+  modalSubtitle: { fontSize: 14, color: '#d4af37', marginTop: 2, marginBottom: 15 },
   modalPhotoBox: { width: '100%', height: 160, backgroundColor: '#2c2c2e', borderRadius: 10, justifyContent: 'center', alignItems: 'center', overflow: 'hidden', marginBottom: 15 },
   modalPhoto: { width: '100%', height: '100%' },
   modalInfoRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
   modalLabel: { fontSize: 16, color: '#aaa' },
   modalValue: { fontSize: 16, fontWeight: 'bold', color: '#ffeb3b' },
   modalButtonRow: { alignItems: 'center' },
-  fullProfileBtn: { backgroundColor: '#2e7d32', width: '100%', paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
-  fullProfileBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
+  fullProfileBtn: { backgroundColor: '#d4af37', width: '100%', paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
+  fullProfileBtnText: { color: '#121212', fontWeight: 'bold', fontSize: 16 },
 });
