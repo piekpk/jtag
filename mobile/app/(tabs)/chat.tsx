@@ -46,6 +46,14 @@ export default function ChatScreen() {
 
   const flatListRef = useRef(null);
   const messageCountRef = useRef(0); // tracks last-seen count so auto-scroll only fires on new messages
+  const isNearBottomRef = useRef(true); // false once the user scrolls up to read history
+
+  // Track whether the user is currently near the bottom of the chat.
+  const handleChatScroll = (e) => {
+    const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+    const distanceFromBottom = contentSize.height - (layoutMeasurement.height + contentOffset.y);
+    isNearBottomRef.current = distanceFromBottom < 80;
+  };
 
   useEffect(() => {
     const getUser = async () => {
@@ -83,6 +91,7 @@ export default function ChatScreen() {
   useEffect(() => {
     setIsLoading(true);
     messageCountRef.current = 0; // fresh channel load should land at the bottom
+    isNearBottomRef.current = true;
     fetchMessages(true);
     const intervalId = setInterval(() => {
       fetchMessages(false);
@@ -244,13 +253,18 @@ export default function ChatScreen() {
             contentContainerStyle={styles.messageList}
             // Only auto-scroll when NEW messages arrive. Reacting to a message
             // re-renders the list (badge row changes) without adding messages,
-            // and must not yank the user away from where they're reading.
+            // and must not move the user's scroll position.
+            // Local channel always follows new messages; global only follows
+            // when the user is already near the bottom.
             onContentSizeChange={() => {
-              if (messages.length > messageCountRef.current) {
+              const grew = messages.length > messageCountRef.current;
+              messageCountRef.current = messages.length;
+              if (grew && (channel === 'local' || isNearBottomRef.current)) {
                 flatListRef.current?.scrollToEnd({ animated: true });
               }
-              messageCountRef.current = messages.length;
             }}
+            onScroll={handleChatScroll}
+            scrollEventThrottle={16}
           />
 
           <View style={styles.inputContainer}>
