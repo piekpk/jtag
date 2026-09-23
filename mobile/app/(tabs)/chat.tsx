@@ -45,6 +45,7 @@ export default function ChatScreen() {
   const [isProfileLoading, setIsProfileLoading] = useState(false);
 
   const flatListRef = useRef(null);
+  const messageCountRef = useRef(0); // tracks last-seen count so auto-scroll only fires on new messages
 
   useEffect(() => {
     const getUser = async () => {
@@ -81,6 +82,7 @@ export default function ChatScreen() {
 
   useEffect(() => {
     setIsLoading(true);
+    messageCountRef.current = 0; // fresh channel load should land at the bottom
     fetchMessages(true);
     const intervalId = setInterval(() => {
       fetchMessages(false);
@@ -240,7 +242,15 @@ export default function ChatScreen() {
             keyExtractor={(item, index) => item.id?.toString() || index.toString()}
             renderItem={renderMessageItem}
             contentContainerStyle={styles.messageList}
-            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+            // Only auto-scroll when NEW messages arrive. Reacting to a message
+            // re-renders the list (badge row changes) without adding messages,
+            // and must not yank the user away from where they're reading.
+            onContentSizeChange={() => {
+              if (messages.length > messageCountRef.current) {
+                flatListRef.current?.scrollToEnd({ animated: true });
+              }
+              messageCountRef.current = messages.length;
+            }}
           />
 
           <View style={styles.inputContainer}>
