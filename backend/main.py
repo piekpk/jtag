@@ -14,7 +14,7 @@ from sqlalchemy import create_engine, or_
 from sqlalchemy.orm import sessionmaker, Session
 from passlib.context import CryptContext
 from pydantic import BaseModel
-from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone
+from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, PhotoReaction
 from schemas import UserProfileUpdate, UserProfileResponse, UserCreate
 
 # Password hashing setup
@@ -69,6 +69,20 @@ class ChatMessageCreate(BaseModel):
 
 class ReactionCreate(BaseModel):
     emoji: str # 'duck', 'jeep', or 'wave'
+
+PHOTO_REACTION_EMOJIS = {"like", "duck", "jeep", "wave"}
+
+def _photo_slot_counts(db, owner_id):
+    """{slot_str: {emoji: count}} across all of an owner's photo slots."""
+    counts = {}
+    for idx, emoji in db.query(PhotoReaction.photo_index, PhotoReaction.emoji).filter(
+        PhotoReaction.photo_owner_id == owner_id
+    ).all():
+        slot = str(idx)
+        counts.setdefault(slot, {})
+        counts[slot][emoji] = counts[slot].get(emoji, 0) + 1
+    return counts
+
 
 # --- App Setup ---
 app = FastAPI(title="Jtap Backend")
@@ -190,6 +204,65 @@ def update_profile(user_id: int, profile_data: UserProfileUpdate, db: Session = 
     db.commit()
     db.refresh(user)
     return user
+
+# --- Photo likes & reactions ---
+@app.get("/users/{user_id}/photos/reactions")
+def get_photo_reactions(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    owner = db.query(User).filter(User.id == user_id).first()
+    if not owner:
+        raise HTTPException(status_code=404, detail="User not found")
+    mine = {}
+    for idx, emoji in db.query(PhotoReaction.photo_index, PhotoReaction.emoji).filter(
+        PhotoReaction.photo_owner_id == user_id,
+        PhotoReaction.user_id == current_user.id
+    ).all():
+        mine.setdefault(str(idx), []).append(emoji)
+    return {"counts": _photo_slot_counts(db, user_id), "mine": mine}
+
+@app.post("/users/{user_id}/photos/{photo_index}/react")
+def react_to_photo(user_id: int, photo_index: int, reaction: ReactionCreate,
+                   db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if reaction.emoji not in PHOTO_REACTION_EMOJIS:
+        raise HTTPException(status_code=400, detail="Invalid emoji")
+    if photo_index < 0 or photo_index > 3:
+        raise HTTPException(status_code=400, detail="Invalid photo index")
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="You can't react to your own photos")
+    owner = db.query(User).filter(User.id == user_id).first()
+    if not owner:
+        raise HTTPException(status_code=404, detail="User not found")
+    photos = (owner.settings or {}).get("photos") or []
+    if photo_index >= len(photos) or not photos[photo_index]:
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    existing = db.query(PhotoReaction).filter(
+        PhotoReaction.photo_owner_id == user_id,
+        PhotoReaction.photo_index == photo_index,
+        PhotoReaction.user_id == current_user.id,
+        PhotoReaction.emoji == reaction.emoji
+    ).first()
+    if existing:
+        db.delete(existing)
+        status = "removed"
+    else:
+        db.add(PhotoReaction(photo_owner_id=user_id, photo_index=photo_index,
+                             user_id=current_user.id, emoji=reaction.emoji))
+        status = "reacted"
+    db.commit()
+
+    counts = {}
+    for (emoji,) in db.query(PhotoReaction.emoji).filter(
+        PhotoReaction.photo_owner_id == user_id,
+        PhotoReaction.photo_index == photo_index
+    ).all():
+        counts[emoji] = counts.get(emoji, 0) + 1
+    mine = [emoji for (emoji,) in db.query(PhotoReaction.emoji).filter(
+        PhotoReaction.photo_owner_id == user_id,
+        PhotoReaction.photo_index == photo_index,
+        PhotoReaction.user_id == current_user.id
+    ).all()]
+    return {"status": status, "counts": counts, "mine": mine}
+
 
 @app.post("/users/{user_id}/profile-picture")
 def upload_profile_picture(user_id: int, file: UploadFile = File(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

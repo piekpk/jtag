@@ -33,6 +33,46 @@ export default function PublicRigScreen() {
   const [tradeRequest, setTradeRequest] = useState(null);
   const [isTrading, setIsTrading] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(null); // index into availablePhotos, null = closed
+  const [photoReactions, setPhotoReactions] = useState({ counts: {}, mine: {} });
+
+  const PHOTO_EMOJIS = [
+    { key: 'like', emoji: '❤️' },
+    { key: 'duck', emoji: '🦆' },
+    { key: 'jeep', emoji: '🚙' },
+    { key: 'wave', emoji: '👋' },
+  ];
+
+  const fetchPhotoReactions = async () => {
+    try {
+      const response = await fetch(`${API_URL}/users/${rigId}/photos/reactions`, {
+        headers: await getAuthHeaders(),
+      });
+      if (response.ok) {
+        setPhotoReactions(await response.json());
+      }
+    } catch (error) {
+      console.error('Failed to load photo reactions:', error);
+    }
+  };
+
+  const togglePhotoReaction = async (slotIndex, emojiKey) => {
+    try {
+      const response = await fetch(`${API_URL}/users/${rigId}/photos/${slotIndex}/react`, {
+        method: 'POST',
+        headers: await getAuthHeaders(),
+        body: JSON.stringify({ emoji: emojiKey }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setPhotoReactions((prev) => ({
+          counts: { ...prev.counts, [slotIndex]: data.counts },
+          mine: { ...prev.mine, [slotIndex]: data.mine },
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to react to photo:', error);
+    }
+  };
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -52,7 +92,10 @@ export default function PublicRigScreen() {
       }
     };
 
-    if (id) fetchProfile();
+    if (id) {
+      fetchProfile();
+      fetchPhotoReactions();
+    }
   }, [id]);
 
   const openDuckPicker = async () => {
@@ -188,18 +231,37 @@ export default function PublicRigScreen() {
         {[0, 1, 2, 3].map((i) => (
           <View key={i} style={styles.photoBox}>
             {photos[i] ? (
-              <TouchableOpacity onPress={() => openLightbox(i)} activeOpacity={0.85} style={{ width: '100%', height: '100%' }}>
-                <Image 
-                  source={{ 
-                    uri: getImageUrl(photos[i]),
-                    headers: { 
-                      'ngrok-skip-browser-warning': 'true',
-                      'User-Agent': 'JtapApp/1.0'
-                    }
-                  }} 
-                  style={styles.photo} 
-                />
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity onPress={() => openLightbox(i)} activeOpacity={0.85} style={{ width: '100%', height: '100%' }}>
+                  <Image 
+                    source={{ 
+                      uri: getImageUrl(photos[i]),
+                      headers: { 
+                        'ngrok-skip-browser-warning': 'true',
+                        'User-Agent': 'JtapApp/1.0'
+                      }
+                    }} 
+                    style={styles.photo} 
+                  />
+                </TouchableOpacity>
+                <View style={styles.photoReactionBar}>
+                  {PHOTO_EMOJIS.map(({ key, emoji }) => {
+                    const count = photoReactions.counts?.[i]?.[key] || 0;
+                    const isMine = (photoReactions.mine?.[i] || []).includes(key);
+                    return (
+                      <TouchableOpacity
+                        key={key}
+                        style={[styles.photoReactBtn, isMine && styles.photoReactBtnActive]}
+                        onPress={() => togglePhotoReaction(i, key)}
+                      >
+                        <Text style={styles.photoReactText}>
+                          {emoji}{count > 0 ? ` ${count}` : ''}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </>
             ) : (
               <Text style={styles.photoPlaceholder}>No Photo</Text>
             )}
@@ -382,6 +444,14 @@ const styles = StyleSheet.create({
   photoBox: { width: '48%', height: 120, backgroundColor: '#2c2c2e', marginBottom: 10, borderRadius: 8, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   photoPlaceholder: { color: '#757575', fontWeight: '600' },
   photo: { width: '100%', height: '100%' },
+  photoReactionBar: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.55)', paddingVertical: 4, paddingHorizontal: 2,
+  },
+  photoReactBtn: { paddingHorizontal: 5, paddingVertical: 3, borderRadius: 8 },
+  photoReactBtnActive: { backgroundColor: 'rgba(212,175,55,0.4)' },
+  photoReactText: { fontSize: 12, color: '#fff' },
   lightboxBackdrop: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.92)',
     justifyContent: 'center', alignItems: 'center',

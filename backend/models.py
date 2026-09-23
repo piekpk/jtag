@@ -1,4 +1,4 @@
-﻿from sqlalchemy import Column, Integer, String, JSON, Float, DateTime
+﻿from sqlalchemy import Column, Integer, String, JSON, Float, DateTime, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 
@@ -106,3 +106,18 @@ class UserMilestone(Base):
     user_id = Column(Integer, index=True, nullable=False)
     key = Column(String, index=True, nullable=False)
     claimed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+class PhotoReaction(Base):
+    """Likes/emoji reactions on a specific photo slot of another user's profile."""
+    __tablename__ = "photo_reactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    photo_owner_id = Column(Integer, index=True, nullable=False)
+    photo_index = Column(Integer, nullable=False)  # 0-3 slot in settings.photos
+    user_id = Column(Integer, index=True, nullable=False)
+    emoji = Column(String(16), nullable=False)  # like | duck | jeep | wave
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("photo_owner_id", "photo_index", "user_id", "emoji"),
+    )
