@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import MilestoneCelebration from './MilestoneCelebration';
 
 // Root layout: guarantees a black system status bar with light icons on every
 // screen and every Android device (notches, punch-holes, foldables, edge-to-edge).
@@ -19,6 +20,7 @@ export default function RootLayout() {
             contentStyle: { backgroundColor: '#121212' },
           }}
         />
+        <MilestoneCelebration />
       </View>
     </SafeAreaProvider>
   );
