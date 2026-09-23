@@ -261,7 +261,8 @@ def react_to_photo(user_id: int, photo_index: int, reaction: ReactionCreate,
         PhotoReaction.photo_index == photo_index,
         PhotoReaction.user_id == current_user.id
     ).all()]
-    return {"status": status, "counts": counts, "mine": mine}
+    done = _check_milestones(db, current_user.id) if status == "reacted" else []
+    return {"status": status, "counts": counts, "mine": mine, "milestones_completed": done}
 
 
 @app.post("/users/{user_id}/profile-picture")
@@ -606,6 +607,15 @@ MILESTONES = [
     {"key": "trades_done_3", "track": "Activity", "name": "Wheeler Dealer",
      "description": "Complete 3 trades", "target": 3,
      "counter": "trades_completed", "reward_pool": ["rare"]},
+    {"key": "photo_react_1", "track": "Activity", "name": "First Like",
+     "description": "React to a photo on another Jeeper's profile", "target": 1,
+     "counter": "photo_reactions", "reward_pool": ["common"]},
+    {"key": "photo_react_5", "track": "Activity", "name": "Photo Fan",
+     "description": "React to 5 photos", "target": 5,
+     "counter": "photo_reactions", "reward_pool": ["common", "rare"]},
+    {"key": "photo_react_10", "track": "Activity", "name": "Hype Squad",
+     "description": "React to 10 photos", "target": 10,
+     "counter": "photo_reactions", "reward_pool": ["rare"]},
     {"key": "pond_3", "track": "Collection", "name": "Pond Starter",
      "description": "Unlock 3 ducks in your pond", "target": 3,
      "counter": "pond_unlocked", "reward_pool": ["rare"], "prefer_unowned": True},
@@ -632,7 +642,34 @@ def _milestone_progress(db: Session, user_id: int, m: dict) -> int:
             or_(Trade.proposer_id == user_id, Trade.recipient_id == user_id)).count()
     if c == "pond_unlocked":
         return db.query(UserDuck).filter(UserDuck.user_id == user_id).count()
+    if c == "photo_reactions":
+        return db.query(PhotoReaction).filter(PhotoReaction.user_id == user_id).count()
     return 0
+
+
+def _photo_reaction_tiers(db: Session, user_id: int) -> list:
+    """Repeating milestones: a duck reward every 20 photo reactions (20, 40, 60, ...).
+
+    Generates tiers up to the user's current count plus the next upcoming tier,
+    so the Rewards tab can show progress toward it. Claimed tiers are recorded
+    as one-time UserMilestone rows (keyed photo_react_<n>), so toggling a
+    reaction off and on can't re-grant a tier.
+    """
+    count = db.query(PhotoReaction).filter(PhotoReaction.user_id == user_id).count()
+    tiers = []
+    n = 20
+    while n <= count + 20:
+        tiers.append({
+            "key": f"photo_react_{n}",
+            "track": "Activity",
+            "name": "Photo Legend",
+            "description": f"React to {n} photos",
+            "target": n,
+            "counter": "photo_reactions",
+            "reward_pool": ["rare"],
+        })
+        n += 20
+    return tiers
 
 
 def _milestone_reward_duck(db: Session, user_id: int, m: dict):
@@ -679,7 +716,7 @@ def _check_milestones(db: Session, user_id: int) -> list:
         claimed_keys = {r.key for r in
                         db.query(UserMilestone).filter(UserMilestone.user_id == user_id).all()}
         found = False
-        for m in MILESTONES:
+        for m in MILESTONES + _photo_reaction_tiers(db, user_id):
             if m["key"] in claimed_keys or m["key"] in skipped:
                 continue
             if _milestone_progress(db, user_id, m) < m["target"]:
@@ -788,7 +825,7 @@ def list_milestones(db: Session = Depends(get_db), current_user: User = Depends(
     claimed_keys = {r.key for r in
                     db.query(UserMilestone).filter(UserMilestone.user_id == current_user.id).all()}
     out = []
-    for m in MILESTONES:
+    for m in MILESTONES + _photo_reaction_tiers(db, current_user.id):
         d = _milestone_dict(db, m)
         d["progress"] = _milestone_progress(db, current_user.id, m)
         d["claimed"] = m["key"] in claimed_keys

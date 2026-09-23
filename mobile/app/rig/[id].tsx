@@ -68,6 +68,7 @@ export default function PublicRigScreen() {
           counts: { ...prev.counts, [slotIndex]: data.counts },
           mine: { ...prev.mine, [slotIndex]: data.mine },
         }));
+        celebrateMilestones(data.milestones_completed);
       }
     } catch (error) {
       console.error('Failed to react to photo:', error);
