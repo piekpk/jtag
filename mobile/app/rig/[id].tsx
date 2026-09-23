@@ -98,7 +98,7 @@ export default function PublicRigScreen() {
     <ScrollView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backBtnText}>← Back</Text>
+          <Text style={styles.backBtnText}>Back</Text>
         </TouchableOpacity>
         
         <View style={styles.headerRow}>
