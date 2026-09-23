@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, View, Text, ActivityIndicator, TouchableOpacity, Alert, Modal, TextInput } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -31,6 +32,40 @@ export default function RadarMapScreen() {
   const [dropDuration, setDropDuration] = useState(6);
   const [dropLabel, setDropLabel] = useState('');
   const [isDropping, setIsDropping] = useState(false);
+  // Tutorial popup (duck drops)
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [dontShowTutorial, setDontShowTutorial] = useState(false);
+  const TUTORIAL_KEY = 'jtap_map_tutorial_dismissed';
+
+  const openTutorial = () => {
+    setDontShowTutorial(false);
+    setShowTutorial(true);
+  };
+
+  const dismissTutorial = async () => {
+    if (dontShowTutorial) {
+      try {
+        await AsyncStorage.setItem(TUTORIAL_KEY, '1');
+      } catch (e) {
+        console.error('Failed to save tutorial preference:', e);
+      }
+    }
+    setShowTutorial(false);
+  };
+
+  // Show the tutorial each time the Map tab is selected, unless dismissed for good
+  useFocusEffect(
+    useCallback(() => {
+      (async () => {
+        try {
+          const dismissed = await AsyncStorage.getItem(TUTORIAL_KEY);
+          if (!dismissed) setShowTutorial(true);
+        } catch (e) {
+          setShowTutorial(true);
+        }
+      })();
+    }, [])
+  );
   // Weather widget (Open-Meteo: free, no API key)
   const [weather, setWeather] = useState(null);
   const [weatherExpanded, setWeatherExpanded] = useState(false);
@@ -393,6 +428,52 @@ export default function RadarMapScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Help button: reopens the duck drop tutorial */}
+      <TouchableOpacity style={styles.helpBtn} onPress={openTutorial}>
+        <Text style={styles.helpBtnText}>?</Text>
+      </TouchableOpacity>
+
+      {/* Duck drop tutorial popup */}
+      <Modal
+        visible={showTutorial}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={dismissTutorial}
+      >
+        <View style={styles.tutorialBackdrop}>
+          <View style={styles.tutorialCard}>
+            <Text style={styles.tutorialTitle}>🦆 Duck Drops</Text>
+            <Text style={styles.tutorialSubtitle}>
+              Hide ducks on the map for nearby Jeepers to find.
+            </Text>
+            {[
+              ['📍', 'Long-press anywhere on the map to drop a duck. Pick the duck, how many can claim it, the radius, and how long it lasts.'],
+              ['🗺️', 'Duck markers appear for Jeepers nearby. Tap one to see what\'s up for grabs and when it expires.'],
+              ['🏃', 'Get inside the drop radius and tap Claim to snag a duck for your collection.'],
+              ['⏳', 'Drops expire — unclaimed ducks disappear for good, so claim fast!'],
+            ].map(([emoji, text], idx) => (
+              <View key={idx} style={styles.tutorialStep}>
+                <Text style={styles.tutorialStepEmoji}>{emoji}</Text>
+                <Text style={styles.tutorialStepText}>{text}</Text>
+              </View>
+            ))}
+            <TouchableOpacity
+              style={styles.tutorialCheckRow}
+              onPress={() => setDontShowTutorial(!dontShowTutorial)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.tutorialCheckbox, dontShowTutorial && styles.tutorialCheckboxChecked]}>
+                {dontShowTutorial && <Text style={styles.tutorialCheckmark}>✓</Text>}
+              </View>
+              <Text style={styles.tutorialCheckLabel}>Don't show this again</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.tutorialBtn} onPress={dismissTutorial}>
+              <Text style={styles.tutorialBtnText}>Got it!</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -418,6 +499,41 @@ const styles = StyleSheet.create({
     marginTop: 6, borderTopWidth: 1, borderTopColor: '#2c2c2e', paddingTop: 6,
   },
   weatherDetail: { color: '#ccc', fontSize: 11, marginTop: 2 },
+  helpBtn: {
+    position: 'absolute', top: 12, right: 12,
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: 'rgba(18,18,18,0.88)',
+    borderWidth: 1, borderColor: '#d4af37',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  helpBtnText: { color: '#d4af37', fontSize: 18, fontWeight: 'bold' },
+  tutorialBackdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center', alignItems: 'center', padding: 24,
+  },
+  tutorialCard: {
+    width: '100%', backgroundColor: '#1e1e1e', borderRadius: 16, padding: 20,
+    borderWidth: 1, borderColor: '#d4af37',
+  },
+  tutorialTitle: { color: '#d4af37', fontSize: 22, fontWeight: 'bold', textAlign: 'center' },
+  tutorialSubtitle: { color: '#aaa', fontSize: 13, textAlign: 'center', marginTop: 6, marginBottom: 14 },
+  tutorialStep: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
+  tutorialStepEmoji: { fontSize: 20, marginRight: 10, marginTop: 1 },
+  tutorialStepText: { color: '#eee', fontSize: 13.5, flex: 1, lineHeight: 19 },
+  tutorialCheckRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6, marginBottom: 14 },
+  tutorialCheckbox: {
+    width: 22, height: 22, borderRadius: 6,
+    borderWidth: 2, borderColor: '#d4af37',
+    justifyContent: 'center', alignItems: 'center', marginRight: 10,
+  },
+  tutorialCheckboxChecked: { backgroundColor: '#d4af37' },
+  tutorialCheckmark: { color: '#121212', fontSize: 14, fontWeight: 'bold' },
+  tutorialCheckLabel: { color: '#ccc', fontSize: 13 },
+  tutorialBtn: {
+    backgroundColor: '#d4af37', borderRadius: 10,
+    paddingVertical: 12, alignItems: 'center',
+  },
+  tutorialBtnText: { color: '#121212', fontSize: 16, fontWeight: 'bold' },
   dropCard: {
     position: 'absolute', bottom: 20, left: 15, right: 15,
     backgroundColor: '#1e1e1e', borderRadius: 14, padding: 15,
