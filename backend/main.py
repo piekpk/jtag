@@ -19,8 +19,17 @@ from schemas import UserProfileUpdate, UserProfileResponse, UserCreate
 # Password hashing setup
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# --- File storage (configurable for hosted deploys) ---
+# Set DATA_DIR to a persistent volume mount (e.g. /data on Railway/Render/Fly)
+# so the SQLite DB and uploads survive restarts. Defaults to the current
+# directory, preserving existing local behavior.
+DATA_DIR = os.environ.get("DATA_DIR", ".")
+os.makedirs(DATA_DIR, exist_ok=True)
+DB_PATH = os.path.join(DATA_DIR, "jtap.db")
+UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
+
 # --- Database Setup ---
-SQLALCHEMY_DATABASE_URL = "sqlite:///./jtap.db" 
+SQLALCHEMY_DATABASE_URL = f"sqlite:///{DB_PATH}" 
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base.metadata.create_all(bind=engine)
@@ -34,7 +43,7 @@ def get_db():
 
 # Raw SQLite helper for chat messages to seamlessly join with user settings
 def get_raw_db():
-    conn = sqlite3.connect('jtap.db')
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -71,8 +80,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-os.makedirs("uploads", exist_ok=True)
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 # --- JWT Auth Setup ---
 SECRET_KEY = os.environ.get("JTAP_SECRET_KEY", "jtap-dev-secret-change-me")
@@ -188,16 +197,16 @@ def upload_profile_picture(user_id: int, file: UploadFile = File(...), db: Sessi
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    os.makedirs("uploads/profiles", exist_ok=True)
-    
+    os.makedirs(os.path.join(UPLOAD_DIR, "profiles"), exist_ok=True)
+
     file_extension = file.filename.split(".")[-1]
     unique_filename = f"user_{user_id}_{uuid4().hex}.{file_extension}"
-    file_location = f"uploads/profiles/{unique_filename}"
+    file_location = os.path.join(UPLOAD_DIR, "profiles", unique_filename)
     
     with open(file_location, "wb+") as file_object:
         shutil.copyfileobj(file.file, file_object)
         
-    user.profile_picture_url = f"/{file_location}"
+    user.profile_picture_url = f"/uploads/profiles/{unique_filename}"
     db.commit()
     
     return {"message": "Profile picture updated", "url": user.profile_picture_url}

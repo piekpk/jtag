@@ -1,0 +1,14 @@
+# Never bake local state or caches into the image
+__pycache__/
+*.pyc
+*.pyo
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+uploads/
+.env
+.env.*
+venv/
+.pytest_cache/
+tests/
