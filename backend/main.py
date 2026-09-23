@@ -3,7 +3,7 @@ import os
 import json
 import random
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 from math import radians, cos, sin, asin, sqrt
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Header
@@ -98,6 +98,12 @@ app.add_middleware(
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
+
+@app.get("/health")
+def health():
+    """Lightweight health check for hosts/load balancers (no auth required)."""
+    return {"status": "ok"}
+
 # --- JWT Auth Setup ---
 SECRET_KEY = os.environ.get("JTAP_SECRET_KEY", "jtap-dev-secret-change-me")
 ALGORITHM = "HS256"
@@ -108,7 +114,7 @@ if SECRET_KEY == "jtap-dev-secret-change-me":
 
 
 def create_access_token(user_id: int) -> str:
-    expire = datetime.utcnow() + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
+    expire = datetime.now(timezone.utc) + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
     return jwt.encode({"sub": str(user_id), "exp": expire}, SECRET_KEY, algorithm=ALGORITHM)
 
 
@@ -159,7 +165,7 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
     classic = db.query(DuckType).filter(DuckType.slug == STARTER_DUCK_SLUG).first()
     if classic:
         db.add(UserDuck(user_id=new_user.id, duck_type_id=classic.id,
-                        count=STARTER_DUCK_COUNT, first_received_at=datetime.utcnow()))
+                        count=STARTER_DUCK_COUNT, first_received_at=datetime.now(timezone.utc)))
         db.commit()
     return AuthResponse(
         id=new_user.id,
@@ -488,7 +494,7 @@ def post_chat_message(chat: ChatMessageCreate, db: Session = Depends(get_db), cu
     
     cursor.execute(
         "INSERT INTO messages (user_id, message, timestamp, reactions, channel, latitude, longitude) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (chat.user_id, chat.message, datetime.utcnow(), "{}", chat.channel, sender_lat, sender_lng)
+        (chat.user_id, chat.message, datetime.now(timezone.utc), "{}", chat.channel, sender_lat, sender_lng)
     )
     conn.commit()
     msg_id = cursor.lastrowid
@@ -741,14 +747,14 @@ def _ensure_starter_ducks(db: Session, user_id: int):
         classic = db.query(DuckType).filter(DuckType.slug == STARTER_DUCK_SLUG).first()
         if classic:
             db.add(UserDuck(user_id=user_id, duck_type_id=classic.id,
-                            count=STARTER_DUCK_COUNT, first_received_at=datetime.utcnow()))
+                            count=STARTER_DUCK_COUNT, first_received_at=datetime.now(timezone.utc)))
             db.commit()
 
 
 def _grant_duck(db: Session, user_id: int, duck_type_id: int, qty: int = 1):
     row = db.query(UserDuck).filter(
         UserDuck.user_id == user_id, UserDuck.duck_type_id == duck_type_id).first()
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     if row:
         row.count += qty
         if not row.first_received_at:
@@ -889,7 +895,7 @@ def duck_leaderboard(metric: str = "given", days: int = 0, lat: float = None, ln
         raise HTTPException(status_code=400, detail="metric must be 'given' or 'received'")
     query = db.query(DuckGive)
     if days and days > 0:
-        query = query.filter(DuckGive.created_at >= datetime.utcnow() - timedelta(days=days))
+        query = query.filter(DuckGive.created_at >= datetime.now(timezone.utc) - timedelta(days=days))
     gives = query.all()
 
     counts = {}
@@ -929,7 +935,7 @@ class DropClaimCreate(BaseModel):
 @app.post("/drops")
 def create_drop(payload: DropCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     _duck_type_or_404(db, payload.duck_type_id)
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     active = db.query(DuckDrop).filter(
         DuckDrop.created_by == current_user.id,
         DuckDrop.expires_at > now,
@@ -959,7 +965,7 @@ def create_drop(payload: DropCreate, db: Session = Depends(get_db), current_user
 @app.get("/drops/active")
 def list_active_drops(lat: float, lng: float, radius_m: float = 10000,
                       db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     drops = db.query(DuckDrop).filter(
         DuckDrop.starts_at <= now,
         DuckDrop.expires_at > now,
@@ -990,7 +996,7 @@ def claim_drop(drop_id: int, payload: DropClaimCreate, db: Session = Depends(get
     drop = db.query(DuckDrop).filter(DuckDrop.id == drop_id).first()
     if not drop:
         raise HTTPException(status_code=404, detail="Drop not found")
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     if not (drop.starts_at <= now <= drop.expires_at):
         raise HTTPException(status_code=400, detail="Drop is not active")
     if drop.claims_count >= drop.max_claims:
@@ -1036,7 +1042,7 @@ def _trade_dict(db: Session, t: Trade) -> dict:
 
 
 def _sweep_expired_trades(db: Session):
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     expired = db.query(Trade).filter(Trade.status == "pending", Trade.expires_at < now).all()
     for t in expired:
         t.status = "expired"
@@ -1066,7 +1072,7 @@ def propose_trade(payload: TradeCreate, db: Session = Depends(get_db),
         proposer_id=current_user.id, recipient_id=payload.recipient_id,
         offered_duck_type_id=payload.offered_duck_type_id, offered_qty=payload.offered_qty,
         requested_duck_type_id=payload.requested_duck_type_id, requested_qty=payload.requested_qty,
-        expires_at=datetime.utcnow() + timedelta(hours=TRADE_EXPIRY_HOURS))
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=TRADE_EXPIRY_HOURS))
     db.add(trade)
     db.commit()
     db.refresh(trade)
@@ -1120,7 +1126,7 @@ def accept_trade(trade_id: int, db: Session = Depends(get_db),
     _spend_duck(db, t.recipient_id, t.requested_duck_type_id, t.requested_qty)
     _grant_duck(db, t.proposer_id, t.requested_duck_type_id, t.requested_qty)
     t.status = "accepted"
-    t.decided_at = datetime.utcnow()
+    t.decided_at = datetime.now(timezone.utc)
     db.commit()
     done = _check_milestones(db, t.proposer_id) + _check_milestones(db, t.recipient_id)
     return {"message": "Trade completed!", "trade": _trade_dict(db, t), "milestones_completed": done}
@@ -1133,7 +1139,7 @@ def decline_trade(trade_id: int, db: Session = Depends(get_db),
     if t.recipient_id != current_user.id:
         raise HTTPException(status_code=403, detail="Only the recipient can decline")
     t.status = "declined"
-    t.decided_at = datetime.utcnow()
+    t.decided_at = datetime.now(timezone.utc)
     db.commit()
     return {"message": "Trade declined"}
 
@@ -1145,6 +1151,6 @@ def cancel_trade(trade_id: int, db: Session = Depends(get_db),
     if t.proposer_id != current_user.id:
         raise HTTPException(status_code=403, detail="Only the proposer can cancel")
     t.status = "cancelled"
-    t.decided_at = datetime.utcnow()
+    t.decided_at = datetime.now(timezone.utc)
     db.commit()
     return {"message": "Trade cancelled"}
