@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, View, Text, ActivityIndicator, TouchableOpacity, Alert, Modal, TextInput } from 'react-native';
+import { StyleSheet, View, Text, ActivityIndicator, TouchableOpacity, Alert, Modal, TextInput, StatusBar, Platform } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -284,6 +284,12 @@ export default function RadarMapScreen() {
         ))}
       </MapView>
 
+      {/* Dark scrim behind the system status bar. On most devices the native
+          bar is opaque black (see app.config.js); on edge-to-edge displays
+          (Android 15+) the bar is transparent, so this keeps the status icons
+          readable over the map. Non-interactive. */}
+      {Platform.OS === 'android' && <View style={styles.statusScrim} pointerEvents="none" />}
+
       {/* Weather widget */}
       {weather && (
         <TouchableOpacity
@@ -479,7 +485,12 @@ export default function RadarMapScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, backgroundColor: '#121212' },
+  statusScrim: {
+    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1,
+    height: StatusBar.currentHeight || 24,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
   map: { ...StyleSheet.absoluteFillObject },
   centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   dropMarker: {
@@ -489,7 +500,7 @@ const styles = StyleSheet.create({
   },
   dropEmoji: { fontSize: 24 },
   weatherBox: {
-    position: 'absolute', top: 12, left: 12,
+    position: 'absolute', top: 12, left: 12, zIndex: 2,
     backgroundColor: 'rgba(18,18,18,0.88)', borderRadius: 12, padding: 10,
     borderWidth: 1, borderColor: '#d4af37', minWidth: 108,
   },
@@ -500,7 +511,7 @@ const styles = StyleSheet.create({
   },
   weatherDetail: { color: '#ccc', fontSize: 11, marginTop: 2 },
   helpBtn: {
-    position: 'absolute', top: 12, right: 12,
+    position: 'absolute', top: 12, right: 12, zIndex: 2,
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: 'rgba(18,18,18,0.88)',
     borderWidth: 1, borderColor: '#d4af37',
