@@ -275,6 +275,33 @@ def get_nearby_users(lat: float, lng: float, radiusInMeters: float = 8000, db: S
             
     return nearby_users
 
+@app.get("/users/search")
+def search_users(q: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Find any registered user by name or rig title.
+
+    Privacy: never returns locations or emails, and skips users who opted out
+    via settings.discoverable = false.
+    """
+    q = (q or "").strip().lower()
+    if len(q) < 2:
+        return []
+    results = []
+    for user in db.query(User).filter(User.id != current_user.id).all():
+        settings = user.settings or {}
+        if settings.get("discoverable") is False:
+            continue
+        owner = (settings.get("ownerName") or "").lower()
+        vehicle = (settings.get("vehicleTitle") or "").lower()
+        if q in owner or q in vehicle:
+            results.append({
+                "id": user.id,
+                "settings": user.settings,
+                "profile_picture_url": user.profile_picture_url,
+            })
+        if len(results) >= 20:
+            break
+    return results
+
 # --- Chat & Reaction Endpoints ---
 @app.get("/chat")
 def get_chat_messages(channel: str = "global", lat: float = None, lng: float = None, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, Alert, ActivityIndicator, Switch } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
@@ -16,6 +16,7 @@ export default function MyRigScreen() {
   // State variables for profile data
   const [ownerName, setOwnerName] = useState('');
   const [vehicleTitle, setVehicleTitle] = useState('');
+  const [discoverable, setDiscoverable] = useState(true);
   const [specs, setSpecs] = useState({
     engine: '',
     wheels: '',
@@ -49,6 +50,7 @@ export default function MyRigScreen() {
             if (data.settings.specs) setSpecs(data.settings.specs);
             if (data.settings.mods) setMods(data.settings.mods);
             if (data.settings.photos) setPhotos(data.settings.photos);
+            if (data.settings.discoverable === false) setDiscoverable(false);
           } else {
             // Default placeholder data for brand new users[cite: 9]
             setOwnerName('New User');
@@ -81,7 +83,8 @@ export default function MyRigScreen() {
               vehicleTitle,
               specs,
               mods,
-              photos
+              photos,
+              discoverable
             }
           }),
         });
@@ -221,6 +224,17 @@ export default function MyRigScreen() {
         ) : (
           <Text style={styles.subtitle}>{vehicleTitle}</Text>
         )}
+        {isEditing && (
+          <View style={styles.discoverRow}>
+            <Text style={styles.discoverLabel}>Show me in search results</Text>
+            <Switch
+              value={discoverable}
+              onValueChange={setDiscoverable}
+              trackColor={{ false: '#3a3a3c', true: '#d4af37' }}
+              thumbColor={discoverable ? '#121212' : '#f4f3f4'}
+            />
+          </View>
+        )}
       </View>
 
       <View style={styles.photoGrid}>
@@ -295,6 +309,11 @@ const styles = StyleSheet.create({
   editBtn: { backgroundColor: '#d4af37', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20 },
   editBtnText: { color: '#121212', fontWeight: 'bold' },
   subtitle: { fontSize: 16, color: '#d4af37', marginTop: 8, fontWeight: '600' },
+  discoverRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginTop: 16, backgroundColor: '#1e1e1e', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14,
+  },
+  discoverLabel: { color: '#fff', fontSize: 14, fontWeight: '600' },
   editSubtitleInput: { fontSize: 16, color: '#d4af37', marginTop: 8, fontWeight: '600', backgroundColor: '#333', padding: 5, borderRadius: 6 },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', padding: 10, justifyContent: 'space-between' },
   photoBox: { width: '48%', height: 120, backgroundColor: '#2c2c2e', marginBottom: 10, borderRadius: 8, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },

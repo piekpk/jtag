@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, SafeAreaView, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
@@ -23,6 +23,9 @@ export default function BrowseScreen() {
   const [users, setUsers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState(null);
+  const [query, setQuery] = useState('');
+  const [searchResults, setSearchResults] = useState(null); // null = not searching
+  const [isSearching, setIsSearching] = useState(false);
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -75,6 +78,35 @@ export default function BrowseScreen() {
     fetchUsers();
   }, []);
 
+  // Global user search (debounced). Finds any registered, discoverable user —
+  // no location needed and none is returned.
+  useEffect(() => {
+    if (query.trim().length < 2) {
+      setSearchResults(null);
+      setIsSearching(false);
+      return;
+    }
+    setIsSearching(true);
+    const t = setTimeout(async () => {
+      try {
+        const loggedInId = await AsyncStorage.getItem('userId');
+        const res = await fetch(
+          `${API_URL}/users/search?q=${encodeURIComponent(query.trim())}`,
+          { headers: await getAuthHeaders() }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setSearchResults(data.filter((u) => u.id.toString() !== loggedInId));
+        }
+      } catch (e) {
+        console.error('User search failed:', e);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 350);
+    return () => clearTimeout(t);
+  }, [query]);
+
   const renderUser = ({ item }) => {
     const ownerName = item.settings?.ownerName || 'Fellow Jeeper';
     const vehicleTitle = item.settings?.vehicleTitle || 'Unknown Rig';
@@ -123,21 +155,36 @@ export default function BrowseScreen() {
     );
   }
 
+  const searching = searchResults !== null;
+  const listData = searching ? searchResults : users;
+  const emptyText = searching
+    ? (isSearching ? 'Searching…' : `No rigs found for "${query.trim()}".`)
+    : 'No other rigs found nearby.';
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Nearby Rigs</Text>
+        <Text style={styles.headerTitle}>{searching ? 'Search Results' : 'Nearby Rigs'}</Text>
+        <TextInput
+          style={styles.searchInput}
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search all Jeepers by name or rig…"
+          placeholderTextColor="#888"
+          autoCapitalize="none"
+          returnKeyType="search"
+        />
       </View>
-      {users.length === 0 ? (
+      {listData.length === 0 ? (
         <View style={styles.centered}>
-          <Text style={styles.emptyText}>No other rigs found nearby.</Text>
+          <Text style={styles.emptyText}>{emptyText}</Text>
         </View>
       ) : (
-        <FlatList 
-          data={users} 
-          keyExtractor={item => item.id.toString()} 
-          renderItem={renderUser} 
-          contentContainerStyle={styles.list} 
+        <FlatList
+          data={listData}
+          keyExtractor={item => item.id.toString()}
+          renderItem={renderUser}
+          contentContainerStyle={styles.list}
         />
       )}
     </SafeAreaView>
@@ -148,7 +195,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#121212' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { padding: 20, backgroundColor: '#1a1a1a' },
-  headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#fff' },
+  headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#fff', marginBottom: 12 },
+  searchInput: {
+    backgroundColor: '#2c2c2e', color: '#fff', borderRadius: 10,
+    paddingVertical: 10, paddingHorizontal: 14, fontSize: 15,
+  },
   list: { padding: 15 },
   userCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1e1e1e', padding: 15, borderRadius: 12, marginBottom: 12, elevation: 2 },
   avatarContainer: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#2c2c2e', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', marginRight: 15 },
