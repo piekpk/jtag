@@ -1,0 +1,24 @@
+# Python & Backend
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+*.db
+*.sqlite3
+uploads/
+
+# Node, React Native, & Expo
+node_modules/
+.expo/
+npm-debug.*
+yarn-error.*
+
+# Android Builds
+mobile/android/build/
+mobile/android/app/build/
+mobile/android/.gradle/
+
+# OS Files
+.DS_Store
+Thumbs.db

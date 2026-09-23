@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -16,45 +16,33 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from './config.js';
 import { saveSession } from './auth.js';
 
-export default function LoginScreen() {
+export default function SignupScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isCheckingSession, setIsCheckingSession] = useState(true);
 
-  // Check if user is already logged in on app startup
-  useEffect(() => {
-    const checkSession = async () => {
-      try {
-        const storedUserId = await AsyncStorage.getItem('userId');
-        const storedToken = await AsyncStorage.getItem('userToken');
-        if (storedUserId && storedToken) {
-          router.replace('/(tabs)/profile');
-        }
-      } catch (error) {
-        console.error("Session check error:", error);
-      } finally {
-        setIsCheckingSession(false);
-      }
-    };
-    checkSession();
-  }, []);
-
-  const handleLogin = async () => {
+  const handleRegister = async () => {
     if (!email || !password) {
-      showAlert('Missing Fields', 'Please enter your email and password.');
+      showAlert('Missing Fields', 'Please enter both an email and password.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      showAlert('Password Mismatch', 'The entered passwords do not match.');
       return;
     }
 
     setIsSubmitting(true);
+
+    // Strip hidden spaces and enforce lowercase
     const normalizedEmail = email.trim().toLowerCase();
 
     try {
-      const response = await fetch(`${API_URL}/login`, {
+      const response = await fetch(`${API_URL}/signup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'ngrok-skip-browser-warning': 'true'
+          'ngrok-skip-browser-warning': 'true',
         },
         body: JSON.stringify({
           email: normalizedEmail,
@@ -65,10 +53,16 @@ export default function LoginScreen() {
       const data = await response.json();
 
       if (response.ok) {
+        console.log("User successfully created! ID:", data.id);
+        
+        // Save the session (user ID + auth token) locally
         await saveSession(data.id, data.access_token);
-        router.replace('/(tabs)/profile');
+        
+        // Navigate to the map screen upon successful registration
+        router.push('/(tabs)/map');
       } else {
-        showAlert("Login Failed", data.detail || "Invalid email or password.");
+        console.error("Sign up failed:", data.detail);
+        showAlert("Registration Failed", data.detail || "An error occurred during sign up.");
       }
     } catch (error) {
       console.error("Network error:", error);
@@ -78,14 +72,6 @@ export default function LoginScreen() {
     }
   };
 
-  if (isCheckingSession) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#d4af37" />
-      </View>
-    );
-  }
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
@@ -94,8 +80,8 @@ export default function LoginScreen() {
       >
         <View style={styles.content}>
           <View style={styles.header}>
-            <Text style={styles.title}>Jtap</Text>
-            <Text style={styles.subtitle}>Sign in to locate nearby rigs & trails</Text>
+            <Text style={styles.title}>Create Account</Text>
+            <Text style={styles.subtitle}>Join Jtap to connect on the trail</Text>
           </View>
 
           <View style={styles.form}>
@@ -120,23 +106,33 @@ export default function LoginScreen() {
               secureTextEntry
             />
 
+            <Text style={styles.label}>Confirm Password</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="••••••••"
+              placeholderTextColor="#8e8e93"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry
+            />
+
             <TouchableOpacity 
-              style={[styles.loginButton, isSubmitting && styles.loginButtonDisabled]} 
-              onPress={handleLogin}
+              style={[styles.registerButton, isSubmitting && styles.registerButtonDisabled]} 
+              onPress={handleRegister}
               disabled={isSubmitting}
             >
               {isSubmitting ? (
                 <ActivityIndicator color="#ffffff" />
               ) : (
-                <Text style={styles.loginButtonText}>Sign In</Text>
+                <Text style={styles.registerButtonText}>Sign Up</Text>
               )}
             </TouchableOpacity>
           </View>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account? </Text>
-            <TouchableOpacity onPress={() => router.push('/signup')}>
-              <Text style={styles.signupText}>Sign Up</Text>
+            <Text style={styles.footerText}>Already have an account? </Text>
+            <TouchableOpacity onPress={() => router.back()}>
+              <Text style={styles.signinText}>Sign In</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -150,12 +146,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#121212',
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#121212',
-  },
   container: {
     flex: 1,
   },
@@ -166,13 +156,12 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 24,
   },
   title: {
-    fontSize: 36,
+    fontSize: 32,
     fontWeight: '800',
     color: '#ffffff',
-    letterSpacing: 1.5,
   },
   subtitle: {
     fontSize: 14,
@@ -200,18 +189,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#ffffff',
   },
-  loginButton: {
+  registerButton: {
     backgroundColor: '#d4af37',
     paddingVertical: 14,
     borderRadius: 8,
     alignItems: 'center',
     marginTop: 24,
   },
-  loginButtonDisabled: {
+  registerButtonDisabled: {
     backgroundColor: '#5c4a12',
     opacity: 0.7,
   },
-  loginButtonText: {
+  registerButtonText: {
     color: '#121212',
     fontSize: 16,
     fontWeight: '700',
@@ -225,7 +214,7 @@ const styles = StyleSheet.create({
     color: '#8e8e93',
     fontSize: 14,
   },
-  signupText: {
+  signinText: {
     color: '#d4af37',
     fontSize: 14,
     fontWeight: '600',
