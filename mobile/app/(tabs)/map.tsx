@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, View, Text, ActivityIndicator, TouchableOpacity, Alert, Modal, TextInput, StatusBar, Platform } from 'react-native';
+import { StyleSheet, View, Text, ActivityIndicator, TouchableOpacity, Modal, TextInput, StatusBar, Platform } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config.js';
 import { getAuthHeaders } from '../auth.js';
+import { showAlert } from '../themedAlert.js';
 import { getActiveDrops, createDrop, claimDrop, getInventory, formatExpiry, rarityColor, celebrateMilestones } from '../duckApi.js';
 
 const RADIUS_CHOICES = [50, 100, 200, 500];
@@ -168,12 +169,12 @@ export default function RadarMapScreen() {
     setIsClaiming(true);
     try {
       const result = await claimDrop(selectedDrop.id, location.latitude, location.longitude);
-      Alert.alert("🦆 Duck claimed!", `You got a ${result.duck.emoji} ${result.duck.name}!`);
+      showAlert("🦆 Duck claimed!", `You got a ${result.duck.emoji} ${result.duck.name}!`);
       celebrateMilestones(result.milestones_completed);
       setDrops(drops.filter((d) => d.id !== selectedDrop.id));
       setSelectedDrop(null);
     } catch (e) {
-      Alert.alert("Couldn't claim", e.message || "Move closer and try again.");
+      showAlert("Couldn't claim", e.message || "Move closer and try again.");
     } finally {
       setIsClaiming(false);
     }
@@ -194,7 +195,7 @@ export default function RadarMapScreen() {
       const inv = await getInventory();
       const spendable = inv.filter((i) => i.count > 0);
       if (spendable.length === 0) {
-        Alert.alert("No ducks", "You're out of ducks! Claim a drop or trade with someone first.");
+        showAlert("No ducks", "You're out of ducks! Claim a drop or trade with someone first.");
         return;
       }
       setInventory(spendable);
@@ -206,7 +207,7 @@ export default function RadarMapScreen() {
       setDropCoord(coordinate);
       setDropModalVisible(true);
     } catch (e) {
-      Alert.alert("Error", "Could not load your ducks.");
+      showAlert("Error", "Could not load your ducks.");
     }
   };
 
@@ -229,9 +230,9 @@ export default function RadarMapScreen() {
       setDropModalVisible(false);
       const fresh = await getActiveDrops(location.latitude, location.longitude);
       setDrops(fresh);
-      Alert.alert("🦆 Drop is live!", `${dropClaims}× ${dropDuck.duck.emoji} ${dropDuck.duck.name} waiting for nearby Jeepers.`);
+      showAlert("🦆 Drop is live!", `${dropClaims}× ${dropDuck.duck.emoji} ${dropDuck.duck.name} waiting for nearby Jeepers.`);
     } catch (e) {
-      Alert.alert("Couldn't create drop", e.message || "Not enough ducks of that type.");
+      showAlert("Couldn't create drop", e.message || "Not enough ducks of that type.");
     } finally {
       setIsDropping(false);
     }

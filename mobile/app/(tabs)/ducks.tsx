@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
+import { showAlert } from '../themedAlert.js';
   getMyPond, getTrades, acceptTrade, declineTrade, cancelTrade,
   getLeaderboard, getDuckFeed, rarityColor, getMilestones, celebrateMilestones,
 } from '../duckApi.js';
@@ -65,11 +66,11 @@ export default function DucksScreen() {
       if (action === 'accept') result = await acceptTrade(tradeId);
       else if (action === 'decline') await declineTrade(tradeId);
       else await cancelTrade(tradeId);
-      Alert.alert('Done', label);
+      showAlert('Done', label);
       if (result) celebrateMilestones(result.milestones_completed);
       load();
     } catch (e) {
-      Alert.alert('Error', e.message || 'Trade action failed.');
+      showAlert('Error', e.message || 'Trade action failed.');
     }
   };
 

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, ActivityIndicator, TouchableOpacity, Alert, Modal, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, ActivityIndicator, TouchableOpacity, Modal, FlatList } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { API_URL } from '../config.js';
 import { getAuthHeaders } from '../auth.js';
 import { getInventory, giveDuck, getUserPond, proposeTrade, rarityColor, celebrateMilestones } from '../duckApi.js';
+import { showAlert } from '../../themedAlert.js';
 
 // Helper function to safely format image URLs and bypass hardcoded local IPs
 const getImageUrl = (imagePath: string) => {
@@ -103,14 +104,14 @@ export default function PublicRigScreen() {
     try {
       const inv = await getInventory();
       if (inv.length === 0) {
-        Alert.alert("No ducks", "You're out of ducks! Claim a drop on the map or trade with someone.");
+        showAlert("No ducks", "You're out of ducks! Claim a drop on the map or trade with someone.");
         return;
       }
       setInventory(inv);
       setDuckPickerVisible(true);
     } catch (error) {
       console.error("Inventory error:", error);
-      Alert.alert("Error", "Could not load your ducks.");
+      showAlert("Error", "Could not load your ducks.");
     }
   };
 
@@ -121,11 +122,11 @@ export default function PublicRigScreen() {
       const data = await giveDuck(rigId, duckTypeId);
       setDuckCount(data.recipient_duck_count);
       setDuckPickerVisible(false);
-      Alert.alert("🦆 Ducked!", "Your duck has been delivered.");
+      showAlert("🦆 Ducked!", "Your duck has been delivered.");
       celebrateMilestones(data.milestones_completed);
     } catch (error) {
       console.error("Duck error:", error);
-      Alert.alert("Error", error.message || "Could not duck this rig.");
+      showAlert("Error", error.message || "Could not duck this rig.");
     } finally {
       setIsDucking(false);
     }
@@ -141,7 +142,7 @@ export default function PublicRigScreen() {
       setTradeModalVisible(true);
     } catch (error) {
       console.error("Trade modal error:", error);
-      Alert.alert("Error", "Could not load trade data.");
+      showAlert("Error", "Could not load trade data.");
     }
   };
 
@@ -157,9 +158,9 @@ export default function PublicRigScreen() {
         requested_qty: 1,
       });
       setTradeModalVisible(false);
-      Alert.alert("Trade proposed!", "They'll see it in their Ducks tab.");
+      showAlert("Trade proposed!", "They'll see it in their Ducks tab.");
     } catch (error) {
-      Alert.alert("Error", error.message || "Could not propose trade.");
+      showAlert("Error", error.message || "Could not propose trade.");
     } finally {
       setIsTrading(false);
     }

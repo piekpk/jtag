@@ -8,10 +8,10 @@ import {
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
+import { showAlert } from './themedAlert.js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from './config.js';
 import { saveSession } from './auth.js';
@@ -42,7 +42,7 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert('Missing Fields', 'Please enter your email and password.');
+      showAlert('Missing Fields', 'Please enter your email and password.');
       return;
     }
 
@@ -68,11 +68,11 @@ export default function LoginScreen() {
         await saveSession(data.id, data.access_token);
         router.replace('/(tabs)/profile');
       } else {
-        Alert.alert("Login Failed", data.detail || "Invalid email or password.");
+        showAlert("Login Failed", data.detail || "Invalid email or password.");
       }
     } catch (error) {
       console.error("Network error:", error);
-      Alert.alert("Connection Error", "Failed to connect to the server. Please check your network and try again.");
+      showAlert("Connection Error", "Failed to connect to the server. Please check your network and try again.");
     } finally {
       setIsSubmitting(false);
     }

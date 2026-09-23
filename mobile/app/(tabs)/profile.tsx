@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, Alert, ActivityIndicator, Switch } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, ActivityIndicator, Switch } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { API_URL } from '../config.js'; //file that contains backend URL[cite: 9]
 import { getAuthHeaders } from '../auth.js';
+import { showAlert } from '../themedAlert.js';
 
 export default function MyRigScreen() {
   const router = useRouter();
@@ -90,12 +91,12 @@ export default function MyRigScreen() {
         });
 
         if (!response.ok) {
-          Alert.alert("Save Failed", "Could not save your profile changes.");
+          showAlert("Save Failed", "Could not save your profile changes.");
           setIsSaving(false);
           return; // Don't exit edit mode if save failed[cite: 9]
         }
       } catch (error) {
-        Alert.alert("Network Error", "Failed to connect to the server.");
+        showAlert("Network Error", "Failed to connect to the server.");
         setIsSaving(false);
         return; // Don't exit edit mode if network failed[cite: 9]
       }
@@ -110,7 +111,7 @@ export default function MyRigScreen() {
       router.replace('/');
     } catch (error) {
       console.error("Failed to log out:", error);
-      Alert.alert("Error", "Could not log out.");
+      showAlert("Error", "Could not log out.");
     }
   };
 
@@ -154,11 +155,11 @@ export default function MyRigScreen() {
           newPhotos[index] = data.url; 
           setPhotos(newPhotos);
         } else {
-          Alert.alert("Upload Failed", "Could not upload the image to the server.");
+          showAlert("Upload Failed", "Could not upload the image to the server.");
         }
       } catch (error) {
         console.error("Upload error:", error);
-        Alert.alert("Network Error", "Could not connect to the server.");
+        showAlert("Network Error", "Could not connect to the server.");
       }
     }
   };
