@@ -6,6 +6,7 @@ export default {
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "ios": {
+      "bundleIdentifier": "com.jtap.app",
       "supportsTablet": false,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Jtap needs your location to find rigs nearby."
