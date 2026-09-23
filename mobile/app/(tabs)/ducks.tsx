@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
 import { showAlert } from '../themedAlert.js';
+import {
   getMyPond, getTrades, acceptTrade, declineTrade, cancelTrade,
   getLeaderboard, getDuckFeed, rarityColor, getMilestones, celebrateMilestones,
 } from '../duckApi.js';
