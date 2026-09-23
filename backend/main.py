@@ -13,7 +13,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from passlib.context import CryptContext
 from pydantic import BaseModel
-from models import Base, User
+from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade
 from schemas import UserProfileUpdate, UserProfileResponse, UserCreate
 
 # Password hashing setup
@@ -71,6 +71,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+os.makedirs("uploads", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # --- JWT Auth Setup ---
@@ -130,6 +131,12 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+    # Starter ducks for the duck game (pre-existing users get them lazily on first pond/inventory fetch)
+    classic = db.query(DuckType).filter(DuckType.slug == STARTER_DUCK_SLUG).first()
+    if classic:
+        db.add(UserDuck(user_id=new_user.id, duck_type_id=classic.id,
+                        count=STARTER_DUCK_COUNT, first_received_at=datetime.utcnow()))
+        db.commit()
     return AuthResponse(
         id=new_user.id,
         email=new_user.email,
@@ -197,19 +204,23 @@ def upload_profile_picture(user_id: int, file: UploadFile = File(...), db: Sessi
 
 @app.post("/users/{user_id}/duck")
 def duck_user_rig(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Legacy one-tap duck: gives a classic yellow duck, spending it from the giver's inventory."""
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="You can't duck yourself")
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
-    current_settings = dict(user.settings or {})
-    current_duck_count = current_settings.get("duckCount", 0) + 1
-    current_settings["duckCount"] = current_duck_count
-    
-    user.settings = current_settings
+
+    _ensure_starter_ducks(db, current_user.id)
+    classic = db.query(DuckType).filter(DuckType.slug == STARTER_DUCK_SLUG).first()
+    _spend_duck(db, current_user.id, classic.id, 1)
+    _grant_duck(db, user.id, classic.id, 1)
+    db.add(DuckGive(giver_id=current_user.id, recipient_id=user.id, duck_type_id=classic.id))
+    _bump_legacy_duck_count(db, user)
     db.commit()
     db.refresh(user)
-    
-    return {"message": "Rig ducked successfully!", "duckCount": current_duck_count}
+
+    return {"message": "Rig ducked successfully!", "duckCount": (user.settings or {}).get("duckCount", 0)}
 
 @app.get("/users", response_model=list[UserProfileResponse])
 def get_all_users(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -399,3 +410,461 @@ def react_to_message(message_id: int, reaction: ReactionCreate, current_user: Us
     conn.close()
     
     return {"status": "success", "reactions": reactions_dict}
+# ================= Duck Game =================
+# Pond (permanent collection) + spendable inventory + drops + trading.
+# All tables are created by Base.metadata.create_all at startup, so a
+# server restart is the only deploy step needed.
+
+DUCK_CATALOG = [
+    {"slug": "classic_yellow", "name": "Classic Duck", "rarity": "common", "emoji": "🐤",
+     "description": "The original. Every Jeeper starts here.", "seasonal": None},
+    {"slug": "mud_duck", "name": "Mud Duck", "rarity": "common", "emoji": "🦆",
+     "description": "Fresh from the pit.", "seasonal": None},
+    {"slug": "golden_duck", "name": "Golden Duck", "rarity": "rare", "emoji": "🐥",
+     "description": "24-karat trail bling.", "seasonal": None},
+    {"slug": "glow_duck", "name": "Glow Duck", "rarity": "rare", "emoji": "✨",
+     "description": "Charges by day, glows by night.", "seasonal": None},
+    {"slug": "frost_duck", "name": "Frost Duck", "rarity": "rare", "emoji": "❄️",
+     "description": "Only drops in the cold months.", "seasonal": "winter"},
+    {"slug": "black_gold", "name": "Black & Gold Duck", "rarity": "epic", "emoji": "🖤",
+     "description": "Matches the app. Obviously the best one.", "seasonal": None},
+    {"slug": "camo_duck", "name": "Camo Duck", "rarity": "epic", "emoji": "🪖",
+     "description": "You didn't see it. That's the point.", "seasonal": None},
+    {"slug": "diamond_duck", "name": "Diamond Duck", "rarity": "legendary", "emoji": "💎",
+     "description": "One in a thousand.", "seasonal": None},
+    {"slug": "spooky_duck", "name": "Spooky Duck", "rarity": "legendary", "emoji": "🎃",
+     "description": "Only drops in October.", "seasonal": "halloween"},
+]
+
+STARTER_DUCK_SLUG = "classic_yellow"
+STARTER_DUCK_COUNT = 3
+TRADE_EXPIRY_HOURS = 48
+MAX_ACTIVE_DROPS_PER_USER = 3
+
+
+def seed_duck_types():
+    db = SessionLocal()
+    try:
+        if db.query(DuckType).count() == 0:
+            for d in DUCK_CATALOG:
+                db.add(DuckType(**d))
+            db.commit()
+    finally:
+        db.close()
+
+
+seed_duck_types()
+
+
+def _duck_type_or_404(db: Session, duck_type_id: int) -> DuckType:
+    dt = db.query(DuckType).filter(DuckType.id == duck_type_id).first()
+    if not dt:
+        raise HTTPException(status_code=404, detail="Duck type not found")
+    return dt
+
+
+def _duck_type_dict(dt: DuckType) -> dict:
+    return {"id": dt.id, "slug": dt.slug, "name": dt.name, "rarity": dt.rarity,
+            "emoji": dt.emoji, "description": dt.description, "seasonal": dt.seasonal}
+
+
+def _owner_name(db: Session, user_id: int) -> str:
+    user = db.query(User).filter(User.id == user_id).first()
+    if user and user.settings:
+        try:
+            return (user.settings or {}).get("ownerName") or "Fellow Jeeper"
+        except Exception:
+            pass
+    return "Fellow Jeeper"
+
+
+def _ensure_starter_ducks(db: Session, user_id: int):
+    """Grant starter ducks once: fires only if the user has no user_ducks rows at all."""
+    if db.query(UserDuck).filter(UserDuck.user_id == user_id).count() == 0:
+        classic = db.query(DuckType).filter(DuckType.slug == STARTER_DUCK_SLUG).first()
+        if classic:
+            db.add(UserDuck(user_id=user_id, duck_type_id=classic.id,
+                            count=STARTER_DUCK_COUNT, first_received_at=datetime.utcnow()))
+            db.commit()
+
+
+def _grant_duck(db: Session, user_id: int, duck_type_id: int, qty: int = 1):
+    row = db.query(UserDuck).filter(
+        UserDuck.user_id == user_id, UserDuck.duck_type_id == duck_type_id).first()
+    now = datetime.utcnow()
+    if row:
+        row.count += qty
+        if not row.first_received_at:
+            row.first_received_at = now
+    else:
+        db.add(UserDuck(user_id=user_id, duck_type_id=duck_type_id,
+                        count=qty, first_received_at=now))
+
+
+def _spend_duck(db: Session, user_id: int, duck_type_id: int, qty: int = 1):
+    row = db.query(UserDuck).filter(
+        UserDuck.user_id == user_id, UserDuck.duck_type_id == duck_type_id).first()
+    if not row or row.count < qty:
+        raise HTTPException(status_code=400, detail="Not enough ducks of that type")
+    row.count -= qty
+
+
+def _bump_legacy_duck_count(db: Session, user: User):
+    """Keep the legacy settings.duckCount in sync so existing UI keeps working."""
+    settings = dict(user.settings or {})
+    settings["duckCount"] = settings.get("duckCount", 0) + 1
+    user.settings = settings
+
+
+class DuckGiveCreate(BaseModel):
+    recipient_id: int
+    duck_type_id: int
+    note: str = None
+
+
+@app.get("/ducks/catalog")
+def list_duck_catalog(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return [_duck_type_dict(dt) for dt in db.query(DuckType).order_by(DuckType.id).all()]
+
+
+@app.get("/ducks/inventory")
+def get_my_inventory(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    _ensure_starter_ducks(db, current_user.id)
+    rows = db.query(UserDuck).filter(UserDuck.user_id == current_user.id, UserDuck.count > 0).all()
+    result = []
+    for row in rows:
+        dt = _duck_type_or_404(db, row.duck_type_id)
+        result.append({"duck": _duck_type_dict(dt), "count": row.count})
+    return result
+
+
+def _pond_for(db: Session, user_id: int) -> dict:
+    _ensure_starter_ducks(db, user_id)
+    types = db.query(DuckType).order_by(DuckType.id).all()
+    owned = {r.duck_type_id: r for r in db.query(UserDuck).filter(UserDuck.user_id == user_id).all()}
+    slots = []
+    unlocked = 0
+    for dt in types:
+        row = owned.get(dt.id)
+        is_unlocked = row is not None
+        if is_unlocked:
+            unlocked += 1
+        slots.append({
+            "duck": _duck_type_dict(dt),
+            "unlocked": is_unlocked,
+            "count": row.count if row else 0,
+            "first_received_at": row.first_received_at.isoformat() if row and row.first_received_at else None,
+        })
+    return {"user_id": user_id, "unlocked": unlocked, "total": len(types), "slots": slots}
+
+
+@app.get("/ducks/pond")
+def get_my_pond(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return _pond_for(db, current_user.id)
+
+
+@app.get("/users/{user_id}/pond")
+def get_user_pond(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not db.query(User).filter(User.id == user_id).first():
+        raise HTTPException(status_code=404, detail="User not found")
+    return _pond_for(db, user_id)
+
+
+@app.post("/ducks/give")
+def give_duck(payload: DuckGiveCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if payload.recipient_id == current_user.id:
+        raise HTTPException(status_code=400, detail="You can't duck yourself")
+    recipient = db.query(User).filter(User.id == payload.recipient_id).first()
+    if not recipient:
+        raise HTTPException(status_code=404, detail="Recipient not found")
+    _duck_type_or_404(db, payload.duck_type_id)
+    _ensure_starter_ducks(db, current_user.id)
+
+    _spend_duck(db, current_user.id, payload.duck_type_id, 1)
+    _grant_duck(db, recipient.id, payload.duck_type_id, 1)
+    db.add(DuckGive(giver_id=current_user.id, recipient_id=recipient.id,
+                    duck_type_id=payload.duck_type_id, note=payload.note))
+    _bump_legacy_duck_count(db, recipient)
+    db.commit()
+    return {"message": "Duck given!", "recipient_duck_count": (recipient.settings or {}).get("duckCount", 0)}
+
+
+@app.get("/ducks/feed")
+def duck_feed(limit: int = 50, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    limit = max(1, min(limit, 100))
+    gives = db.query(DuckGive).order_by(DuckGive.created_at.desc()).limit(limit).all()
+    feed = []
+    for g in gives:
+        dt = _duck_type_or_404(db, g.duck_type_id)
+        feed.append({
+            "id": g.id,
+            "giver_id": g.giver_id,
+            "giver_name": _owner_name(db, g.giver_id),
+            "recipient_id": g.recipient_id,
+            "recipient_name": _owner_name(db, g.recipient_id),
+            "duck": _duck_type_dict(dt),
+            "note": g.note,
+            "created_at": g.created_at.isoformat() if g.created_at else None,
+        })
+    return feed
+
+
+@app.get("/ducks/leaderboard")
+def duck_leaderboard(metric: str = "given", days: int = 0, lat: float = None, lng: float = None,
+                     radius_m: float = 50000, db: Session = Depends(get_db),
+                     current_user: User = Depends(get_current_user)):
+    if metric not in ("given", "received"):
+        raise HTTPException(status_code=400, detail="metric must be 'given' or 'received'")
+    query = db.query(DuckGive)
+    if days and days > 0:
+        query = query.filter(DuckGive.created_at >= datetime.utcnow() - timedelta(days=days))
+    gives = query.all()
+
+    counts = {}
+    for g in gives:
+        uid = g.giver_id if metric == "given" else g.recipient_id
+        counts[uid] = counts.get(uid, 0) + 1
+
+    board = []
+    for uid, total in counts.items():
+        if lat is not None and lng is not None:
+            user = db.query(User).filter(User.id == uid).first()
+            if not user or user.latitude is None or user.longitude is None:
+                continue
+            if haversine(lat, lng, user.latitude, user.longitude) > radius_m:
+                continue
+        board.append({"user_id": uid, "name": _owner_name(db, uid), "ducks": total})
+    board.sort(key=lambda x: x["ducks"], reverse=True)
+    return board[:50]
+
+
+# --- Duck Drops ---
+class DropCreate(BaseModel):
+    duck_type_id: int
+    latitude: float
+    longitude: float
+    radius_m: float = 200.0
+    duration_hours: float = 2.0
+    max_claims: int = 50
+    label: str = None
+
+
+class DropClaimCreate(BaseModel):
+    lat: float
+    lng: float
+
+
+@app.post("/drops")
+def create_drop(payload: DropCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    _duck_type_or_404(db, payload.duck_type_id)
+    now = datetime.utcnow()
+    active = db.query(DuckDrop).filter(
+        DuckDrop.created_by == current_user.id,
+        DuckDrop.expires_at > now,
+        DuckDrop.claims_count < DuckDrop.max_claims).count()
+    if active >= MAX_ACTIVE_DROPS_PER_USER:
+        raise HTTPException(status_code=400, detail="You already have 3 active drops")
+    drop = DuckDrop(
+        duck_type_id=payload.duck_type_id,
+        latitude=payload.latitude, longitude=payload.longitude,
+        radius_m=max(50.0, payload.radius_m),
+        starts_at=now,
+        expires_at=now + timedelta(hours=max(0.25, min(payload.duration_hours, 72))),
+        max_claims=max(1, min(payload.max_claims, 500)),
+        created_by=current_user.id, label=payload.label)
+    db.add(drop)
+    db.commit()
+    db.refresh(drop)
+    return {"id": drop.id, "message": "Drop is live!"}
+
+
+@app.get("/drops/active")
+def list_active_drops(lat: float, lng: float, radius_m: float = 10000,
+                      db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    now = datetime.utcnow()
+    drops = db.query(DuckDrop).filter(
+        DuckDrop.starts_at <= now,
+        DuckDrop.expires_at > now,
+        DuckDrop.claims_count < DuckDrop.max_claims).all()
+    claimed_ids = {c.drop_id for c in db.query(DropClaim).filter(
+        DropClaim.user_id == current_user.id).all()}
+    result = []
+    for d in drops:
+        dist = haversine(lat, lng, d.latitude, d.longitude)
+        if dist > radius_m:
+            continue
+        dt = _duck_type_or_404(db, d.duck_type_id)
+        result.append({
+            "id": d.id, "duck": _duck_type_dict(dt),
+            "latitude": d.latitude, "longitude": d.longitude,
+            "radius_m": d.radius_m, "distance_m": dist,
+            "expires_at": d.expires_at.isoformat(),
+            "claims_left": d.max_claims - d.claims_count,
+            "label": d.label, "claimed_by_me": d.id in claimed_ids,
+        })
+    result.sort(key=lambda x: x["distance_m"])
+    return result
+
+
+@app.post("/drops/{drop_id}/claim")
+def claim_drop(drop_id: int, payload: DropClaimCreate, db: Session = Depends(get_db),
+               current_user: User = Depends(get_current_user)):
+    drop = db.query(DuckDrop).filter(DuckDrop.id == drop_id).first()
+    if not drop:
+        raise HTTPException(status_code=404, detail="Drop not found")
+    now = datetime.utcnow()
+    if not (drop.starts_at <= now <= drop.expires_at):
+        raise HTTPException(status_code=400, detail="Drop is not active")
+    if drop.claims_count >= drop.max_claims:
+        raise HTTPException(status_code=400, detail="Drop is fully claimed")
+    if db.query(DropClaim).filter(DropClaim.drop_id == drop_id,
+                                 DropClaim.user_id == current_user.id).first():
+        raise HTTPException(status_code=400, detail="You already claimed this drop")
+    if haversine(payload.lat, payload.lng, drop.latitude, drop.longitude) > drop.radius_m:
+        raise HTTPException(status_code=400, detail="You're not close enough to claim this drop")
+
+    drop.claims_count += 1
+    db.add(DropClaim(drop_id=drop_id, user_id=current_user.id))
+    _ensure_starter_ducks(db, current_user.id)
+    _grant_duck(db, current_user.id, drop.duck_type_id, 1)
+    db.commit()
+    dt = _duck_type_or_404(db, drop.duck_type_id)
+    return {"message": "Duck claimed!", "duck": _duck_type_dict(dt)}
+
+
+# --- Trading ---
+class TradeCreate(BaseModel):
+    recipient_id: int
+    offered_duck_type_id: int
+    offered_qty: int = 1
+    requested_duck_type_id: int
+    requested_qty: int = 1
+
+
+def _trade_dict(db: Session, t: Trade) -> dict:
+    return {
+        "id": t.id,
+        "proposer_id": t.proposer_id, "proposer_name": _owner_name(db, t.proposer_id),
+        "recipient_id": t.recipient_id, "recipient_name": _owner_name(db, t.recipient_id),
+        "offered": {"duck": _duck_type_dict(_duck_type_or_404(db, t.offered_duck_type_id)),
+                    "qty": t.offered_qty},
+        "requested": {"duck": _duck_type_dict(_duck_type_or_404(db, t.requested_duck_type_id)),
+                      "qty": t.requested_qty},
+        "status": t.status,
+        "created_at": t.created_at.isoformat() if t.created_at else None,
+        "expires_at": t.expires_at.isoformat() if t.expires_at else None,
+    }
+
+
+def _sweep_expired_trades(db: Session):
+    now = datetime.utcnow()
+    expired = db.query(Trade).filter(Trade.status == "pending", Trade.expires_at < now).all()
+    for t in expired:
+        t.status = "expired"
+        t.decided_at = now
+    if expired:
+        db.commit()
+
+
+@app.post("/trades")
+def propose_trade(payload: TradeCreate, db: Session = Depends(get_db),
+                  current_user: User = Depends(get_current_user)):
+    if payload.recipient_id == current_user.id:
+        raise HTTPException(status_code=400, detail="You can't trade with yourself")
+    if not db.query(User).filter(User.id == payload.recipient_id).first():
+        raise HTTPException(status_code=404, detail="Recipient not found")
+    if payload.offered_qty < 1 or payload.requested_qty < 1:
+        raise HTTPException(status_code=400, detail="Quantities must be at least 1")
+    _duck_type_or_404(db, payload.offered_duck_type_id)
+    _duck_type_or_404(db, payload.requested_duck_type_id)
+    _ensure_starter_ducks(db, current_user.id)
+    _spend_duck_check_only(db, current_user.id, payload.offered_duck_type_id, payload.offered_qty)
+    pending = db.query(Trade).filter(
+        Trade.proposer_id == current_user.id, Trade.status == "pending").count()
+    if pending >= 10:
+        raise HTTPException(status_code=400, detail="Too many pending trade offers")
+    trade = Trade(
+        proposer_id=current_user.id, recipient_id=payload.recipient_id,
+        offered_duck_type_id=payload.offered_duck_type_id, offered_qty=payload.offered_qty,
+        requested_duck_type_id=payload.requested_duck_type_id, requested_qty=payload.requested_qty,
+        expires_at=datetime.utcnow() + timedelta(hours=TRADE_EXPIRY_HOURS))
+    db.add(trade)
+    db.commit()
+    db.refresh(trade)
+    return _trade_dict(db, trade)
+
+
+def _spend_duck_check_only(db: Session, user_id: int, duck_type_id: int, qty: int):
+    row = db.query(UserDuck).filter(
+        UserDuck.user_id == user_id, UserDuck.duck_type_id == duck_type_id).first()
+    if not row or row.count < qty:
+        raise HTTPException(status_code=400, detail="You don't have enough of the offered duck")
+
+
+@app.get("/trades")
+def list_trades(box: str = "all", db: Session = Depends(get_db),
+                current_user: User = Depends(get_current_user)):
+    _sweep_expired_trades(db)
+    query = db.query(Trade)
+    if box == "incoming":
+        query = query.filter(Trade.recipient_id == current_user.id)
+    elif box == "outgoing":
+        query = query.filter(Trade.proposer_id == current_user.id)
+    else:
+        query = query.filter((Trade.proposer_id == current_user.id) |
+                             (Trade.recipient_id == current_user.id))
+    trades = query.order_by(Trade.created_at.desc()).limit(100).all()
+    return [_trade_dict(db, t) for t in trades]
+
+
+def _get_open_trade(db: Session, trade_id: int) -> Trade:
+    _sweep_expired_trades(db)
+    t = db.query(Trade).filter(Trade.id == trade_id).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Trade not found")
+    if t.status != "pending":
+        raise HTTPException(status_code=400, detail=f"Trade is {t.status}")
+    return t
+
+
+@app.post("/trades/{trade_id}/accept")
+def accept_trade(trade_id: int, db: Session = Depends(get_db),
+                 current_user: User = Depends(get_current_user)):
+    t = _get_open_trade(db, trade_id)
+    if t.recipient_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the recipient can accept")
+    # Re-validate both sides still hold the ducks, then swap atomically in one commit.
+    _spend_duck_check_only(db, t.proposer_id, t.offered_duck_type_id, t.offered_qty)
+    _spend_duck_check_only(db, t.recipient_id, t.requested_duck_type_id, t.requested_qty)
+    _spend_duck(db, t.proposer_id, t.offered_duck_type_id, t.offered_qty)
+    _grant_duck(db, t.recipient_id, t.offered_duck_type_id, t.offered_qty)
+    _spend_duck(db, t.recipient_id, t.requested_duck_type_id, t.requested_qty)
+    _grant_duck(db, t.proposer_id, t.requested_duck_type_id, t.requested_qty)
+    t.status = "accepted"
+    t.decided_at = datetime.utcnow()
+    db.commit()
+    return {"message": "Trade completed!", "trade": _trade_dict(db, t)}
+
+
+@app.post("/trades/{trade_id}/decline")
+def decline_trade(trade_id: int, db: Session = Depends(get_db),
+                  current_user: User = Depends(get_current_user)):
+    t = _get_open_trade(db, trade_id)
+    if t.recipient_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the recipient can decline")
+    t.status = "declined"
+    t.decided_at = datetime.utcnow()
+    db.commit()
+    return {"message": "Trade declined"}
+
+
+@app.post("/trades/{trade_id}/cancel")
+def cancel_trade(trade_id: int, db: Session = Depends(get_db),
+                 current_user: User = Depends(get_current_user)):
+    t = _get_open_trade(db, trade_id)
+    if t.proposer_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the proposer can cancel")
+    t.status = "cancelled"
+    t.decided_at = datetime.utcnow()
+    db.commit()
+    return {"message": "Trade cancelled"}

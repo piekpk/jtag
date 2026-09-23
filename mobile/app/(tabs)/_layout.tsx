@@ -51,6 +51,15 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="ducks"
+        options={{
+          title: 'Ducks',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="trophy-outline" size={size} color={color} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }

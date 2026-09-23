@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, ActivityIndicator, TouchableOpacity, Alert, Modal, FlatList } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { API_URL } from '../config.js';
 import { getAuthHeaders } from '../auth.js';
+import { getInventory, giveDuck, getUserPond, proposeTrade, rarityColor } from '../duckApi.js';
 
 // Helper function to safely format image URLs and bypass hardcoded local IPs
 const getImageUrl = (imagePath: string) => {
@@ -18,11 +19,19 @@ const getImageUrl = (imagePath: string) => {
 
 export default function PublicRigScreen() {
   const { id } = useLocalSearchParams();
+  const rigId = Array.isArray(id) ? id[0] : id;
   const router = useRouter();
   const [profile, setProfile] = useState(null);
   const [duckCount, setDuckCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isDucking, setIsDucking] = useState(false);
+  const [duckPickerVisible, setDuckPickerVisible] = useState(false);
+  const [tradeModalVisible, setTradeModalVisible] = useState(false);
+  const [inventory, setInventory] = useState([]);
+  const [theirPond, setTheirPond] = useState(null);
+  const [tradeOffer, setTradeOffer] = useState(null);
+  const [tradeRequest, setTradeRequest] = useState(null);
+  const [isTrading, setIsTrading] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -45,26 +54,68 @@ export default function PublicRigScreen() {
     if (id) fetchProfile();
   }, [id]);
 
-  const handleDuckRig = async () => {
+  const openDuckPicker = async () => {
+    try {
+      const inv = await getInventory();
+      if (inv.length === 0) {
+        Alert.alert("No ducks", "You're out of ducks! Claim a drop on the map or trade with someone.");
+        return;
+      }
+      setInventory(inv);
+      setDuckPickerVisible(true);
+    } catch (error) {
+      console.error("Inventory error:", error);
+      Alert.alert("Error", "Could not load your ducks.");
+    }
+  };
+
+  const handleGiveDuck = async (duckTypeId) => {
     if (isDucking) return;
     setIsDucking(true);
     try {
-      const response = await fetch(`${API_URL}/users/${id}/duck`, {
-        method: 'POST',
-        headers: await getAuthHeaders()
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setDuckCount(data.duckCount);
-      } else {
-        Alert.alert("Error", "Could not duck this rig.");
-      }
+      const data = await giveDuck(rigId, duckTypeId);
+      setDuckCount(data.recipient_duck_count);
+      setDuckPickerVisible(false);
+      Alert.alert("🦆 Ducked!", "Your duck has been delivered.");
     } catch (error) {
       console.error("Duck error:", error);
-      Alert.alert("Network Error", "Failed to connect to the server.");
+      Alert.alert("Error", error.message || "Could not duck this rig.");
     } finally {
       setIsDucking(false);
+    }
+  };
+
+  const openTradeModal = async () => {
+    try {
+      const [inv, pond] = await Promise.all([getInventory(), getUserPond(rigId)]);
+      setInventory(inv);
+      setTheirPond(pond);
+      setTradeOffer(null);
+      setTradeRequest(null);
+      setTradeModalVisible(true);
+    } catch (error) {
+      console.error("Trade modal error:", error);
+      Alert.alert("Error", "Could not load trade data.");
+    }
+  };
+
+  const handleProposeTrade = async () => {
+    if (!tradeOffer || !tradeRequest || isTrading) return;
+    setIsTrading(true);
+    try {
+      await proposeTrade({
+        recipient_id: parseInt(rigId, 10),
+        offered_duck_type_id: tradeOffer.duck.id,
+        offered_qty: 1,
+        requested_duck_type_id: tradeRequest.duck.id,
+        requested_qty: 1,
+      });
+      setTradeModalVisible(false);
+      Alert.alert("Trade proposed!", "They'll see it in their Ducks tab.");
+    } catch (error) {
+      Alert.alert("Error", error.message || "Could not propose trade.");
+    } finally {
+      setIsTrading(false);
     }
   };
 
@@ -95,7 +146,8 @@ export default function PublicRigScreen() {
   const photos = settings.photos || [];
 
   return (
-    <ScrollView style={styles.container}>
+    <View style={styles.container}>
+    <ScrollView style={{ flex: 1 }}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Text style={styles.backBtnText}>Back</Text>
@@ -110,13 +162,18 @@ export default function PublicRigScreen() {
           {/* Duck Button */}
           <TouchableOpacity 
             style={[styles.duckBtn, isDucking && { opacity: 0.6 }]} 
-            onPress={handleDuckRig}
+            onPress={openDuckPicker}
             disabled={isDucking}
           >
             <Text style={styles.duckBtnIcon}>🦆</Text>
             <Text style={styles.duckBtnCount}>{duckCount}</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Propose Trade Button */}
+        <TouchableOpacity style={styles.tradeBtn} onPress={openTradeModal}>
+          <Text style={styles.tradeBtnText}>⇄ Propose Duck Trade</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.photoGrid}>
@@ -155,6 +212,89 @@ export default function PublicRigScreen() {
         <Text style={styles.modText}>{mods}</Text>
       </View>
     </ScrollView>
+
+    {/* Duck picker modal */}
+    <Modal visible={duckPickerVisible} transparent animationType="slide" onRequestClose={() => setDuckPickerVisible(false)}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalBox}>
+          <Text style={styles.modalTitle}>Pick a duck to give</Text>
+          <FlatList
+            data={inventory}
+            keyExtractor={(item) => item.duck.id.toString()}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[styles.duckRow, { borderColor: rarityColor(item.duck.rarity) }]}
+                onPress={() => handleGiveDuck(item.duck.id)}
+                disabled={isDucking}
+              >
+                <Text style={styles.duckRowEmoji}>{item.duck.emoji}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.duckRowName}>{item.duck.name}</Text>
+                  <Text style={[styles.duckRowRarity, { color: rarityColor(item.duck.rarity) }]}>{item.duck.rarity}</Text>
+                </View>
+                <Text style={styles.duckRowCount}>×{item.count}</Text>
+              </TouchableOpacity>
+            )}
+          />
+          <TouchableOpacity style={styles.modalClose} onPress={() => setDuckPickerVisible(false)}>
+            <Text style={styles.modalCloseText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+
+    {/* Trade proposal modal */}
+    <Modal visible={tradeModalVisible} transparent animationType="slide" onRequestClose={() => setTradeModalVisible(false)}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalBox}>
+          <Text style={styles.modalTitle}>Propose a trade</Text>
+          <Text style={styles.modalLabel}>You offer:</Text>
+          <ScrollView horizontal style={styles.pickRow} showsHorizontalScrollIndicator={false}>
+            {inventory.map((item) => (
+              <TouchableOpacity
+                key={item.duck.id}
+                style={[styles.pickChip, tradeOffer?.duck.id === item.duck.id && styles.pickChipActive]}
+                onPress={() => setTradeOffer(item)}
+              >
+                <Text style={styles.pickEmoji}>{item.duck.emoji}</Text>
+                <Text style={styles.pickCount}>×{item.count}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          <Text style={styles.modalLabel}>You want (their pond):</Text>
+          <ScrollView horizontal style={styles.pickRow} showsHorizontalScrollIndicator={false}>
+            {(theirPond?.slots || []).filter((s) => s.unlocked && s.count > 0).map((slot) => (
+              <TouchableOpacity
+                key={slot.duck.id}
+                style={[styles.pickChip, tradeRequest?.duck.id === slot.duck.id && styles.pickChipActive]}
+                onPress={() => setTradeRequest(slot)}
+              >
+                <Text style={styles.pickEmoji}>{slot.duck.emoji}</Text>
+                <Text style={styles.pickCount}>×{slot.count}</Text>
+              </TouchableOpacity>
+            ))}
+            {(theirPond?.slots || []).filter((s) => s.unlocked && s.count > 0).length === 0 && (
+              <Text style={styles.emptyNote}>They have no ducks to trade.</Text>
+            )}
+          </ScrollView>
+          <TouchableOpacity
+            style={[styles.proposeBtn, (!tradeOffer || !tradeRequest || isTrading) && { opacity: 0.5 }]}
+            onPress={handleProposeTrade}
+            disabled={!tradeOffer || !tradeRequest || isTrading}
+          >
+            <Text style={styles.proposeBtnText}>
+              {tradeOffer && tradeRequest
+                ? `Offer ${tradeOffer.duck.emoji} for ${tradeRequest.duck.emoji}`
+                : 'Select both ducks'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.modalClose} onPress={() => setTradeModalVisible(false)}>
+            <Text style={styles.modalCloseText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+    </View>
   );
 }
 
@@ -187,5 +327,26 @@ const styles = StyleSheet.create({
   specRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 },
   specLabel: { fontSize: 16, color: '#aaa', flex: 1 },
   specValue: { fontSize: 16, fontWeight: '600', color: '#fff', flex: 2, textAlign: 'right' },
-  modText: { fontSize: 16, paddingVertical: 6, color: '#ccc', lineHeight: 24 }
+  modText: { fontSize: 16, paddingVertical: 6, color: '#ccc', lineHeight: 24 },
+  tradeBtn: { marginTop: 12, backgroundColor: '#2c2c2e', borderWidth: 1, borderColor: '#d4af37', paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
+  tradeBtnText: { color: '#d4af37', fontWeight: 'bold', fontSize: 15 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  modalBox: { backgroundColor: '#1e1e1e', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '80%' },
+  modalTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },
+  modalLabel: { color: '#d4af37', fontWeight: '600', marginTop: 10, marginBottom: 8 },
+  duckRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2c2c2e', borderRadius: 10, borderWidth: 1.5, padding: 12, marginBottom: 8 },
+  duckRowEmoji: { fontSize: 32, marginRight: 12 },
+  duckRowName: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  duckRowRarity: { fontSize: 12, textTransform: 'capitalize' },
+  duckRowCount: { color: '#d4af37', fontWeight: 'bold', fontSize: 16 },
+  modalClose: { marginTop: 12, padding: 12, alignItems: 'center' },
+  modalCloseText: { color: '#888', fontSize: 16 },
+  pickRow: { flexDirection: 'row', marginBottom: 6 },
+  pickChip: { backgroundColor: '#2c2c2e', borderRadius: 12, borderWidth: 2, borderColor: 'transparent', padding: 10, marginRight: 8, alignItems: 'center', minWidth: 64 },
+  pickChipActive: { borderColor: '#d4af37' },
+  pickEmoji: { fontSize: 30 },
+  pickCount: { color: '#d4af37', fontWeight: 'bold', fontSize: 12, marginTop: 4 },
+  emptyNote: { color: '#757575', fontStyle: 'italic', padding: 10 },
+  proposeBtn: { backgroundColor: '#d4af37', borderRadius: 10, padding: 14, alignItems: 'center', marginTop: 14 },
+  proposeBtnText: { color: '#121212', fontWeight: 'bold', fontSize: 16 },
 });
