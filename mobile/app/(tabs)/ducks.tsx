@@ -20,12 +20,14 @@ export default function DucksScreen() {
   const [metric, setMetric] = useState('given');
   const [nearbyOnly, setNearbyOnly] = useState(false);
   const [feed, setFeed] = useState([]);
+  const [loadError, setLoadError] = useState(null);
 
   useEffect(() => {
     AsyncStorage.getItem('userId').then(setMyUserId);
   }, []);
 
   const load = useCallback(async () => {
+    setLoadError(null);
     try {
       if (section === 'Pond') setPond(await getMyPond());
       else if (section === 'Trades') setTrades(await getTrades('all'));
@@ -44,6 +46,7 @@ export default function DucksScreen() {
       else if (section === 'Feed') setFeed(await getDuckFeed());
     } catch (e) {
       console.error('Ducks load error:', e);
+      setLoadError(e.message || 'Something went wrong loading ducks.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -236,6 +239,14 @@ export default function DucksScreen() {
           style={styles.body}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#d4af37" />}
         >
+          {!!loadError && (
+            <View style={styles.errorBox}>
+              <Text style={styles.errorText}>{loadError}</Text>
+              <TouchableOpacity style={styles.retryBtn} onPress={() => { setLoading(true); load(); }}>
+                <Text style={styles.retryText}>Try again</Text>
+              </TouchableOpacity>
+            </View>
+          )}
           {section === 'Pond' && renderPond()}
           {section === 'Trades' && renderTrades()}
           {section === 'Ranks' && renderRanks()}
@@ -248,6 +259,10 @@ export default function DucksScreen() {
 }
 
 const styles = StyleSheet.create({
+  errorBox: { margin: 16, padding: 16, backgroundColor: '#1e1e1e', borderRadius: 12, borderWidth: 1, borderColor: '#d4af37', alignItems: 'center' },
+  errorText: { color: '#e0e0e0', fontSize: 14, textAlign: 'center', marginBottom: 12 },
+  retryBtn: { backgroundColor: '#d4af37', paddingVertical: 10, paddingHorizontal: 24, borderRadius: 20 },
+  retryText: { color: '#121212', fontWeight: '700', fontSize: 14 },
   container: { flex: 1, backgroundColor: '#121212' },
   header: { padding: 25, paddingTop: 50, backgroundColor: '#1a1a1a' },
   title: { fontSize: 28, fontWeight: '900', color: '#ffffff', letterSpacing: 1 },

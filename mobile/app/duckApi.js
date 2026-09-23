@@ -12,17 +12,31 @@ export function rarityColor(rarity) {
   return RARITY_COLORS[rarity] || '#9e9e9e';
 }
 
+const REQUEST_TIMEOUT_MS = 20000;
+
 async function req(path, options = {}) {
-  const response = await fetch(`${API_URL}${path}`, {
-    ...(options.body ? { method: options.method || 'POST' } : {}),
-    ...options,
-    headers: await getAuthHeaders(),
-  });
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new Error(text || `Request failed (${response.status})`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${API_URL}${path}`, {
+      ...(options.body ? { method: options.method || 'POST' } : {}),
+      ...options,
+      signal: controller.signal,
+      headers: await getAuthHeaders(),
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      throw new Error(text || `Request failed (${response.status})`);
+    }
+    return response.json();
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      throw new Error('Request timed out. Check your connection and try again.');
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
   }
-  return response.json();
 }
 
 export const getDuckCatalog = () => req('/ducks/catalog');
