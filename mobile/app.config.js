@@ -27,6 +27,10 @@ export default {
         }
       }
     },
+    "androidStatusBar": {
+      "backgroundColor": "#121212",
+      "barStyle": "light-content"
+    },
     "plugins": [
       "expo-router"
     ],
