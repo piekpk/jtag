@@ -1,6 +1,7 @@
 import shutil
 import os
 import json
+import random
 import sqlite3
 from datetime import datetime, timedelta
 from uuid import uuid4
@@ -9,11 +10,11 @@ from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 import jwt
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, or_
 from sqlalchemy.orm import sessionmaker, Session
 from passlib.context import CryptContext
 from pydantic import BaseModel
-from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade
+from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone
 from schemas import UserProfileUpdate, UserProfileResponse, UserCreate
 
 # Password hashing setup
@@ -228,8 +229,10 @@ def duck_user_rig(user_id: int, db: Session = Depends(get_db), current_user: Use
     _bump_legacy_duck_count(db, user)
     db.commit()
     db.refresh(user)
+    done = _check_milestones(db, current_user.id) + _check_milestones(db, user.id)
 
-    return {"message": "Rig ducked successfully!", "duckCount": (user.settings or {}).get("duckCount", 0)}
+    return {"message": "Rig ducked successfully!", "duckCount": (user.settings or {}).get("duckCount", 0),
+            "milestones_completed": done}
 
 @app.get("/users", response_model=list[UserProfileResponse])
 def get_all_users(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -487,6 +490,114 @@ def _owner_name(db: Session, user_id: int) -> str:
     return "Fellow Jeeper"
 
 
+# --- Milestone rewards ---
+# One-time milestones that mint ducks from controlled rarity pools.
+# `counter` maps to a progress query below; collection milestones count pond unlocks.
+MILESTONES = [
+    {"key": "give_5", "track": "Activity", "name": "Duck Giver",
+     "description": "Give 5 ducks to fellow Jeepers", "target": 5,
+     "counter": "ducks_given", "reward_pool": ["rare"]},
+    {"key": "drops_claimed_5", "track": "Activity", "name": "Treasure Hunter",
+     "description": "Claim 5 location drops", "target": 5,
+     "counter": "drops_claimed", "reward_pool": ["common", "rare"]},
+    {"key": "drops_created_3", "track": "Activity", "name": "Drop Master",
+     "description": "Create 3 location drops", "target": 3,
+     "counter": "drops_created", "reward_pool": ["common", "rare"]},
+    {"key": "trades_done_3", "track": "Activity", "name": "Wheeler Dealer",
+     "description": "Complete 3 trades", "target": 3,
+     "counter": "trades_completed", "reward_pool": ["rare"]},
+    {"key": "pond_3", "track": "Collection", "name": "Pond Starter",
+     "description": "Unlock 3 ducks in your pond", "target": 3,
+     "counter": "pond_unlocked", "reward_pool": ["rare"], "prefer_unowned": True},
+    {"key": "pond_6", "track": "Collection", "name": "Pond Pro",
+     "description": "Unlock 6 ducks in your pond", "target": 6,
+     "counter": "pond_unlocked", "reward_pool": ["epic"], "prefer_unowned": True},
+    {"key": "pond_9", "track": "Collection", "name": "Diamond Pond",
+     "description": "Complete the full pond — all 9 ducks", "target": 9,
+     "counter": "pond_unlocked", "reward_slug": "diamond_duck"},
+]
+
+
+def _milestone_progress(db: Session, user_id: int, m: dict) -> int:
+    c = m["counter"]
+    if c == "ducks_given":
+        return db.query(DuckGive).filter(DuckGive.giver_id == user_id).count()
+    if c == "drops_claimed":
+        return db.query(DropClaim).filter(DropClaim.user_id == user_id).count()
+    if c == "drops_created":
+        return db.query(DuckDrop).filter(DuckDrop.created_by == user_id).count()
+    if c == "trades_completed":
+        return db.query(Trade).filter(
+            Trade.status == "accepted",
+            or_(Trade.proposer_id == user_id, Trade.recipient_id == user_id)).count()
+    if c == "pond_unlocked":
+        return db.query(UserDuck).filter(UserDuck.user_id == user_id).count()
+    return 0
+
+
+def _milestone_reward_duck(db: Session, user_id: int, m: dict):
+    """Pick the duck this milestone grants. None if the pool is empty."""
+    if m.get("reward_slug"):
+        return db.query(DuckType).filter(DuckType.slug == m["reward_slug"]).first()
+    pool = db.query(DuckType).filter(
+        DuckType.rarity.in_(m["reward_pool"]),
+        DuckType.seasonal.is_(None)).order_by(DuckType.id).all()
+    if not pool:
+        return None
+    if m.get("prefer_unowned"):
+        owned_ids = {r.duck_type_id for r in
+                     db.query(UserDuck).filter(UserDuck.user_id == user_id).all()}
+        unowned = [d for d in pool if d.id not in owned_ids]
+        if unowned:
+            pool = unowned
+    return random.choice(pool)
+
+
+def _milestone_reward_text(db: Session, m: dict) -> str:
+    if m.get("reward_slug"):
+        dt = db.query(DuckType).filter(DuckType.slug == m["reward_slug"]).first()
+        return f"{dt.name} {dt.emoji}" if dt else "Special duck"
+    return "Random " + " or ".join(m["reward_pool"]) + " duck"
+
+
+def _milestone_dict(db: Session, m: dict) -> dict:
+    return {"key": m["key"], "track": m["track"], "name": m["name"],
+            "description": m["description"], "target": m["target"],
+            "reward": _milestone_reward_text(db, m)}
+
+
+def _check_milestones(db: Session, user_id: int) -> list:
+    """Grant every newly-completed milestone for the user (loops for cascades).
+
+    Called after the triggering action's commit, so progress queries see the
+    latest state. Each grant commits separately; returns
+    [{"milestone": {...}, "duck": {...}}] for the response payload.
+    """
+    completed = []
+    skipped = set()  # milestones with an empty reward pool (defensive)
+    while True:
+        claimed_keys = {r.key for r in
+                        db.query(UserMilestone).filter(UserMilestone.user_id == user_id).all()}
+        found = False
+        for m in MILESTONES:
+            if m["key"] in claimed_keys or m["key"] in skipped:
+                continue
+            if _milestone_progress(db, user_id, m) < m["target"]:
+                continue
+            dt = _milestone_reward_duck(db, user_id, m)
+            if not dt:
+                skipped.add(m["key"])
+                continue
+            _grant_duck(db, user_id, dt.id, 1)
+            db.add(UserMilestone(user_id=user_id, key=m["key"]))
+            db.commit()
+            completed.append({"milestone": _milestone_dict(db, m), "duck": _duck_type_dict(dt)})
+            found = True
+        if not found:
+            break
+    return completed
+
+
 def _ensure_starter_ducks(db: Session, user_id: int):
     """Grant starter ducks once: fires only if the user has no user_ducks rows at all."""
     if db.query(UserDuck).filter(UserDuck.user_id == user_id).count() == 0:
@@ -572,6 +683,19 @@ def get_my_pond(db: Session = Depends(get_db), current_user: User = Depends(get_
     return _pond_for(db, current_user.id)
 
 
+@app.get("/ducks/milestones")
+def list_milestones(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    claimed_keys = {r.key for r in
+                    db.query(UserMilestone).filter(UserMilestone.user_id == current_user.id).all()}
+    out = []
+    for m in MILESTONES:
+        d = _milestone_dict(db, m)
+        d["progress"] = _milestone_progress(db, current_user.id, m)
+        d["claimed"] = m["key"] in claimed_keys
+        out.append(d)
+    return out
+
+
 @app.get("/users/{user_id}/pond")
 def get_user_pond(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if not db.query(User).filter(User.id == user_id).first():
@@ -595,7 +719,9 @@ def give_duck(payload: DuckGiveCreate, db: Session = Depends(get_db), current_us
                     duck_type_id=payload.duck_type_id, note=payload.note))
     _bump_legacy_duck_count(db, recipient)
     db.commit()
-    return {"message": "Duck given!", "recipient_duck_count": (recipient.settings or {}).get("duckCount", 0)}
+    done = _check_milestones(db, current_user.id) + _check_milestones(db, recipient.id)
+    return {"message": "Duck given!", "recipient_duck_count": (recipient.settings or {}).get("duckCount", 0),
+            "milestones_completed": done}
 
 
 @app.get("/ducks/feed")
@@ -689,7 +815,8 @@ def create_drop(payload: DropCreate, db: Session = Depends(get_db), current_user
     db.add(drop)
     db.commit()
     db.refresh(drop)
-    return {"id": drop.id, "message": "Drop is live!"}
+    done = _check_milestones(db, current_user.id)
+    return {"id": drop.id, "message": "Drop is live!", "milestones_completed": done}
 
 
 @app.get("/drops/active")
@@ -742,8 +869,9 @@ def claim_drop(drop_id: int, payload: DropClaimCreate, db: Session = Depends(get
     _ensure_starter_ducks(db, current_user.id)
     _grant_duck(db, current_user.id, drop.duck_type_id, 1)
     db.commit()
+    done = _check_milestones(db, current_user.id)
     dt = _duck_type_or_404(db, drop.duck_type_id)
-    return {"message": "Duck claimed!", "duck": _duck_type_dict(dt)}
+    return {"message": "Duck claimed!", "duck": _duck_type_dict(dt), "milestones_completed": done}
 
 
 # --- Trading ---
@@ -857,7 +985,8 @@ def accept_trade(trade_id: int, db: Session = Depends(get_db),
     t.status = "accepted"
     t.decided_at = datetime.utcnow()
     db.commit()
-    return {"message": "Trade completed!", "trade": _trade_dict(db, t)}
+    done = _check_milestones(db, t.proposer_id) + _check_milestones(db, t.recipient_id)
+    return {"message": "Trade completed!", "trade": _trade_dict(db, t), "milestones_completed": done}
 
 
 @app.post("/trades/{trade_id}/decline")

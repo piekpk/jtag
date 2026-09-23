@@ -1,5 +1,6 @@
 import { API_URL } from './config.js';
 import { getAuthHeaders } from './auth.js';
+import { Alert } from 'react-native';
 
 export const RARITY_COLORS = {
   common: '#9e9e9e',
@@ -42,6 +43,17 @@ async function req(path, options = {}) {
 export const getDuckCatalog = () => req('/ducks/catalog');
 export const getInventory = () => req('/ducks/inventory');
 export const getMyPond = () => req('/ducks/pond');
+export const getMilestones = () => req('/ducks/milestones');
+
+/** Show a celebration alert for freshly completed milestones (from action responses). */
+export function celebrateMilestones(completed) {
+  if (!completed || !completed.length) return;
+  const lines = completed.map((c) => `${c.duck.emoji} ${c.duck.name}`).join('\n');
+  const title = completed.length === 1
+    ? `Milestone complete: ${completed[0].milestone.name}!`
+    : `${completed.length} milestones complete!`;
+  Alert.alert(title, `You earned:\n${lines}`);
+}
 export const getUserPond = (userId) => req(`/users/${userId}/pond`);
 export const giveDuck = (recipientId, duckTypeId, note) =>
   req('/ducks/give', { body: JSON.stringify({ recipient_id: recipientId, duck_type_id: duckTypeId, note }) });

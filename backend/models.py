@@ -97,3 +97,12 @@ class Trade(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     expires_at = Column(DateTime, nullable=False)
     decided_at = Column(DateTime, nullable=True)
+
+class UserMilestone(Base):
+    """One-time milestone completions per user (rewards auto-granted)."""
+    __tablename__ = "user_milestones"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True, nullable=False)
+    key = Column(String, index=True, nullable=False)
+    claimed_at = Column(DateTime, default=datetime.utcnow, nullable=False)

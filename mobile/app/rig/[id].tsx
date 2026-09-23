@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Image, ActivityIndicator, Touchable
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { API_URL } from '../config.js';
 import { getAuthHeaders } from '../auth.js';
-import { getInventory, giveDuck, getUserPond, proposeTrade, rarityColor } from '../duckApi.js';
+import { getInventory, giveDuck, getUserPond, proposeTrade, rarityColor, celebrateMilestones } from '../duckApi.js';
 
 // Helper function to safely format image URLs and bypass hardcoded local IPs
 const getImageUrl = (imagePath: string) => {
@@ -77,6 +77,7 @@ export default function PublicRigScreen() {
       setDuckCount(data.recipient_duck_count);
       setDuckPickerVisible(false);
       Alert.alert("🦆 Ducked!", "Your duck has been delivered.");
+      celebrateMilestones(data.milestones_completed);
     } catch (error) {
       console.error("Duck error:", error);
       Alert.alert("Error", error.message || "Could not duck this rig.");

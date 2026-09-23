@@ -4,10 +4,10 @@ import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   getMyPond, getTrades, acceptTrade, declineTrade, cancelTrade,
-  getLeaderboard, getDuckFeed, rarityColor,
+  getLeaderboard, getDuckFeed, rarityColor, getMilestones, celebrateMilestones,
 } from '../duckApi.js';
 
-const SECTIONS = ['Pond', 'Trades', 'Ranks', 'Feed'];
+const SECTIONS = ['Pond', 'Trades', 'Ranks', 'Feed', 'Rewards'];
 
 export default function DucksScreen() {
   const [section, setSection] = useState('Pond');
@@ -20,6 +20,7 @@ export default function DucksScreen() {
   const [metric, setMetric] = useState('given');
   const [nearbyOnly, setNearbyOnly] = useState(false);
   const [feed, setFeed] = useState([]);
+  const [milestones, setMilestones] = useState([]);
   const [loadError, setLoadError] = useState(null);
 
   useEffect(() => {
@@ -44,6 +45,7 @@ export default function DucksScreen() {
         setBoard(await getLeaderboard(params));
       }
       else if (section === 'Feed') setFeed(await getDuckFeed());
+      else if (section === 'Rewards') setMilestones(await getMilestones());
     } catch (e) {
       console.error('Ducks load error:', e);
       setLoadError(e.message || 'Something went wrong loading ducks.');
@@ -59,10 +61,12 @@ export default function DucksScreen() {
 
   const handleTradeAction = async (tradeId, action, label) => {
     try {
-      if (action === 'accept') await acceptTrade(tradeId);
+      let result = null;
+      if (action === 'accept') result = await acceptTrade(tradeId);
       else if (action === 'decline') await declineTrade(tradeId);
       else await cancelTrade(tradeId);
       Alert.alert('Done', label);
+      if (result) celebrateMilestones(result.milestones_completed);
       load();
     } catch (e) {
       Alert.alert('Error', e.message || 'Trade action failed.');
@@ -199,6 +203,39 @@ export default function DucksScreen() {
     </View>
   );
 
+  const renderRewards = () => {
+    const tracks = ['Activity', 'Collection'];
+    return (
+      <View>
+        {tracks.map((track) => (
+          <View key={track}>
+            <Text style={styles.sectionHead}>{track}</Text>
+            {milestones.filter((m) => m.track === track).map((m) => {
+              const pct = Math.min(100, Math.round((m.progress / m.target) * 100));
+              return (
+                <View key={m.key} style={[styles.card, m.claimed && styles.msClaimed]}>
+                  <View style={styles.msRow}>
+                    <Text style={styles.msName}>{m.name}</Text>
+                    {m.claimed ? (
+                      <Text style={styles.msCheck}>✓ claimed</Text>
+                    ) : (
+                      <Text style={styles.msCount}>{Math.min(m.progress, m.target)}/{m.target}</Text>
+                    )}
+                  </View>
+                  <Text style={styles.msDesc}>{m.description}</Text>
+                  <View style={styles.msBar}>
+                    <View style={[styles.msFill, { width: `${pct}%` }]} />
+                  </View>
+                  <Text style={styles.msReward}>🎁 {m.reward}</Text>
+                </View>
+              );
+            })}
+          </View>
+        ))}
+      </View>
+    );
+  };
+
   const renderFeed = () => (
     <View>
       {feed.length === 0 && <Text style={styles.empty}>No duck activity yet.</Text>}
@@ -251,6 +288,7 @@ export default function DucksScreen() {
           {section === 'Trades' && renderTrades()}
           {section === 'Ranks' && renderRanks()}
           {section === 'Feed' && renderFeed()}
+          {section === 'Rewards' && renderRewards()}
           <View style={{ height: 40 }} />
         </ScrollView>
       )}
@@ -263,6 +301,15 @@ const styles = StyleSheet.create({
   errorText: { color: '#e0e0e0', fontSize: 14, textAlign: 'center', marginBottom: 12 },
   retryBtn: { backgroundColor: '#d4af37', paddingVertical: 10, paddingHorizontal: 24, borderRadius: 20 },
   retryText: { color: '#121212', fontWeight: '700', fontSize: 14 },
+  msRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  msName: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  msCheck: { color: '#d4af37', fontWeight: '700', fontSize: 12 },
+  msCount: { color: '#aaa', fontWeight: '600', fontSize: 13 },
+  msDesc: { color: '#ccc', fontSize: 13, marginBottom: 8 },
+  msBar: { height: 8, backgroundColor: '#2c2c2e', borderRadius: 4, overflow: 'hidden', marginBottom: 8 },
+  msFill: { height: '100%', backgroundColor: '#d4af37', borderRadius: 4 },
+  msReward: { color: '#d4af37', fontSize: 13, fontWeight: '600' },
+  msClaimed: { opacity: 0.65 },
   container: { flex: 1, backgroundColor: '#121212' },
   header: { padding: 25, paddingTop: 50, backgroundColor: '#1a1a1a' },
   title: { fontSize: 28, fontWeight: '900', color: '#ffffff', letterSpacing: 1 },

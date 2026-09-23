@@ -5,7 +5,7 @@ import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from '../config.js';
 import { getAuthHeaders } from '../auth.js';
-import { getActiveDrops, createDrop, claimDrop, getInventory, formatExpiry, rarityColor } from '../duckApi.js';
+import { getActiveDrops, createDrop, claimDrop, getInventory, formatExpiry, rarityColor, celebrateMilestones } from '../duckApi.js';
 
 const RADIUS_CHOICES = [50, 100, 200, 500];
 const DURATION_CHOICES = [
@@ -100,6 +100,7 @@ export default function RadarMapScreen() {
     try {
       const result = await claimDrop(selectedDrop.id, location.latitude, location.longitude);
       Alert.alert("🦆 Duck claimed!", `You got a ${result.duck.emoji} ${result.duck.name}!`);
+      celebrateMilestones(result.milestones_completed);
       setDrops(drops.filter((d) => d.id !== selectedDrop.id));
       setSelectedDrop(null);
     } catch (e) {
@@ -146,7 +147,7 @@ export default function RadarMapScreen() {
     if (!dropDuck || !dropCoord || isDropping) return;
     setIsDropping(true);
     try {
-      await createDrop({
+      const result = await createDrop({
         duck_type_id: dropDuck.duck.id,
         latitude: dropCoord.latitude,
         longitude: dropCoord.longitude,
@@ -155,6 +156,7 @@ export default function RadarMapScreen() {
         max_claims: dropClaims,
         label: dropLabel.trim() || null,
       });
+      celebrateMilestones(result.milestones_completed);
       setDropModalVisible(false);
       const fresh = await getActiveDrops(location.latitude, location.longitude);
       setDrops(fresh);
