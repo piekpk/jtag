@@ -51,8 +51,8 @@ def _ensure_is_admin_column():
 
 
 def _bootstrap_admins():
-    """Grant admin to every address in ADMIN_EMAILS (comma-separated). Runs at startup."""
-    emails = [e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()]
+    """Grant admin to every address in ADMIN_EMAILS (comma-separated, defaults to the owner's email). Runs at startup."""
+    emails = [e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "glichxp@gmail.com").split(",") if e.strip()]
     if not emails:
         return
     db = SessionLocal()
