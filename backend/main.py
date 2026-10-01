@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from uuid import uuid4
 from math import radians, cos, sin, asin, sqrt
 from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Header
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import jwt
 from fastapi.staticfiles import StaticFiles
@@ -35,6 +36,39 @@ engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base.metadata.create_all(bind=engine)
 
+
+def _ensure_is_admin_column():
+    """Lightweight migration: add users.is_admin to DBs created before the column existed."""
+    conn = get_raw_db()
+    try:
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(users)")]
+        if "is_admin" not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0")
+            conn.commit()
+            print("Migration: added users.is_admin column.")
+    finally:
+        conn.close()
+
+
+def _bootstrap_admins():
+    """Grant admin to every address in ADMIN_EMAILS (comma-separated). Runs at startup."""
+    emails = [e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()]
+    if not emails:
+        return
+    db = SessionLocal()
+    try:
+        granted = 0
+        for u in db.query(User).filter(User.email.in_(emails)).all():
+            if not u.is_admin:
+                u.is_admin = True
+                granted += 1
+        if granted:
+            db.commit()
+            print(f"Admin bootstrap: granted admin to {granted} user(s).")
+    finally:
+        db.close()
+
+
 def get_db():
     db = SessionLocal()
     try:
@@ -47,6 +81,11 @@ def get_raw_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+# Run after get_raw_db exists: migrate old DBs, then grant admins.
+_ensure_is_admin_column()
+_bootstrap_admins()
 
 # --- Helper Functions ---
 def haversine(lat1, lon1, lat2, lon2):
@@ -137,6 +176,13 @@ def require_self(user_id: int, current_user: User) -> User:
     return current_user
 
 
+def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    """Restrict a route to admin users."""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return current_user
+
+
 class AuthResponse(UserProfileResponse):
     access_token: str
     token_type: str = "bearer"
@@ -166,6 +212,7 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
         email=new_user.email,
         profile_picture_url=new_user.profile_picture_url,
         settings=new_user.settings,
+        is_admin=new_user.is_admin,
         access_token=create_access_token(new_user.id),
     )
 
@@ -182,6 +229,7 @@ def login(user_credentials: UserCreate, db: Session = Depends(get_db)):
         email=user.email,
         profile_picture_url=user.profile_picture_url,
         settings=user.settings,
+        is_admin=user.is_admin,
         access_token=create_access_token(user.id),
     )
 
@@ -1148,3 +1196,154 @@ def cancel_trade(trade_id: int, db: Session = Depends(get_db),
     t.decided_at = datetime.utcnow()
     db.commit()
     return {"message": "Trade cancelled"}
+
+
+# --- Admin web panel ---
+# Single-page admin UI served at /admin. Sign in with an admin account;
+# it talks to the /admin/* JSON endpoints below using your JWT.
+ADMIN_HTML_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "admin.html")
+
+
+@app.get("/admin", response_class=HTMLResponse)
+def admin_panel():
+    with open(ADMIN_HTML_PATH, encoding="utf-8") as f:
+        return f.read()
+
+
+# --- Admin API ---
+# Read-only browse + delete over every table, restricted to admin users.
+ADMIN_TABLES = {
+    "users": User,
+    "duck_types": DuckType,
+    "user_ducks": UserDuck,
+    "duck_gives": DuckGive,
+    "duck_drops": DuckDrop,
+    "drop_claims": DropClaim,
+    "trades": Trade,
+    "user_milestones": UserMilestone,
+    "photo_reactions": PhotoReaction,
+}
+
+# Columns never exposed through the admin API.
+ADMIN_HIDDEN_COLUMNS = {
+    "users": {"hashed_password"},
+}
+
+MESSAGE_COLUMNS = ["id", "user_id", "message", "timestamp", "reactions", "channel", "latitude", "longitude"]
+MESSAGE_TABLE_DDL = """CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    message TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    reactions TEXT DEFAULT '{}',
+    channel TEXT DEFAULT 'global',
+    latitude REAL,
+    longitude REAL
+)"""
+
+
+def _admin_table_or_404(name: str) -> str:
+    if name != "messages" and name not in ADMIN_TABLES:
+        raise HTTPException(status_code=404, detail="Unknown table")
+    return name
+
+
+def _row_to_dict(row, hidden: set) -> dict:
+    out = {}
+    for col in row.__table__.columns:
+        if col.name in hidden:
+            continue
+        v = getattr(row, col.name)
+        if isinstance(v, datetime):
+            v = v.isoformat()
+        out[col.name] = v
+    return out
+
+
+@app.get("/admin/overview")
+def admin_overview(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """Row counts for every table."""
+    tables = [{"table": name, "count": db.query(model).count()} for name, model in ADMIN_TABLES.items()]
+    conn = get_raw_db()
+    try:
+        conn.execute(MESSAGE_TABLE_DDL)
+        count = conn.execute("SELECT COUNT(*) AS c FROM messages").fetchone()["c"]
+    finally:
+        conn.close()
+    tables.append({"table": "messages", "count": count})
+    return {"tables": tables}
+
+
+@app.get("/admin/tables/{name}")
+def admin_table_rows(name: str, limit: int = 50, offset: int = 0,
+                     db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """Paginated rows for one table, newest first."""
+    _admin_table_or_404(name)
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
+    if name == "messages":
+        conn = get_raw_db()
+        try:
+            rows = conn.execute(
+                "SELECT * FROM messages ORDER BY id DESC LIMIT ? OFFSET ?", (limit, offset)
+            ).fetchall()
+            return {"columns": MESSAGE_COLUMNS, "rows": [dict(r) for r in rows]}
+        finally:
+            conn.close()
+    model = ADMIN_TABLES[name]
+    hidden = ADMIN_HIDDEN_COLUMNS.get(name, set())
+    q = db.query(model).order_by(model.id.desc())
+    total = q.count()
+    rows = q.offset(offset).limit(limit).all()
+    columns = [c.name for c in model.__table__.columns if c.name not in hidden]
+    return {"columns": columns, "total": total, "rows": [_row_to_dict(r, hidden) for r in rows]}
+
+
+@app.get("/admin/tables/{name}/{row_id}")
+def admin_row_detail(name: str, row_id: int,
+                     db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """Full detail for a single row."""
+    _admin_table_or_404(name)
+    if name == "messages":
+        conn = get_raw_db()
+        try:
+            r = conn.execute("SELECT * FROM messages WHERE id = ?", (row_id,)).fetchone()
+            if not r:
+                raise HTTPException(status_code=404, detail="Row not found")
+            return {"row": dict(r)}
+        finally:
+            conn.close()
+    model = ADMIN_TABLES[name]
+    hidden = ADMIN_HIDDEN_COLUMNS.get(name, set())
+    row = db.query(model).filter(model.id == row_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Row not found")
+    return {"row": _row_to_dict(row, hidden)}
+
+
+@app.delete("/admin/tables/{name}/{row_id}")
+def admin_delete_row(name: str, row_id: int,
+                     db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """Delete a single row. The duck catalog and your own admin account are protected."""
+    _admin_table_or_404(name)
+    if name == "duck_types":
+        raise HTTPException(status_code=403, detail="The duck catalog cannot be deleted")
+    if name == "users" and row_id == admin.id:
+        raise HTTPException(status_code=403, detail="You cannot delete your own admin account")
+    if name == "messages":
+        conn = get_raw_db()
+        try:
+            cur = conn.execute("DELETE FROM messages WHERE id = ?", (row_id,))
+            conn.commit()
+            if cur.rowcount == 0:
+                raise HTTPException(status_code=404, detail="Row not found")
+            return {"deleted": True}
+        finally:
+            conn.close()
+    model = ADMIN_TABLES[name]
+    row = db.query(model).filter(model.id == row_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Row not found")
+    db.delete(row)
+    db.commit()
+    return {"deleted": True}

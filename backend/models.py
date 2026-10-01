@@ -1,4 +1,4 @@
-﻿from sqlalchemy import Column, Integer, String, JSON, Float, DateTime, UniqueConstraint
+﻿from sqlalchemy import Column, Integer, String, JSON, Float, DateTime, Boolean, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 
@@ -14,6 +14,7 @@ class User(Base):
     settings = Column(JSON, server_default='{}')
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
+    is_admin = Column(Boolean, nullable=False, default=False, server_default="0")
 
 
 # --- Duck Game Models ---

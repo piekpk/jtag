@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jtap Database Admin</title>
+<style>
+  :root { --gold: #d4af37; --bg: #121212; --card: #1e1e1e; --surface: #2c2c2e; --muted: #8e8e93; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: #fff; font-family: -apple-system, Segoe UI, Roboto, sans-serif; }
+  header { background: #1a1a1a; padding: 20px; border-bottom: 1px solid var(--surface); position: sticky; top: 0; }
+  header h1 { margin: 0; color: var(--gold); font-size: 20px; }
+  header p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+  #crumb { color: var(--gold); font-size: 13px; margin-top: 8px; }
+  #crumb a { color: var(--gold); cursor: pointer; text-decoration: none; margin-right: 6px; }
+  main { max-width: 900px; margin: 0 auto; padding: 16px; }
+  .card { background: var(--card); border-radius: 12px; padding: 16px; margin-bottom: 10px; cursor: pointer; display: flex; align-items: center; gap: 12px; }
+  .card:hover { background: var(--surface); }
+  .card .name { flex: 1; font-weight: 700; }
+  .card .count { color: var(--gold); font-weight: 700; }
+  .kv { display: flex; padding: 8px 0; border-bottom: 1px solid var(--surface); font-size: 14px; }
+  .kv .k { color: var(--gold); width: 160px; flex-shrink: 0; font-weight: 600; }
+  .kv .v { word-break: break-word; }
+  .rowline { display: flex; gap: 10px; align-items: center; }
+  .rowline .id { color: var(--gold); font-weight: 700; min-width: 52px; }
+  .rowline .sum { color: #ccc; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  button { background: var(--gold); color: #121212; border: 0; border-radius: 10px; padding: 12px 20px; font-weight: 700; cursor: pointer; font-size: 14px; }
+  button.ghost { background: var(--surface); color: #fff; }
+  button.danger { background: transparent; border: 1px solid #5a2a2a; color: #ff5a5a; width: 100%; margin-top: 12px; }
+  input { width: 100%; background: var(--surface); border: 1px solid #444; color: #fff; border-radius: 10px; padding: 12px; margin-bottom: 10px; font-size: 14px; }
+  .login { max-width: 380px; margin: 60px auto; background: var(--card); padding: 24px; border-radius: 12px; }
+  .login h2 { color: var(--gold); margin-top: 0; }
+  .err { color: #ff8a8a; margin-bottom: 10px; font-size: 14px; }
+  .empty { color: var(--muted); }
+  #more { width: 100%; margin: 8px 0 24px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>&#128737; Jtap Database Admin</h1>
+  <p id="sub">Sign in with an admin account</p>
+  <div id="crumb"></div>
+</header>
+<main id="app"></main>
+<script>
+const app = document.getElementById('app');
+const crumb = document.getElementById('crumb');
+const sub = document.getElementById('sub');
+let tables = [], table = null, rows = [], offset = 0, hasMore = false;
+const PAGE = 50;
+
+const SUMMARY = {
+  users: ['email'], duck_types: ['name', 'rarity'],
+  user_ducks: ['user_id', 'duck_type_id', 'count'],
+  duck_gives: ['giver_id', 'recipient_id', 'duck_type_id'],
+  duck_drops: ['label', 'duck_type_id', 'claims_count'],
+  drop_claims: ['drop_id', 'user_id'], trades: ['proposer_id', 'recipient_id', 'status'],
+  user_milestones: ['user_id', 'key'], photo_reactions: ['photo_owner_id', 'emoji'],
+  messages: ['user_id', 'channel', 'message'],
+};
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function api(path, opts = {}) {
+  const token = sessionStorage.getItem('jtap_admin_token');
+  const res = await fetch(path, { ...opts,
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } });
+  if (res.status === 401 || res.status === 403) { showLogin('Not signed in as admin.'); throw new Error('auth'); }
+  if (!res.ok) throw new Error(await res.text().catch(() => res.status));
+  return res.json();
+}
+
+function showLogin(msg) {
+  sub.textContent = 'Sign in with an admin account';
+  crumb.innerHTML = '';
+  app.innerHTML = `<div class="login"><h2>Admin sign in</h2>
+    ${msg ? `<div class="err">${esc(msg)}</div>` : ''}
+    <input id="em" type="email" placeholder="Email" autocomplete="username">
+    <input id="pw" type="password" placeholder="Password" autocomplete="current-password">
+    <button id="go" style="width:100%">Sign in</button></div>`;
+  const doLogin = async () => {
+    const email = document.getElementById('em').value.trim();
+    const password = document.getElementById('pw').value;
+    try {
+      const r = await fetch('/login', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }) });
+      if (!r.ok) throw new Error('Login failed');
+      const data = await r.json();
+      sessionStorage.setItem('jtap_admin_token', data.access_token);
+      loadTables();
+    } catch (e) { showLogin(e.message); }
+  };
+  document.getElementById('go').onclick = doLogin;
+  document.getElementById('pw').onkeydown = e => { if (e.key === 'Enter') doLogin(); };
+}
+
+async function loadTables() {
+  try {
+    const data = await api('/admin/overview');
+    tables = data.tables;
+    sub.textContent = 'Browse every table in the app database';
+    crumb.innerHTML = '';
+    app.innerHTML = tables.map(t =>
+      `<div class="card" onclick="openTable('${t.table}')">
+         <span class="name">${esc(t.table)}</span><span class="count">${t.count}</span><span>&#8250;</span>
+       </div>`).join('');
+  } catch (e) { /* showLogin already handled auth */ }
+}
+
+async function openTable(name) {
+  table = name; offset = 0;
+  try {
+    const data = await api(`/admin/tables/${name}?limit=${PAGE}&offset=0`);
+    rows = data.rows;
+    hasMore = data.total === undefined ? rows.length === PAGE : data.total > PAGE;
+    renderRows();
+  } catch (e) { alert('Could not load table: ' + e.message); }
+}
+
+function summarize(r) {
+  const fields = SUMMARY[table] || Object.keys(r).filter(k => k !== 'id').slice(0, 2);
+  return fields.map(f => r[f]).filter(v => v !== undefined && v !== null && v !== '')
+    .map(v => { v = String(v); return v.length > 40 ? v.slice(0, 40) + '…' : v; })
+    .slice(0, 2).join(' · ') || '—';
+}
+
+function renderRows() {
+  sub.textContent = `${rows.length} rows loaded · newest first`;
+  crumb.innerHTML = `<a onclick="loadTables()">tables</a> / ${esc(table)}`;
+  app.innerHTML = (rows.length ? rows.map(r =>
+    `<div class="card" onclick="openDetail(${r.id})">
+       <div class="rowline"><span class="id">#${r.id}</span><span class="sum">${esc(summarize(r))}</span><span>&#8250;</span></div>
+     </div>`).join('') : '<p class="empty">No rows in this table yet.</p>')
+    + (hasMore ? '<button id="more" class="ghost" onclick="loadMore()">Load more</button>' : '');
+}
+
+async function loadMore() {
+  const next = offset + PAGE;
+  try {
+    const data = await api(`/admin/tables/${table}?limit=${PAGE}&offset=${next}`);
+    rows = rows.concat(data.rows);
+    offset = next;
+    hasMore = data.total === undefined ? data.rows.length === PAGE : data.total > next + PAGE;
+    renderRows();
+  } catch (e) { alert('Could not load more: ' + e.message); }
+}
+
+async function openDetail(id) {
+  try {
+    const data = await api(`/admin/tables/${table}/${id}`);
+    const row = data.row;
+    sub.textContent = `${table} · full record`;
+    crumb.innerHTML = `<a onclick="loadTables()">tables</a> / <a onclick="openTable('${table}')">${esc(table)}</a> / #${id}`;
+    app.innerHTML = `<div class="card" style="cursor:default; display:block">` +
+      Object.entries(row).map(([k, v]) =>
+        `<div class="kv"><span class="k">${esc(k)}</span><span class="v">${esc(typeof v === 'object' ? JSON.stringify(v) : v)}</span></div>`).join('') +
+      `</div><button class="danger" onclick="delRow(${id})">Delete this row</button>`;
+  } catch (e) { alert('Could not load row: ' + e.message); }
+}
+
+async function delRow(id) {
+  if (!confirm(`Delete ${table} #${id}? This cannot be undone.`)) return;
+  try {
+    await api(`/admin/tables/${table}/${id}`, { method: 'DELETE' });
+    openTable(table);
+  } catch (e) { alert('Delete failed: ' + e.message); }
+}
+
+showLogin('');
+</script>
+</body>
+</html>
