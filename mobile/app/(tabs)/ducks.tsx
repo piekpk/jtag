@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Modal } from 'react-native';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { showAlert } from '../themedAlert.js';
@@ -23,6 +23,7 @@ export default function DucksScreen() {
   const [feed, setFeed] = useState([]);
   const [milestones, setMilestones] = useState([]);
   const [loadError, setLoadError] = useState(null);
+  const [selectedDuck, setSelectedDuck] = useState(null);
 
   useEffect(() => {
     AsyncStorage.getItem('userId').then(setMyUserId);
@@ -86,7 +87,9 @@ export default function DucksScreen() {
             const d = slot.duck;
             const c = rarityColor(d.rarity);
             return (
-              <View key={d.id} style={[styles.duckCell, { borderColor: slot.unlocked ? c : '#333' }]}>
+              <TouchableOpacity key={d.id} style={[styles.duckCell, { borderColor: slot.unlocked ? c : '#333' }]}
+                onPress={() => slot.unlocked && setSelectedDuck({ ...d, count: slot.count })}
+                activeOpacity={slot.unlocked ? 0.7 : 1}>
                 <Text style={[styles.duckEmoji, !slot.unlocked && { opacity: 0.25 }]}>
                   {slot.unlocked ? d.emoji : '🦆'}
                 </Text>
@@ -97,7 +100,7 @@ export default function DucksScreen() {
                   <Text style={styles.duckCount}>×{slot.count}</Text>
                 )}
                 <Text style={[styles.rarityTag, { color: c }]}>{d.rarity}</Text>
-              </View>
+              </TouchableOpacity>
             );
           })}
         </View>
@@ -293,6 +296,35 @@ export default function DucksScreen() {
           <View style={{ height: 40 }} />
         </ScrollView>
       )}
+
+      {/* Duck lore modal (tap an unlocked pond duck) */}
+      <Modal visible={!!selectedDuck} transparent animationType="fade"
+        onRequestClose={() => setSelectedDuck(null)}>
+        <View style={styles.loreOverlay}>
+          <View style={styles.loreBox}>
+            {selectedDuck && (
+              <>
+                <Text style={styles.loreEmoji}>{selectedDuck.emoji}</Text>
+                <Text style={styles.loreName}>{selectedDuck.name}</Text>
+                <Text style={[styles.loreRarity, { color: rarityColor(selectedDuck.rarity) }]}>
+                  {selectedDuck.rarity}{selectedDuck.count > 0 ? ` • ×${selectedDuck.count}` : ''}
+                </Text>
+                {selectedDuck.description ? (
+                  <Text style={styles.loreDesc}>{selectedDuck.description}</Text>
+                ) : null}
+                {selectedDuck.lore ? (
+                  <Text style={styles.loreText}>{selectedDuck.lore}</Text>
+                ) : (
+                  <Text style={styles.lorePending}>Legend still being written…</Text>
+                )}
+                <TouchableOpacity style={styles.loreClose} onPress={() => setSelectedDuck(null)}>
+                  <Text style={styles.loreCloseText}>Close</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -330,6 +362,16 @@ const styles = StyleSheet.create({
   duckName: { color: '#fff', fontSize: 11, fontWeight: '600', marginTop: 6, textAlign: 'center' },
   duckCount: { color: '#d4af37', fontSize: 13, fontWeight: 'bold' },
   rarityTag: { fontSize: 10, textTransform: 'capitalize', marginTop: 2 },
+  loreOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  loreBox: { backgroundColor: '#1e1e1e', borderRadius: 16, padding: 24, width: '100%', maxWidth: 340, alignItems: 'center', borderWidth: 1, borderColor: '#d4af37' },
+  loreEmoji: { fontSize: 56 },
+  loreName: { color: '#fff', fontSize: 20, fontWeight: '800', marginTop: 8 },
+  loreRarity: { fontSize: 13, fontWeight: '700', textTransform: 'capitalize', marginTop: 4 },
+  loreDesc: { color: '#d4af37', fontSize: 14, fontStyle: 'italic', textAlign: 'center', marginTop: 10 },
+  loreText: { color: '#e0e0e0', fontSize: 14, lineHeight: 20, textAlign: 'center', marginTop: 10 },
+  lorePending: { color: '#8e8e93', fontSize: 13, fontStyle: 'italic', marginTop: 10 },
+  loreClose: { backgroundColor: '#d4af37', borderRadius: 20, paddingVertical: 10, paddingHorizontal: 28, marginTop: 18 },
+  loreCloseText: { color: '#121212', fontWeight: '700', fontSize: 14 },
   hint: { color: '#757575', fontSize: 13, marginTop: 8, lineHeight: 20 },
   empty: { color: '#757575', fontSize: 14, marginVertical: 10 },
   card: { backgroundColor: '#1e1e1e', borderRadius: 12, padding: 15, marginBottom: 10 },

@@ -1,4 +1,4 @@
-﻿from sqlalchemy import Column, Integer, String, JSON, Float, DateTime, Boolean, UniqueConstraint
+﻿from sqlalchemy import Column, Integer, String, Text, JSON, Float, DateTime, Boolean, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 
@@ -28,6 +28,7 @@ class DuckType(Base):
     rarity = Column(String, nullable=False, default="common")  # common | rare | epic | legendary
     emoji = Column(String, nullable=False, default="🐤")
     description = Column(String, nullable=True)
+    lore = Column(Text, nullable=True)  # AI-generated backstory (duck_ai)
     seasonal = Column(String, nullable=True)  # e.g. "halloween", "winter", or None
 
 
@@ -70,6 +71,7 @@ class DuckDrop(Base):
     claims_count = Column(Integer, nullable=False, default=0)
     created_by = Column(Integer, nullable=True)
     label = Column(String, nullable=True)
+    clue = Column(String, nullable=True)  # AI-generated scavenger-hunt clue (duck_ai)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 

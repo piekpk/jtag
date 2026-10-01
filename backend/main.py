@@ -6,7 +6,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from uuid import uuid4
 from math import radians, cos, sin, asin, sqrt
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Header
+from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Header, BackgroundTasks
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import jwt
@@ -17,6 +17,7 @@ from passlib.context import CryptContext
 from pydantic import BaseModel
 from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, PhotoReaction
 from schemas import UserProfileUpdate, UserProfileResponse, UserCreate
+import duck_ai
 
 # Password hashing setup
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -35,6 +36,24 @@ SQLALCHEMY_DATABASE_URL = f"sqlite:///{DB_PATH}"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base.metadata.create_all(bind=engine)
+duck_ai.SessionLocal = SessionLocal
+
+
+def _ensure_duck_ai_columns():
+    """Lightweight migration: add duck_types.lore and duck_drops.clue to older DBs."""
+    conn = get_raw_db()
+    try:
+        duck_cols = [r["name"] for r in conn.execute("PRAGMA table_info(duck_types)")]
+        if "lore" not in duck_cols:
+            conn.execute("ALTER TABLE duck_types ADD COLUMN lore TEXT")
+            print("Migration: added duck_types.lore column.")
+        drop_cols = [r["name"] for r in conn.execute("PRAGMA table_info(duck_drops)")]
+        if "clue" not in drop_cols:
+            conn.execute("ALTER TABLE duck_drops ADD COLUMN clue TEXT")
+            print("Migration: added duck_drops.clue column.")
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def _ensure_is_admin_column():
@@ -50,9 +69,14 @@ def _ensure_is_admin_column():
         conn.close()
 
 
+def _admin_emails() -> set:
+    """Emails granted admin via ADMIN_EMAILS (comma-separated) or the owner default."""
+    return {e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "glichxp@gmail.com").split(",") if e.strip()}
+
+
 def _bootstrap_admins():
     """Grant admin to every address in ADMIN_EMAILS (comma-separated, defaults to the owner's email). Runs at startup."""
-    emails = [e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "glichxp@gmail.com").split(",") if e.strip()]
+    emails = _admin_emails()
     if not emails:
         return
     db = SessionLocal()
@@ -85,6 +109,7 @@ def get_raw_db():
 
 # Run after get_raw_db exists: migrate old DBs, then grant admins.
 _ensure_is_admin_column()
+_ensure_duck_ai_columns()
 _bootstrap_admins()
 
 # --- Helper Functions ---
@@ -197,7 +222,8 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Email already registered")
     
     hashed_pw = pwd_context.hash(user.password)
-    new_user = User(email=normalized_email, hashed_password=hashed_pw)
+    new_user = User(email=normalized_email, hashed_password=hashed_pw,
+                    is_admin=normalized_email in _admin_emails())
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
@@ -606,10 +632,20 @@ MAX_ACTIVE_DROPS_PER_USER = 3
 def seed_duck_types():
     db = SessionLocal()
     try:
-        if db.query(DuckType).count() == 0:
-            for d in DUCK_CATALOG:
-                db.add(DuckType(**d))
+        new_ids = []
+        for d in DUCK_CATALOG:
+            existing = db.query(DuckType).filter(DuckType.slug == d["slug"]).first()
+            if not existing:
+                dt = DuckType(**d)
+                db.add(dt)
+                db.flush()
+                new_ids.append(dt.id)
+        if new_ids:
             db.commit()
+            print(f"Seeded {len(new_ids)} new duck type(s).")
+        # AI lore for newcomers (background; no-op if the LLM is unreachable).
+        for duck_id in new_ids:
+            duck_ai.generate_lore_for_duck(duck_id)
     finally:
         db.close()
 
@@ -626,7 +662,8 @@ def _duck_type_or_404(db: Session, duck_type_id: int) -> DuckType:
 
 def _duck_type_dict(dt: DuckType) -> dict:
     return {"id": dt.id, "slug": dt.slug, "name": dt.name, "rarity": dt.rarity,
-            "emoji": dt.emoji, "description": dt.description, "seasonal": dt.seasonal}
+            "emoji": dt.emoji, "description": dt.description, "lore": dt.lore,
+            "seasonal": dt.seasonal}
 
 
 def _owner_name(db: Session, user_id: int) -> str:
@@ -975,7 +1012,8 @@ class DropClaimCreate(BaseModel):
 
 
 @app.post("/drops")
-def create_drop(payload: DropCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def create_drop(payload: DropCreate, background_tasks: BackgroundTasks,
+                db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     _duck_type_or_404(db, payload.duck_type_id)
     now = datetime.utcnow()
     active = db.query(DuckDrop).filter(
@@ -1000,6 +1038,8 @@ def create_drop(payload: DropCreate, db: Session = Depends(get_db), current_user
     db.add(drop)
     db.commit()
     db.refresh(drop)
+    # AI scavenger-hunt clue fills in shortly (background; drop is live immediately).
+    background_tasks.add_task(duck_ai.generate_clue_for_drop, drop.id)
     done = _check_milestones(db, current_user.id)
     return {"id": drop.id, "message": "Drop is live!", "milestones_completed": done}
 
@@ -1026,7 +1066,7 @@ def list_active_drops(lat: float, lng: float, radius_m: float = 10000,
             "radius_m": d.radius_m, "distance_m": dist,
             "expires_at": d.expires_at.isoformat(),
             "claims_left": d.max_claims - d.claims_count,
-            "label": d.label, "claimed_by_me": d.id in claimed_ids,
+            "label": d.label, "clue": d.clue, "claimed_by_me": d.id in claimed_ids,
         })
     result.sort(key=lambda x: x["distance_m"])
     return result
@@ -1347,3 +1387,33 @@ def admin_delete_row(name: str, row_id: int,
     db.delete(row)
     db.commit()
     return {"deleted": True}
+
+
+# --- Duck AI (lore + drop clues) ---
+@app.post("/admin/duck-types/{duck_type_id}/lore")
+def admin_generate_lore(duck_type_id: int, force: bool = False,
+                        db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """(Re)generate AI lore for one duck. Runs in the background; poll the duck to see it."""
+    _duck_type_or_404(db, duck_type_id)
+    duck_ai.generate_lore_for_duck(duck_type_id, force=force)
+    return {"started": True}
+
+
+@app.post("/admin/duck-types/backfill-lore")
+def admin_backfill_lore(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """Generate AI lore for every duck missing it. Runs in the background."""
+    ids = [r[0] for r in db.query(DuckType.id).filter(DuckType.lore.is_(None)).all()]
+    for duck_id in ids:
+        duck_ai.generate_lore_for_duck(duck_id)
+    return {"started": True, "ducks": len(ids)}
+
+
+@app.post("/admin/duck-drops/{drop_id}/clue")
+def admin_generate_clue(drop_id: int, force: bool = False,
+                        db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """(Re)generate the AI scavenger-hunt clue for one drop. Runs in the background."""
+    drop = db.query(DuckDrop).filter(DuckDrop.id == drop_id).first()
+    if not drop:
+        raise HTTPException(status_code=404, detail="Drop not found")
+    duck_ai.generate_clue_for_drop(drop_id, force=force)
+    return {"started": True}

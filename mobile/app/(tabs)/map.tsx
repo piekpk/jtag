@@ -329,6 +329,9 @@ export default function RadarMapScreen() {
               {formatExpiry(selectedDrop.expires_at)} • {selectedDrop.claims_left} left
               {selectedDrop.label ? ` • ${selectedDrop.label}` : ''}
             </Text>
+            {selectedDrop.clue ? (
+              <Text style={styles.dropClue}>🔍 {selectedDrop.clue}</Text>
+            ) : null}
             {!inRange && !selectedDrop.claimed_by_me && (
               <Text style={styles.dropHint}>
                 {Math.round(selectedDrop.distance_m)}m away — get within {Math.round(selectedDrop.radius_m)}m to claim
@@ -555,6 +558,7 @@ const styles = StyleSheet.create({
   dropTitle: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
   dropMeta: { color: '#d4af37', fontSize: 13, marginTop: 4 },
   dropHint: { color: '#888', fontSize: 12, marginTop: 4 },
+  dropClue: { color: '#d4af37', fontSize: 13, fontStyle: 'italic', marginTop: 6, lineHeight: 18 },
   claimBtn: { backgroundColor: '#d4af37', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 10, marginLeft: 10 },
   claimBtnText: { color: '#121212', fontWeight: 'bold', fontSize: 15 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
