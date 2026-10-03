@@ -5,6 +5,7 @@ export default {
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
+    "icon": "./assets/icon.png",
     "ios": {
       "bundleIdentifier": "com.jtap.app",
       "supportsTablet": false,
@@ -17,6 +18,10 @@ export default {
     },
     "android": {
       "package": "com.jtap.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      },
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION"

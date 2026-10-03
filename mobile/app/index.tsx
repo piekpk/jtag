@@ -9,6 +9,7 @@ import {
   Platform,
   SafeAreaView,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { router } from 'expo-router';
 import { showAlert } from './themedAlert.js';
@@ -94,6 +95,7 @@ export default function LoginScreen() {
       >
         <View style={styles.content}>
           <View style={styles.header}>
+            <Image source={require('../assets/icon.png')} style={styles.logo} />
             <Text style={styles.title}>Jtap</Text>
             <Text style={styles.subtitle}>Sign in to locate nearby rigs & trails</Text>
           </View>
@@ -167,6 +169,12 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     marginBottom: 32,
+  },
+  logo: {
+    width: 110,
+    height: 110,
+    borderRadius: 24,
+    marginBottom: 14,
   },
   title: {
     fontSize: 36,
