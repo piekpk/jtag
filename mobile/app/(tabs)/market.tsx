@@ -1,0 +1,406 @@
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
+  RefreshControl, Modal, TextInput, Image,
+} from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { showAlert } from '../themedAlert.js';
+import {
+  listMarketplace, createListing, deleteListing, markListingSold,
+  photoUrl, MARKET_CATEGORIES,
+} from '../marketApi.js';
+
+function timeAgo(iso) {
+  if (!iso) return '';
+  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+
+function formatPrice(p) {
+  const n = Number(p);
+  if (!n) return 'Free';
+  return `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+}
+
+export default function MarketScreen() {
+  const [listings, setListings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [query, setQuery] = useState('');
+  const [debouncedQ, setDebouncedQ] = useState('');
+  const [category, setCategory] = useState('All');
+  const [myUserId, setMyUserId] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [loadError, setLoadError] = useState(null);
+
+  // create-form state
+  const [cPhoto, setCPhoto] = useState(null);
+  const [cTitle, setCTitle] = useState('');
+  const [cPrice, setCPrice] = useState('');
+  const [cCategory, setCCategory] = useState('Other');
+  const [cDesc, setCDesc] = useState('');
+  const [cContact, setCContact] = useState('');
+  const [posting, setPosting] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem('userId').then(setMyUserId);
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQ(query.trim()), 400);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const load = useCallback(async () => {
+    try {
+      setLoadError(null);
+      const data = await listMarketplace({ q: debouncedQ, category });
+      setListings(data.listings || []);
+    } catch (e) {
+      setLoadError(e.message || 'Could not load marketplace.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [debouncedQ, category]);
+
+  useEffect(() => { setLoading(true); load(); }, [load]);
+
+  const onRefresh = () => { setRefreshing(true); load(); };
+
+  const pickPhoto = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      showAlert('Permission needed', 'Allow photo access to add a listing photo.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.8,
+    });
+    if (!result.canceled) setCPhoto(result.assets[0].uri);
+  };
+
+  const resetCreate = () => {
+    setCPhoto(null); setCTitle(''); setCPrice('');
+    setCCategory('Other'); setCDesc(''); setCContact('');
+  };
+
+  const handlePost = async () => {
+    if (!cPhoto) { showAlert('Photo required', 'Add one photo of the item.'); return; }
+    if (!cTitle.trim()) { showAlert('Title required', 'Give your listing a title.'); return; }
+    if (!cDesc.trim()) { showAlert('Description required', 'Describe the item.'); return; }
+    if (!cContact.trim()) { showAlert('Contact info required', 'Tell buyers how to reach you.'); return; }
+    const price = parseFloat(cPrice);
+    if (cPrice.trim() && (isNaN(price) || price < 0)) {
+      showAlert('Invalid price', 'Enter a valid price (numbers only).'); return;
+    }
+    setPosting(true);
+    try {
+      await createListing({
+        photoUri: cPhoto, title: cTitle.trim(), price: isNaN(price) ? 0 : price,
+        description: cDesc.trim(), contactInfo: cContact.trim(), category: cCategory,
+      });
+      setShowCreate(false);
+      resetCreate();
+      load();
+      showAlert('Posted', 'Your listing is live on the marketplace.');
+    } catch (e) {
+      showAlert('Post failed', e.message || 'Could not post your listing.');
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  const handleDelete = (listing) => {
+    showAlert('Delete listing?', `"${listing.title}" will be removed permanently.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete', style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteListing(listing.id);
+            setSelected(null);
+            load();
+          } catch (e) {
+            showAlert('Delete failed', e.message || 'Could not delete the listing.');
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleToggleSold = async (listing) => {
+    try {
+      const updated = await markListingSold(listing.id, !listing.is_sold);
+      setSelected(updated);
+      load();
+    } catch (e) {
+      showAlert('Update failed', e.message || 'Could not update the listing.');
+    }
+  };
+
+  const renderCard = (l) => {
+    const isMine = myUserId && String(l.user_id) === String(myUserId);
+    return (
+      <TouchableOpacity key={l.id} style={styles.card} onPress={() => setSelected(l)} activeOpacity={0.85}>
+        {photoUrl(l.photo_url) ? (
+          <Image source={{ uri: photoUrl(l.photo_url) }} style={styles.photo} resizeMode="cover" />
+        ) : (
+          <View style={[styles.photo, styles.photoFallback]}><Text style={styles.photoEmoji}>🏷️</Text></View>
+        )}
+        {l.is_sold && (
+          <View style={styles.soldBanner}><Text style={styles.soldText}>SOLD</Text></View>
+        )}
+        <View style={styles.cbody}>
+          <View style={styles.row1}>
+            <Text style={styles.title} numberOfLines={1}>{l.title}</Text>
+            <Text style={styles.price}>{formatPrice(l.price)}</Text>
+          </View>
+          <Text style={styles.meta}>{l.seller_name} · {timeAgo(l.created_at)}</Text>
+          <Text style={styles.desc} numberOfLines={2}>{l.description}</Text>
+          <View style={styles.sellerRow}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{(l.seller_name || '?')[0].toUpperCase()}</Text>
+            </View>
+            <Text style={styles.sname} numberOfLines={1}>{l.seller_name}</Text>
+            {isMine ? (
+              <Text style={styles.mineTag}>Your listing</Text>
+            ) : (
+              <View style={styles.contactBtn}><Text style={styles.contactText}>Contact</Text></View>
+            )}
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const isMineSelected = selected && myUserId && String(selected.user_id) === String(myUserId);
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Marketplace</Text>
+      </View>
+      <View style={styles.searchWrap}>
+        <TextInput
+          style={styles.search}
+          placeholder="Search parts, gear, ducks…"
+          placeholderTextColor="#8e8e93"
+          value={query}
+          onChangeText={setQuery}
+          returnKeyType="search"
+        />
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}
+        contentContainerStyle={styles.chips}>
+        {MARKET_CATEGORIES.map((c) => (
+          <TouchableOpacity key={c} style={[styles.chip, category === c && styles.chipOn]}
+            onPress={() => setCategory(c)}>
+            <Text style={[styles.chipText, category === c && styles.chipTextOn]}>{c}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {loading ? (
+        <View style={styles.center}><ActivityIndicator size="large" color="#d4af37" /></View>
+      ) : loadError ? (
+        <View style={styles.center}>
+          <Text style={styles.errorText}>{loadError}</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={() => { setLoading(true); load(); }}>
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <ScrollView style={styles.feed} contentContainerStyle={{ paddingBottom: 110 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh}
+            tintColor="#d4af37" colors={['#d4af37']} />}>
+          {listings.length === 0 ? (
+            <Text style={styles.empty}>
+              {debouncedQ || category !== 'All'
+                ? 'No listings match your search.'
+                : 'No listings yet. Tap + to post the first one.'}
+            </Text>
+          ) : listings.map(renderCard)}
+        </ScrollView>
+      )}
+
+      <TouchableOpacity style={styles.fab} onPress={() => setShowCreate(true)} activeOpacity={0.8}>
+        <Text style={styles.fabText}>+</Text>
+      </TouchableOpacity>
+
+      {/* Detail modal */}
+      <Modal visible={!!selected} animationType="slide" transparent
+        onRequestClose={() => setSelected(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.detailBox}>
+            <ScrollView>
+              {selected && photoUrl(selected.photo_url) && (
+                <Image source={{ uri: photoUrl(selected.photo_url) }} style={styles.detailPhoto} resizeMode="cover" />
+              )}
+              {selected && (
+                <View style={styles.detailBody}>
+                  <View style={styles.row1}>
+                    <Text style={styles.detailTitle}>{selected.title}</Text>
+                    <Text style={styles.price}>{formatPrice(selected.price)}</Text>
+                  </View>
+                  <Text style={styles.meta}>
+                    {selected.seller_name} · {timeAgo(selected.created_at)} · {selected.category}
+                    {selected.is_sold ? ' · SOLD' : ''}
+                  </Text>
+                  <Text style={styles.detailDesc}>{selected.description}</Text>
+                  <Text style={styles.contactLabel}>CONTACT</Text>
+                  <Text style={styles.contactInfo}>{selected.contact_info}</Text>
+                  {isMineSelected && (
+                    <View style={styles.ownerBtns}>
+                      <TouchableOpacity style={styles.soldBtn} onPress={() => handleToggleSold(selected)}>
+                        <Text style={styles.soldBtnText}>
+                          {selected.is_sold ? 'Mark available' : 'Mark sold'}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(selected)}>
+                        <Text style={styles.deleteBtnText}>Delete</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                  <TouchableOpacity style={styles.closeBtn} onPress={() => setSelected(null)}>
+                    <Text style={styles.closeBtnText}>Close</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Create modal */}
+      <Modal visible={showCreate} animationType="slide" transparent
+        onRequestClose={() => setShowCreate(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.detailBox}>
+            <ScrollView contentContainerStyle={{ paddingBottom: 8 }}>
+              <Text style={styles.createTitle}>New Listing</Text>
+              <TouchableOpacity style={styles.photoBox} onPress={pickPhoto} activeOpacity={0.8}>
+                {cPhoto ? (
+                  <Image source={{ uri: cPhoto }} style={styles.photoPreview} resizeMode="cover" />
+                ) : (
+                  <>
+                    <Text style={styles.photoBoxCam}>📷</Text>
+                    <Text style={styles.photoBoxT1}>Tap to add photo</Text>
+                    <Text style={styles.photoBoxT2}>1 photo per listing</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <Text style={styles.flabel}>Title</Text>
+              <TextInput style={styles.field} placeholder="What are you selling?"
+                placeholderTextColor="#8e8e93" value={cTitle} onChangeText={setCTitle} maxLength={120} />
+              <Text style={styles.flabel}>Price</Text>
+              <TextInput style={styles.field} placeholder="$ 0" placeholderTextColor="#8e8e93"
+                value={cPrice} onChangeText={setCPrice} keyboardType="decimal-pad" />
+              <Text style={styles.flabel}>Category</Text>
+              <View style={styles.catWrap}>
+                {MARKET_CATEGORIES.filter((c) => c !== 'All').map((c) => (
+                  <TouchableOpacity key={c} style={[styles.chip, cCategory === c && styles.chipOn]}
+                    onPress={() => setCCategory(c)}>
+                    <Text style={[styles.chipText, cCategory === c && styles.chipTextOn]}>{c}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={styles.flabel}>Description</Text>
+              <TextInput style={[styles.field, styles.fieldBig]} multiline
+                placeholder="Condition, fitment, mileage, reason for selling…"
+                placeholderTextColor="#8e8e93" value={cDesc} onChangeText={setCDesc} textAlignVertical="top" />
+              <Text style={styles.flabel}>Contact info</Text>
+              <TextInput style={styles.field} placeholder="Phone, Messenger, or however buyers reach you"
+                placeholderTextColor="#8e8e93" value={cContact} onChangeText={setCContact} />
+              <TouchableOpacity style={[styles.postBtn, posting && { opacity: 0.6 }]}
+                onPress={handlePost} disabled={posting} activeOpacity={0.85}>
+                <Text style={styles.postBtnText}>{posting ? 'Posting…' : 'Post Listing'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => { setShowCreate(false); resetCreate(); }}>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#121212' },
+  header: { padding: 25, paddingTop: 50, backgroundColor: '#1a1a1a' },
+  headerTitle: { fontSize: 26, fontWeight: '800', color: '#d4af37', letterSpacing: 0.5 },
+  searchWrap: { paddingHorizontal: 18, paddingTop: 12, backgroundColor: '#1a1a1a', paddingBottom: 4 },
+  search: { backgroundColor: '#2c2c2e', borderRadius: 12, padding: 12, paddingLeft: 16, color: '#fff', fontSize: 15 },
+  chipScroll: { backgroundColor: '#1a1a1a', maxHeight: 52 },
+  chips: { flexDirection: 'row', gap: 8, paddingHorizontal: 18, paddingVertical: 10, alignItems: 'center' },
+  chip: { backgroundColor: '#2c2c2e', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 18 },
+  chipOn: { backgroundColor: '#d4af37' },
+  chipText: { color: '#ccc', fontSize: 12.5, fontWeight: '600' },
+  chipTextOn: { color: '#121212' },
+  feed: { flex: 1 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
+  errorText: { color: '#e0e0e0', fontSize: 14, textAlign: 'center', marginBottom: 12 },
+  retryBtn: { backgroundColor: '#d4af37', paddingVertical: 10, paddingHorizontal: 24, borderRadius: 20 },
+  retryText: { color: '#121212', fontWeight: '700', fontSize: 14 },
+  empty: { color: '#8e8e93', fontSize: 14, textAlign: 'center', marginTop: 40, paddingHorizontal: 32, lineHeight: 22 },
+  card: { backgroundColor: '#1e1e1e', borderRadius: 14, marginHorizontal: 18, marginTop: 14, overflow: 'hidden', borderWidth: 1, borderColor: '#2a2a2c' },
+  photo: { width: '100%', height: 190, backgroundColor: '#2c2c2e' },
+  photoFallback: { alignItems: 'center', justifyContent: 'center' },
+  photoEmoji: { fontSize: 52 },
+  soldBanner: { position: 'absolute', top: 12, right: 0, backgroundColor: '#d4af37', paddingVertical: 4, paddingHorizontal: 14, borderTopLeftRadius: 8, borderBottomLeftRadius: 8 },
+  soldText: { color: '#121212', fontWeight: '800', fontSize: 12 },
+  cbody: { padding: 12, paddingBottom: 14 },
+  row1: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 },
+  title: { fontSize: 15.5, fontWeight: '700', color: '#fff', flex: 1 },
+  price: { fontSize: 16, fontWeight: '800', color: '#d4af37' },
+  meta: { color: '#8e8e93', fontSize: 12, marginTop: 3 },
+  desc: { color: '#c9c9ce', fontSize: 13, marginTop: 7, lineHeight: 19 },
+  sellerRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 9 },
+  avatar: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#d4af37', alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: '#121212', fontWeight: '800', fontSize: 13 },
+  sname: { fontSize: 13, color: '#e6e6e6', fontWeight: '600', flex: 1 },
+  mineTag: { color: '#8e8e93', fontSize: 12, fontStyle: 'italic' },
+  contactBtn: { borderWidth: 1, borderColor: '#d4af37', paddingVertical: 7, paddingHorizontal: 14, borderRadius: 16 },
+  contactText: { color: '#d4af37', fontSize: 12.5, fontWeight: '700' },
+  fab: { position: 'absolute', right: 20, bottom: 28, width: 58, height: 58, borderRadius: 29, backgroundColor: '#d4af37', alignItems: 'center', justifyContent: 'center', elevation: 6, shadowColor: '#d4af37', shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
+  fabText: { color: '#121212', fontSize: 30, fontWeight: '300', marginTop: -3 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' },
+  detailBox: { backgroundColor: '#1e1e1e', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '92%', paddingTop: 8 },
+  detailPhoto: { width: '100%', height: 260, borderTopLeftRadius: 20, borderTopRightRadius: 20, backgroundColor: '#2c2c2e' },
+  detailBody: { padding: 18, paddingBottom: 34 },
+  detailTitle: { fontSize: 19, fontWeight: '800', color: '#fff', flex: 1 },
+  detailDesc: { color: '#e0e0e0', fontSize: 14.5, lineHeight: 22, marginTop: 12 },
+  contactLabel: { color: '#d4af37', fontSize: 12, fontWeight: '800', letterSpacing: 1, marginTop: 18 },
+  contactInfo: { color: '#fff', fontSize: 15, fontWeight: '600', marginTop: 6, backgroundColor: '#2c2c2e', borderRadius: 10, padding: 12 },
+  ownerBtns: { flexDirection: 'row', gap: 10, marginTop: 18 },
+  soldBtn: { flex: 1, backgroundColor: '#2c2c2e', borderRadius: 10, padding: 13, alignItems: 'center' },
+  soldBtnText: { color: '#d4af37', fontWeight: '700', fontSize: 14 },
+  deleteBtn: { flex: 1, backgroundColor: 'transparent', borderWidth: 1, borderColor: '#5a2a2a', borderRadius: 10, padding: 13, alignItems: 'center' },
+  deleteBtnText: { color: '#ff8a8a', fontWeight: '700', fontSize: 14 },
+  closeBtn: { backgroundColor: '#d4af37', borderRadius: 10, padding: 14, alignItems: 'center', marginTop: 14 },
+  closeBtnText: { color: '#121212', fontWeight: '800', fontSize: 15 },
+  createTitle: { color: '#fff', fontSize: 20, fontWeight: '800', padding: 18, paddingBottom: 6 },
+  photoBox: { marginHorizontal: 18, borderWidth: 2, borderStyle: 'dashed', borderColor: '#d4af37', borderRadius: 14, height: 170, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1a1a1a', overflow: 'hidden' },
+  photoBoxCam: { fontSize: 34 },
+  photoBoxT1: { color: '#d4af37', fontWeight: '700', fontSize: 14, marginTop: 6 },
+  photoBoxT2: { color: '#8e8e93', fontSize: 12, marginTop: 2 },
+  photoPreview: { width: '100%', height: '100%' },
+  flabel: { color: '#d4af37', fontSize: 12.5, fontWeight: '700', marginHorizontal: 18, marginTop: 14, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.6 },
+  field: { marginHorizontal: 18, backgroundColor: '#2c2c2e', borderRadius: 10, padding: 13, color: '#fff', fontSize: 14.5 },
+  fieldBig: { height: 96, textAlignVertical: 'top' },
+  catWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginHorizontal: 18 },
+  postBtn: { marginHorizontal: 18, marginTop: 20, backgroundColor: '#d4af37', borderRadius: 12, padding: 16, alignItems: 'center' },
+  postBtnText: { color: '#121212', fontWeight: '800', fontSize: 16 },
+  cancelBtn: { marginHorizontal: 18, marginTop: 10, marginBottom: 26, padding: 12, alignItems: 'center' },
+  cancelBtnText: { color: '#8e8e93', fontWeight: '600', fontSize: 14 },
+});

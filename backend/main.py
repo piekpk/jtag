@@ -6,7 +6,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from uuid import uuid4
 from math import radians, cos, sin, asin, sqrt
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Header, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, Header, BackgroundTasks
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import jwt
@@ -15,7 +15,7 @@ from sqlalchemy import create_engine, or_
 from sqlalchemy.orm import sessionmaker, Session
 from passlib.context import CryptContext
 from pydantic import BaseModel
-from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, PhotoReaction
+from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, PhotoReaction, MarketListing
 from schemas import UserProfileUpdate, UserProfileResponse, UserCreate
 import duck_ai
 
@@ -1238,6 +1238,116 @@ def cancel_trade(trade_id: int, db: Session = Depends(get_db),
     return {"message": "Trade cancelled"}
 
 
+# --- Marketplace ---
+def _listing_dict(db: Session, l: MarketListing) -> dict:
+    return {
+        "id": l.id, "user_id": l.user_id,
+        "seller_name": _owner_name(db, l.user_id),
+        "photo_url": l.photo_url, "title": l.title, "price": l.price,
+        "description": l.description, "contact_info": l.contact_info,
+        "category": l.category, "is_sold": l.is_sold,
+        "created_at": l.created_at.isoformat() if l.created_at else None,
+    }
+
+
+@app.post("/marketplace")
+def create_listing(photo: UploadFile = File(...), title: str = Form(...),
+                   price: float = Form(0.0), description: str = Form(...),
+                   contact_info: str = Form(...), category: str = Form("Other"),
+                   db: Session = Depends(get_db),
+                   current_user: User = Depends(get_current_user)):
+    title = (title or "").strip()
+    description = (description or "").strip()
+    contact_info = (contact_info or "").strip()
+    if not title or not description or not contact_info:
+        raise HTTPException(status_code=400, detail="Title, description, and contact info are required")
+    if len(title) > 120:
+        raise HTTPException(status_code=400, detail="Title too long (120 chars max)")
+    if price < 0:
+        raise HTTPException(status_code=400, detail="Price cannot be negative")
+    if not photo.content_type or not photo.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Photo must be an image")
+    listing = MarketListing(
+        user_id=current_user.id, photo_url="", title=title, price=price,
+        description=description, contact_info=contact_info,
+        category=(category or "Other").strip() or "Other")
+    db.add(listing)
+    db.commit()
+    db.refresh(listing)
+    os.makedirs(os.path.join(UPLOAD_DIR, "marketplace"), exist_ok=True)
+    ext = ((photo.filename or "jpg").split(".")[-1].lower()[:5] or "jpg")
+    filename = f"listing_{listing.id}_{uuid4().hex}.{ext}"
+    with open(os.path.join(UPLOAD_DIR, "marketplace", filename), "wb+") as f:
+        shutil.copyfileobj(photo.file, f)
+    listing.photo_url = f"/uploads/marketplace/{filename}"
+    db.commit()
+    db.refresh(listing)
+    return _listing_dict(db, listing)
+
+
+@app.get("/marketplace")
+def list_marketplace(q: str = None, category: str = None, include_sold: bool = False,
+                     limit: int = 50, offset: int = 0,
+                     db: Session = Depends(get_db),
+                     current_user: User = Depends(get_current_user)):
+    query = db.query(MarketListing)
+    if not include_sold:
+        query = query.filter(MarketListing.is_sold == False)  # noqa: E712
+    if category and category.lower() != "all":
+        query = query.filter(MarketListing.category == category)
+    if q and q.strip():
+        like = f"%{q.strip()}%"
+        query = query.filter(or_(MarketListing.title.ilike(like),
+                                 MarketListing.description.ilike(like)))
+    total = query.count()
+    rows = (query.order_by(MarketListing.created_at.desc())
+            .limit(min(limit, 100)).offset(max(offset, 0)).all())
+    return {"total": total, "listings": [_listing_dict(db, l) for l in rows]}
+
+
+@app.get("/marketplace/{listing_id}")
+def get_listing(listing_id: int, db: Session = Depends(get_db),
+                current_user: User = Depends(get_current_user)):
+    l = db.query(MarketListing).filter(MarketListing.id == listing_id).first()
+    if not l:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    return _listing_dict(db, l)
+
+
+def _listing_or_403(db: Session, listing_id: int, current_user: User) -> MarketListing:
+    l = db.query(MarketListing).filter(MarketListing.id == listing_id).first()
+    if not l:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    if l.user_id != current_user.id and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not your listing")
+    return l
+
+
+@app.delete("/marketplace/{listing_id}")
+def delete_listing(listing_id: int, db: Session = Depends(get_db),
+                   current_user: User = Depends(get_current_user)):
+    l = _listing_or_403(db, listing_id, current_user)
+    if l.photo_url:
+        try:
+            os.remove(os.path.join(UPLOAD_DIR, "marketplace",
+                                   os.path.basename(l.photo_url)))
+        except OSError:
+            pass
+    db.delete(l)
+    db.commit()
+    return {"deleted": True}
+
+
+@app.post("/marketplace/{listing_id}/sold")
+def mark_listing_sold(listing_id: int, sold: bool = True,
+                      db: Session = Depends(get_db),
+                      current_user: User = Depends(get_current_user)):
+    l = _listing_or_403(db, listing_id, current_user)
+    l.is_sold = sold
+    db.commit()
+    return _listing_dict(db, l)
+
+
 # --- Admin web panel ---
 # Single-page admin UI served at /admin. Sign in with an admin account;
 # it talks to the /admin/* JSON endpoints below using your JWT.
@@ -1262,6 +1372,7 @@ ADMIN_TABLES = {
     "trades": Trade,
     "user_milestones": UserMilestone,
     "photo_reactions": PhotoReaction,
+    "market_listings": MarketListing,
 }
 
 # Columns never exposed through the admin API.

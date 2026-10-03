@@ -124,3 +124,18 @@ class PhotoReaction(Base):
     __table_args__ = (
         UniqueConstraint("photo_owner_id", "photo_index", "user_id", "emoji"),
     )
+
+class MarketListing(Base):
+    """Marketplace listing: one photo, description, contact info."""
+    __tablename__ = "market_listings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True, nullable=False)
+    photo_url = Column(String, nullable=False)
+    title = Column(String(120), nullable=False)
+    price = Column(Float, nullable=False, default=0.0)
+    description = Column(Text, nullable=False)
+    contact_info = Column(String(200), nullable=False)
+    category = Column(String(60), nullable=False, default="Other")
+    is_sold = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
