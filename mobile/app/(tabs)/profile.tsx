@@ -7,6 +7,11 @@ import { API_URL } from '../config.js'; //file that contains backend URL[cite: 9
 import { getAuthHeaders } from '../auth.js';
 import { showAlert } from '../themedAlert.js';
 import { SOCIAL_PLATFORMS, platformById, validSocialLinks, normalizeSocialUrl } from '../socialLinks.js';
+import { getDuckCatalog, getInventory } from '../duckApi.js';
+import DuckIcon from '../DuckIcon';
+import DuckShowcase from '../DuckShowcase';
+
+const MAX_SHOWCASE = 5;
 
 export default function MyRigScreen() {
   const router = useRouter();
@@ -28,6 +33,9 @@ export default function MyRigScreen() {
   const [photos, setPhotos] = useState<string[]>(['', '', '', '']);
   const [coverPhoto, setCoverPhoto] = useState('');
   const [socialLinks, setSocialLinks] = useState<{ platform: string; url: string }[]>([]);
+  const [showcaseDucks, setShowcaseDucks] = useState<number[]>([]);
+  const [catalog, setCatalog] = useState<any[]>([]);
+  const [inventory, setInventory] = useState<any[]>([]);
   const [showPicker, setShowPicker] = useState(false);
   const [urlPlatform, setUrlPlatform] = useState<string | null>(null);
   const [urlValue, setUrlValue] = useState('');
@@ -42,6 +50,9 @@ export default function MyRigScreen() {
           return;
         }
         setUserId(storedUserId);
+        // Duck catalog + inventory back the featured-ducks picker and showcase.
+        getDuckCatalog().then(setCatalog).catch(() => {});
+        getInventory().then(setInventory).catch(() => {});
 
         const response = await fetch(`${API_URL}/users/${storedUserId}/profile`, {
           headers: await getAuthHeaders()
@@ -60,6 +71,9 @@ export default function MyRigScreen() {
             if (data.settings.coverPhoto) setCoverPhoto(data.settings.coverPhoto);
             if (data.settings.socialLinks) setSocialLinks(validSocialLinks(data.settings.socialLinks));
             if (data.settings.discoverable === false) setDiscoverable(false);
+            if (Array.isArray(data.settings.showcaseDucks)) {
+              setShowcaseDucks(data.settings.showcaseDucks.filter((x) => typeof x === 'number').slice(0, MAX_SHOWCASE));
+            }
           } else {
             // Default placeholder data for brand new users[cite: 9]
             setOwnerName('New User');
@@ -95,6 +109,7 @@ export default function MyRigScreen() {
               photos,
               coverPhoto,
               socialLinks: validSocialLinks(socialLinks),
+              showcaseDucks,
               discoverable
             }
           }),
@@ -215,9 +230,24 @@ export default function MyRigScreen() {
     );
   }
 
+  // Featured-ducks picker: toggle a duck type in/out of the showcase (max 5).
+  const toggleShowcaseDuck = (duckId: number) => {
+    setShowcaseDucks((prev) => {
+      if (prev.includes(duckId)) return prev.filter((x) => x !== duckId);
+      if (prev.length >= MAX_SHOWCASE) return prev;
+      return [...prev, duckId];
+    });
+  };
+
+  // Resolve showcase ids to duck objects for display.
+  const catalogById: Record<number, any> = {};
+  catalog.forEach((d) => { catalogById[d.id] = d; });
+  const showcaseDuckObjs = showcaseDucks.map((duckId) => catalogById[duckId]).filter(Boolean);
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
+        {!isEditing && <DuckShowcase ducks={showcaseDuckObjs} />}
         <View style={styles.headerTop}>
           {isEditing ? (
             <TextInput
@@ -303,6 +333,37 @@ export default function MyRigScreen() {
               <Text style={styles.photoPlaceholder}>+ Add cover photo</Text>
             )}
           </TouchableOpacity>
+        </View>
+      )}
+
+      {isEditing && (
+        <View style={styles.coverWrap}>
+          <Text style={styles.coverLabel}>Featured ducks — shown on your profile (up to {MAX_SHOWCASE})</Text>
+          {inventory.length === 0 ? (
+            <Text style={styles.showcaseEmpty}>No ducks yet — claim a drop on the map first.</Text>
+          ) : (
+            <View style={styles.showcaseGrid}>
+              {inventory.map((item) => {
+                const selected = showcaseDucks.includes(item.duck.id);
+                return (
+                  <TouchableOpacity
+                    key={item.duck.id}
+                    style={[styles.showcaseCell, selected && styles.showcaseCellActive]}
+                    onPress={() => toggleShowcaseDuck(item.duck.id)}
+                    activeOpacity={0.8}
+                  >
+                    <DuckIcon duck={item.duck} size={40} />
+                    <Text style={styles.showcaseCount}>×{item.count}</Text>
+                    {selected && (
+                      <View style={styles.showcaseCheck}>
+                        <Text style={styles.showcaseCheckText}>✓</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
         </View>
       )}
 
@@ -486,6 +547,19 @@ const styles = StyleSheet.create({
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', padding: 10, justifyContent: 'space-between' },
   coverWrap: { paddingHorizontal: 10, marginBottom: 4 },
   coverLabel: { color: '#d4af37', fontWeight: '600', fontSize: 13, marginBottom: 8 },
+  showcaseEmpty: { color: '#888', fontSize: 13, fontStyle: 'italic', paddingVertical: 8 },
+  showcaseGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  showcaseCell: {
+    width: 68, alignItems: 'center', paddingVertical: 10, marginRight: 8, marginBottom: 8,
+    backgroundColor: '#1e1e1e', borderRadius: 12, borderWidth: 2, borderColor: '#2c2c2e',
+  },
+  showcaseCellActive: { borderColor: '#d4af37', backgroundColor: '#26241a' },
+  showcaseCount: { color: '#d4af37', fontSize: 11, fontWeight: '700', marginTop: 4 },
+  showcaseCheck: {
+    position: 'absolute', top: -7, right: -7, width: 22, height: 22, borderRadius: 11,
+    backgroundColor: '#d4af37', alignItems: 'center', justifyContent: 'center',
+  },
+  showcaseCheckText: { color: '#121212', fontSize: 13, fontWeight: '800' },
   socialRow: { flexDirection: 'row', marginTop: 12 },
   socBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#1e1e1e', borderWidth: 1, borderColor: '#2c2c2e', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
   socImg: { width: 22, height: 22, resizeMode: 'contain' },

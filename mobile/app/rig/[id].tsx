@@ -3,9 +3,10 @@ import { View, Text, StyleSheet, ScrollView, Image, ActivityIndicator, Touchable
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { API_URL } from '../config.js';
 import { getAuthHeaders } from '../auth.js';
-import { getInventory, giveDuck, getUserPond, proposeTrade, rarityColor, celebrateMilestones } from '../duckApi.js';
+import { getInventory, giveDuck, getUserPond, proposeTrade, rarityColor, celebrateMilestones, getDuckCatalog } from '../duckApi.js';
 import { listMarketplace, photoUrl } from '../marketApi.js';
 import { showAlert } from '../themedAlert.js';
+import DuckShowcase from '../DuckShowcase';
 import { platformById, validSocialLinks, normalizeSocialUrl } from '../socialLinks.js';
 
 // Helper function to safely format image URLs and bypass hardcoded local IPs
@@ -40,6 +41,7 @@ export default function PublicRigScreen() {
   const [listingsVisible, setListingsVisible] = useState(false);
   const [sellerListings, setSellerListings] = useState([]);
   const [loadingListings, setLoadingListings] = useState(false);
+  const [catalog, setCatalog] = useState([]);
 
   const PHOTO_EMOJIS = [
     { key: 'like', emoji: '❤️' },
@@ -102,6 +104,7 @@ export default function PublicRigScreen() {
     if (id) {
       fetchProfile();
       fetchPhotoReactions();
+      getDuckCatalog().then(setCatalog).catch(() => {});
     }
   }, [id]);
 
@@ -199,6 +202,13 @@ export default function PublicRigScreen() {
   const coverPhoto = settings.coverPhoto || null;
   const socialLinks = validSocialLinks(settings.socialLinks);
   const availablePhotos = photos.filter(Boolean); // non-empty slots only, for the lightbox
+  // Featured duck showcase: ids stored in settings, resolved against the catalog.
+  const catalogById = {};
+  catalog.forEach((d) => { catalogById[d.id] = d; });
+  const showcaseDucks = (settings.showcaseDucks || [])
+    .map((duckId) => catalogById[duckId])
+    .filter(Boolean)
+    .slice(0, 5);
 
   const openLightbox = (slotIndex) => {
     const idx = availablePhotos.indexOf(photos[slotIndex]);
@@ -261,6 +271,7 @@ export default function PublicRigScreen() {
               </TouchableOpacity>
             </View>
             <View style={styles.coverTitleWrap}>
+              <DuckShowcase ducks={showcaseDucks} />
               <Text style={styles.coverTitle}>{ownerName}'s Rig</Text>
               <Text style={styles.coverSubtitle}>{vehicleTitle}</Text>
               {socialLinks.length > 0 && (
@@ -295,6 +306,7 @@ export default function PublicRigScreen() {
         
         <View style={styles.headerRow}>
           <View style={{ flex: 1 }}>
+            <DuckShowcase ducks={showcaseDucks} />
             <Text style={styles.title}>{ownerName}'s Rig</Text>
             <Text style={styles.subtitle}>{vehicleTitle}</Text>
             {socialLinks.length > 0 && (
