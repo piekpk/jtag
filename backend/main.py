@@ -22,6 +22,7 @@ from schemas import UserProfileUpdate, UserProfileResponse, UserCreate
 import duck_ai
 import profanity
 import holiday_ducks
+import jtapbot
 
 # Password hashing setup
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -668,7 +669,13 @@ def post_chat_message(chat: ChatMessageCreate, db: Session = Depends(get_db), cu
     conn.commit()
     msg_id = cursor.lastrowid
     conn.close()
-    
+
+    # JtapBot replies when @-mentioned in global chat (fire-and-forget).
+    try:
+        jtapbot.maybe_reply(chat.user_id, chat.channel, chat.message)
+    except Exception as e:
+        print(f"JtapBot mention hook failed: {e}")
+
     return {"id": msg_id, "status": "success"}
 
 @app.post("/chat/{message_id}/react")
@@ -815,6 +822,10 @@ def seed_duck_types():
 
 
 seed_duck_types()
+
+# JtapBot: global-chat bot user + scheduled Jeep jokes/tips.
+jtapbot.init_bot(SessionLocal)
+jtapbot.start()
 
 
 def _duck_type_or_404(db: Session, duck_type_id: int) -> DuckType:
