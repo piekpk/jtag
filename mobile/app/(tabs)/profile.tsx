@@ -7,7 +7,7 @@ import { API_URL } from '../config.js'; //file that contains backend URL[cite: 9
 import { getAuthHeaders } from '../auth.js';
 import { showAlert } from '../themedAlert.js';
 import { SOCIAL_PLATFORMS, platformById, validSocialLinks, normalizeSocialUrl } from '../socialLinks.js';
-import { getDuckCatalog, getInventory } from '../duckApi.js';
+import { getDuckCatalog, getInventory, getMyPond } from '../duckApi.js';
 import DuckIcon from '../DuckIcon';
 import DuckShowcase from '../DuckShowcase';
 
@@ -35,6 +35,7 @@ export default function MyRigScreen() {
   const [socialLinks, setSocialLinks] = useState<{ platform: string; url: string }[]>([]);
   const [showcaseDucks, setShowcaseDucks] = useState<number[]>([]);
   const [catalog, setCatalog] = useState<any[]>([]);
+  const [pondSlots, setPondSlots] = useState<any[]>([]);
   const [inventory, setInventory] = useState<any[]>([]);
   const [showPicker, setShowPicker] = useState(false);
   const [urlPlatform, setUrlPlatform] = useState<string | null>(null);
@@ -53,6 +54,7 @@ export default function MyRigScreen() {
         // Duck catalog + inventory back the featured-ducks picker and showcase.
         getDuckCatalog().then(setCatalog).catch(() => {});
         getInventory().then(setInventory).catch(() => {});
+        getMyPond().then((p) => setPondSlots(p.slots || [])).catch(() => {});
 
         const response = await fetch(`${API_URL}/users/${storedUserId}/profile`, {
           headers: await getAuthHeaders()
@@ -344,11 +346,11 @@ export default function MyRigScreen() {
       {isEditing && (
         <View style={styles.coverWrap}>
           <Text style={styles.coverLabel}>Featured ducks — shown on your profile (up to {MAX_SHOWCASE})</Text>
-          {inventory.length === 0 ? (
+          {pondSlots.filter((s) => s.unlocked).length === 0 ? (
             <Text style={styles.showcaseEmpty}>No ducks yet — claim a drop on the map first.</Text>
           ) : (
             <View style={styles.showcaseGrid}>
-              {inventory.map((item) => {
+              {pondSlots.filter((s) => s.unlocked).map((item) => {
                 const selected = showcaseDucks.includes(item.duck.id);
                 return (
                   <TouchableOpacity
@@ -358,7 +360,7 @@ export default function MyRigScreen() {
                     activeOpacity={0.8}
                   >
                     <DuckIcon duck={item.duck} size={40} />
-                    <Text style={styles.showcaseCount}>×{item.count}</Text>
+                    {item.count > 0 && <Text style={styles.showcaseCount}>×{item.count}</Text>}
                     {selected && (
                       <View style={styles.showcaseCheck}>
                         <Text style={styles.showcaseCheckText}>✓</Text>
