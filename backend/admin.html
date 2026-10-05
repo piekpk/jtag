@@ -43,7 +43,8 @@
   <div id="crumb"></div>
   <div id="aitools" style="display:none; margin-top:10px;">
     <button style="padding:8px 16px; font-size:13px;" onclick="backfillLore()">✨ Backfill duck lore</button>
-    <div style="background:var(--card); border-radius:10px; padding:12px; margin-top:10px; max-width:420px;">
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
+    <div style="background:var(--card); border-radius:10px; padding:12px; flex:1; min-width:280px; max-width:420px;">
       <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">🎁 Give ducks to a user</div>
       <input id="g_email" type="email" placeholder="User email" style="margin-bottom:8px;">
       <div style="display:flex; gap:8px;">
@@ -52,7 +53,7 @@
       </div>
       <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="grantDuck()">Give ducks</button>
     </div>
-    <div style="background:var(--card); border-radius:10px; padding:12px; margin-top:10px; max-width:420px;">
+    <div style="background:var(--card); border-radius:10px; padding:12px; flex:1; min-width:280px; max-width:420px;">
       <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">➕ Create duck type</div>
       <input id="d_name" placeholder="Name (e.g. Trail Boss Duck)" style="margin-bottom:8px;">
       <div style="display:flex; gap:8px;">
@@ -67,6 +68,7 @@
       <input id="d_desc" placeholder="Short description (optional)" style="margin-bottom:8px;">
       <input id="d_seasonal" placeholder="Seasonal tag, e.g. halloween (optional)" style="margin-bottom:8px;">
       <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="createDuckType()">Create duck type</button>
+    </div>
     </div>
   </div>
 </header>
