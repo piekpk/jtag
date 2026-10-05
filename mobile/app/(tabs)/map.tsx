@@ -8,7 +8,7 @@ import { API_URL } from '../config.js';
 import { getAuthHeaders } from '../auth.js';
 import { showAlert } from '../themedAlert.js';
 import { getActiveDrops, createDrop, claimDrop, getInventory, formatExpiry, rarityColor, celebrateMilestones } from '../duckApi.js';
-import DuckIcon from '../DuckIcon.js';
+import DuckIcon from '../DuckIcon';
 
 const RADIUS_CHOICES = [50, 100, 200, 500];
 const DURATION_CHOICES = [

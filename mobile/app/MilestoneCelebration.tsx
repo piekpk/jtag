@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Modal, TouchableOpacity, StyleSheet } from 'react-native';
 import { onCelebration } from './celebration';
-import DuckIcon from './DuckIcon.js';
+import DuckIcon from './DuckIcon';
 
 // Themed replacement for the native Alert.alert milestone popup:
 // black & gold, rounded card, mounted once in the root layout so it can

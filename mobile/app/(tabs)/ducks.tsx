@@ -7,7 +7,7 @@ import {
   getMyPond, getTrades, acceptTrade, declineTrade, cancelTrade,
   getLeaderboard, getDuckFeed, rarityColor, getMilestones, celebrateMilestones,
 } from '../duckApi.js';
-import DuckIcon from '../DuckIcon.js';
+import DuckIcon from '../DuckIcon';
 
 const SECTIONS = ['Pond', 'Trades', 'Ranks', 'Feed', 'Rewards'];
 
