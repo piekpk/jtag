@@ -40,7 +40,6 @@ export default function PublicRigScreen() {
   const [listingsVisible, setListingsVisible] = useState(false);
   const [sellerListings, setSellerListings] = useState([]);
   const [loadingListings, setLoadingListings] = useState(false);
-  const [selectedListing, setSelectedListing] = useState(null);
 
   const PHOTO_EMOJIS = [
     { key: 'like', emoji: '❤️' },
@@ -213,7 +212,6 @@ export default function PublicRigScreen() {
   };
 
   const openListings = async () => {
-    setSelectedListing(null);
     setListingsVisible(true);
     setLoadingListings(true);
     try {
@@ -225,6 +223,11 @@ export default function PublicRigScreen() {
     } finally {
       setLoadingListings(false);
     }
+  };
+
+  const openListingInMarket = (item) => {
+    setListingsVisible(false);
+    router.push({ pathname: '/(tabs)/market', params: { listingId: String(item.id) } });
   };
 
   return (
@@ -433,31 +436,8 @@ export default function PublicRigScreen() {
       >
         <View style={styles.listingsOverlay}>
           <View style={styles.listingsBox}>
-            <Text style={styles.listingsTitle}>
-              {selectedListing ? selectedListing.title : `${ownerName}'s listings`}
-            </Text>
-            {selectedListing ? (
-              <ScrollView style={{ flex: 1 }}>
-                {photoUrl(selectedListing.photo_url) && (
-                  <Image source={{ uri: photoUrl(selectedListing.photo_url) }} style={styles.listingDetailPhoto} resizeMode="cover" />
-                )}
-                <View style={styles.listingDetailBody}>
-                  <View style={styles.listingRow1}>
-                    <Text style={styles.listingDetailTitle}>{selectedListing.title}</Text>
-                    <Text style={styles.listingPrice}>{formatPrice(selectedListing.price)}</Text>
-                  </View>
-                  <Text style={styles.listingMeta}>
-                    {selectedListing.category}{selectedListing.is_sold ? ' · SOLD' : ''}
-                  </Text>
-                  <Text style={styles.listingDesc}>{selectedListing.description}</Text>
-                  <Text style={styles.listingContactLabel}>CONTACT</Text>
-                  <Text style={styles.listingContact}>{selectedListing.contact_info}</Text>
-                  <TouchableOpacity style={styles.listingsBackBtn} onPress={() => setSelectedListing(null)}>
-                    <Text style={styles.listingsBackText}>‹ Back to listings</Text>
-                  </TouchableOpacity>
-                </View>
-              </ScrollView>
-            ) : loadingListings ? (
+            <Text style={styles.listingsTitle}>{ownerName}'s listings</Text>
+            {loadingListings ? (
               <ActivityIndicator size="large" color="#d4af37" style={{ marginVertical: 30 }} />
             ) : sellerListings.length === 0 ? (
               <Text style={styles.listingsEmpty}>No marketplace listings yet.</Text>
@@ -466,7 +446,7 @@ export default function PublicRigScreen() {
                 data={sellerListings}
                 keyExtractor={(item) => String(item.id)}
                 renderItem={({ item }) => (
-                  <TouchableOpacity style={styles.listingRow} onPress={() => setSelectedListing(item)} activeOpacity={0.8}>
+                  <TouchableOpacity style={styles.listingRow} onPress={() => openListingInMarket(item)} activeOpacity={0.8}>
                     {photoUrl(item.photo_url) ? (
                       <Image source={{ uri: photoUrl(item.photo_url) }} style={styles.listingThumb} resizeMode="cover" />
                     ) : (
@@ -677,18 +657,8 @@ const styles = StyleSheet.create({
   listingTitle: { color: '#fff', fontSize: 15, fontWeight: '600' },
   listingMeta: { color: '#888', fontSize: 12, marginTop: 3 },
   listingGo: { color: '#d4af37', fontSize: 22, marginLeft: 8 },
-  listingPrice: { color: '#d4af37', fontSize: 16, fontWeight: '800' },
   listingsCloseBtn: { marginTop: 12, backgroundColor: '#2c2c2e', borderRadius: 10, padding: 12, alignItems: 'center' },
   listingsCloseText: { color: '#fff', fontSize: 15, fontWeight: '600' },
-  listingDetailPhoto: { width: '100%', height: 240, borderRadius: 12, backgroundColor: '#2c2c2e' },
-  listingDetailBody: { paddingVertical: 12 },
-  listingRow1: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  listingDetailTitle: { color: '#fff', fontSize: 17, fontWeight: '800', flex: 1, marginRight: 10 },
-  listingDesc: { color: '#ccc', fontSize: 14, lineHeight: 20, marginTop: 10 },
-  listingContactLabel: { color: '#d4af37', fontSize: 11, fontWeight: '700', letterSpacing: 1, marginTop: 14 },
-  listingContact: { color: '#fff', fontSize: 14, marginTop: 4 },
-  listingsBackBtn: { marginTop: 16, padding: 10, alignItems: 'center' },
-  listingsBackText: { color: '#d4af37', fontSize: 15, fontWeight: '600' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
   modalBox: { backgroundColor: '#1e1e1e', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '80%' },
   modalTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },

@@ -5,9 +5,10 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { showAlert } from '../themedAlert.js';
 import {
-  listMarketplace, createListing, deleteListing, markListingSold,
+  listMarketplace, createListing, deleteListing, markListingSold, getListing,
   photoUrl, MARKET_CATEGORIES,
 } from '../marketApi.js';
 
@@ -27,6 +28,8 @@ function formatPrice(p) {
 }
 
 export default function MarketScreen() {
+  const router = useRouter();
+  const params = useLocalSearchParams();
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -56,6 +59,21 @@ export default function MarketScreen() {
     const t = setTimeout(() => setDebouncedQ(query.trim()), 400);
     return () => clearTimeout(t);
   }, [query]);
+
+  // Open a specific listing when navigated here with ?listingId= (e.g. from a seller's profile).
+  useEffect(() => {
+    const openId = params.listingId;
+    if (!openId) return;
+    router.setParams({ listingId: undefined }); // consume once so refocus doesn't reopen
+    (async () => {
+      try {
+        const listing = await getListing(openId);
+        setSelected(listing);
+      } catch (e) {
+        // listing may be gone; fall through to the normal list
+      }
+    })();
+  }, [params.listingId]);
 
   const load = useCallback(async () => {
     try {
