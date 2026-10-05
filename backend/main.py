@@ -17,7 +17,7 @@ from sqlalchemy import create_engine, or_, func
 from sqlalchemy.orm import sessionmaker, Session
 from passlib.context import CryptContext
 from pydantic import BaseModel
-from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, Milestone, PhotoReaction, MarketListing, Notification
+from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, Milestone, PhotoReaction, MarketListing, Notification, Meetup, MeetupRsvp
 from schemas import UserProfileUpdate, UserProfileResponse, UserCreate
 import duck_ai
 
@@ -1340,6 +1340,130 @@ def claim_drop(drop_id: int, payload: DropClaimCreate, db: Session = Depends(get
     return {"message": "Duck claimed!", "duck": _duck_type_dict(dt), "milestones_completed": done}
 
 
+# --- Meetups ---
+MAX_ACTIVE_MEETUPS_PER_USER = 5
+
+
+class MeetupCreate(BaseModel):
+    title: str
+    description: str = None
+    latitude: float
+    longitude: float
+    start_time: datetime
+    end_time: datetime
+
+
+def _meetup_dict(db: Session, m: Meetup, lat: float, lng: float, viewer_id: int) -> dict:
+    attendee_count = db.query(MeetupRsvp).filter(MeetupRsvp.meetup_id == m.id).count()
+    joined = db.query(MeetupRsvp).filter(
+        MeetupRsvp.meetup_id == m.id, MeetupRsvp.user_id == viewer_id).first() is not None
+    return {
+        "id": m.id,
+        "title": m.title,
+        "description": m.description,
+        "latitude": m.latitude, "longitude": m.longitude,
+        "distance_m": haversine(lat, lng, m.latitude, m.longitude),
+        "start_time": m.start_time.isoformat() if m.start_time else None,
+        "end_time": m.end_time.isoformat() if m.end_time else None,
+        "created_by": m.created_by,
+        "host_name": _owner_name(db, m.created_by),
+        "attendee_count": attendee_count,
+        "joined_by_me": joined,
+        "created_at": m.created_at.isoformat() if m.created_at else None,
+    }
+
+
+@app.post("/meetups")
+def create_meetup(payload: MeetupCreate, db: Session = Depends(get_db),
+                  current_user: User = Depends(get_current_user)):
+    title = (payload.title or "").strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Give your meetup a title")
+    if len(title) > 80:
+        raise HTTPException(status_code=400, detail="Title is too long (max 80 characters)")
+    now = datetime.utcnow()
+    if payload.end_time <= payload.start_time:
+        raise HTTPException(status_code=400, detail="End time must be after start time")
+    if payload.start_time < now - timedelta(minutes=5):
+        raise HTTPException(status_code=400, detail="Start time must be in the future")
+    if payload.end_time - payload.start_time > timedelta(hours=72):
+        raise HTTPException(status_code=400, detail="Meetups can't run longer than 72 hours")
+    active = db.query(Meetup).filter(
+        Meetup.created_by == current_user.id,
+        Meetup.end_time > now).count()
+    if active >= MAX_ACTIVE_MEETUPS_PER_USER:
+        raise HTTPException(status_code=400, detail="You already have 5 upcoming meetups")
+    m = Meetup(
+        title=title,
+        description=(payload.description or "").strip()[:500] or None,
+        latitude=payload.latitude, longitude=payload.longitude,
+        start_time=payload.start_time, end_time=payload.end_time,
+        created_by=current_user.id)
+    db.add(m)
+    db.commit()
+    db.refresh(m)
+    # The host is automatically on the attendee list.
+    db.add(MeetupRsvp(meetup_id=m.id, user_id=current_user.id))
+    db.commit()
+    return _meetup_dict(db, m, payload.latitude, payload.longitude, current_user.id)
+
+
+@app.get("/meetups/active")
+def list_active_meetups(lat: float, lng: float, radius_m: float = 50000,
+                        db: Session = Depends(get_db),
+                        current_user: User = Depends(get_current_user)):
+    now = datetime.utcnow()
+    result = []
+    for m in db.query(Meetup).filter(Meetup.end_time > now).all():
+        dist = haversine(lat, lng, m.latitude, m.longitude)
+        if dist > radius_m:
+            continue
+        result.append(_meetup_dict(db, m, lat, lng, current_user.id))
+    result.sort(key=lambda x: x["start_time"])
+    return result
+
+
+@app.post("/meetups/{meetup_id}/rsvp")
+def rsvp_meetup(meetup_id: int, db: Session = Depends(get_db),
+                current_user: User = Depends(get_current_user)):
+    m = db.query(Meetup).filter(Meetup.id == meetup_id).first()
+    if not m:
+        raise HTTPException(status_code=404, detail="Meetup not found")
+    if m.end_time <= datetime.utcnow():
+        raise HTTPException(status_code=400, detail="This meetup is over")
+    existing = db.query(MeetupRsvp).filter(
+        MeetupRsvp.meetup_id == meetup_id, MeetupRsvp.user_id == current_user.id).first()
+    if not existing:
+        db.add(MeetupRsvp(meetup_id=meetup_id, user_id=current_user.id))
+        db.commit()
+    return {"message": "You're in!", "meetup_id": meetup_id}
+
+
+@app.delete("/meetups/{meetup_id}/rsvp")
+def leave_meetup(meetup_id: int, db: Session = Depends(get_db),
+                 current_user: User = Depends(get_current_user)):
+    rsvp = db.query(MeetupRsvp).filter(
+        MeetupRsvp.meetup_id == meetup_id, MeetupRsvp.user_id == current_user.id).first()
+    if rsvp:
+        db.delete(rsvp)
+        db.commit()
+    return {"message": "RSVP removed", "meetup_id": meetup_id}
+
+
+@app.delete("/meetups/{meetup_id}")
+def cancel_meetup(meetup_id: int, db: Session = Depends(get_db),
+                  current_user: User = Depends(get_current_user)):
+    m = db.query(Meetup).filter(Meetup.id == meetup_id).first()
+    if not m:
+        raise HTTPException(status_code=404, detail="Meetup not found")
+    if m.created_by != current_user.id and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Only the host can cancel this meetup")
+    db.query(MeetupRsvp).filter(MeetupRsvp.meetup_id == meetup_id).delete()
+    db.delete(m)
+    db.commit()
+    return {"message": "Meetup cancelled", "meetup_id": meetup_id}
+
+
 # --- Trading ---
 class TradeCreate(BaseModel):
     recipient_id: int
@@ -1619,6 +1743,8 @@ ADMIN_TABLES = {
     "notifications": Notification,
     "photo_reactions": PhotoReaction,
     "market_listings": MarketListing,
+    "meetups": Meetup,
+    "meetup_rsvps": MeetupRsvp,
 }
 
 # Columns never exposed through the admin API.

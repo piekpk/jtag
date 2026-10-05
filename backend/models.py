@@ -170,3 +170,28 @@ class Notification(Base):
     data = Column(JSON, nullable=True)
     is_read = Column(Boolean, nullable=False, default=False, server_default="0")
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class Meetup(Base):
+    """A user-planned meetup at a real-world location."""
+    __tablename__ = "meetups"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(80), nullable=False)
+    description = Column(String(500), nullable=True)
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
+    start_time = Column(DateTime, nullable=False)
+    end_time = Column(DateTime, nullable=False)
+    created_by = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class MeetupRsvp(Base):
+    """One RSVP per user per meetup."""
+    __tablename__ = "meetup_rsvps"
+
+    id = Column(Integer, primary_key=True, index=True)
+    meetup_id = Column(Integer, index=True, nullable=False)
+    user_id = Column(Integer, index=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

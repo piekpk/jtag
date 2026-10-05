@@ -8,6 +8,7 @@ import { API_URL } from '../config.js';
 import { getAuthHeaders } from '../auth.js';
 import { showAlert } from '../themedAlert.js';
 import { getActiveDrops, createDrop, claimDrop, getInventory, formatExpiry, rarityColor, celebrateMilestones } from '../duckApi.js';
+import { getActiveMeetups, createMeetup, rsvpMeetup, leaveMeetup, cancelMeetup, formatMeetupTime, formatDistance } from '../meetupApi.js';
 import DuckIcon from '../DuckIcon';
 
 const RADIUS_CHOICES = [50, 100, 200, 500];
@@ -15,6 +16,28 @@ const DURATION_CHOICES = [
   { label: '1 hr', hours: 1 },
   { label: '6 hrs', hours: 6 },
   { label: '24 hrs', hours: 24 },
+];
+const MEETUP_START_PRESETS = [
+  { key: '1h', label: 'In 1 hour', get: () => new Date(Date.now() + 3600e3) },
+  { key: '3h', label: 'In 3 hours', get: () => new Date(Date.now() + 3 * 3600e3) },
+  {
+    key: 'tmrw9', label: 'Tomorrow 9 AM',
+    get: () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d; },
+  },
+  {
+    key: 'sat9', label: 'Saturday 9 AM',
+    get: () => {
+      const d = new Date();
+      d.setDate(d.getDate() + (((6 - d.getDay()) + 7) % 7 || 7));
+      d.setHours(9, 0, 0, 0);
+      return d;
+    },
+  },
+];
+const MEETUP_DURATION_CHOICES = [
+  { label: '2 hrs', hours: 2 },
+  { label: '4 hrs', hours: 4 },
+  { label: '8 hrs', hours: 8 },
 ];
 
 export default function RadarMapScreen() {
@@ -35,6 +58,25 @@ export default function RadarMapScreen() {
   const [dropDuration, setDropDuration] = useState(6);
   const [dropLabel, setDropLabel] = useState('');
   const [isDropping, setIsDropping] = useState(false);
+  const [myUserId, setMyUserId] = useState(null);
+  // Meetup state
+  const [meetups, setMeetups] = useState([]);
+  const [selectedMeetup, setSelectedMeetup] = useState(null);
+  const [chooserVisible, setChooserVisible] = useState(false);
+  const [chooserCoord, setChooserCoord] = useState(null);
+  const [meetupModalVisible, setMeetupModalVisible] = useState(false);
+  const [meetupCoord, setMeetupCoord] = useState(null);
+  const [meetupTitle, setMeetupTitle] = useState('');
+  const [meetupDesc, setMeetupDesc] = useState('');
+  const [meetupStart, setMeetupStart] = useState('3h');
+  const [meetupDuration, setMeetupDuration] = useState(4);
+  const [isCreatingMeetup, setIsCreatingMeetup] = useState(false);
+  const [isRsvping, setIsRsvping] = useState(false);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
+  // Map layer filters
+  const [showRigs, setShowRigs] = useState(true);
+  const [showDucks, setShowDucks] = useState(true);
+  const [showMeetups, setShowMeetups] = useState(true);
   // Tutorial popup (duck drops)
   const [showTutorial, setShowTutorial] = useState(false);
   const [dontShowTutorial, setDontShowTutorial] = useState(false);
@@ -107,6 +149,7 @@ export default function RadarMapScreen() {
     (async () => {
       try {
         const loggedInId = await AsyncStorage.getItem('userId');
+        setMyUserId(loggedInId);
 
         // 1. Get local permissions and coordinates
         let { status } = await Location.requestForegroundPermissionsAsync();
@@ -160,6 +203,14 @@ export default function RadarMapScreen() {
         } catch (e) {
           console.error("Failed to fetch drops:", e);
         }
+
+        // 5. Fetch active meetups near this location
+        try {
+          const activeMeetups = await getActiveMeetups(currentCoords.latitude, currentCoords.longitude);
+          setMeetups(activeMeetups);
+        } catch (e) {
+          console.error("Failed to fetch meetups:", e);
+        }
       } catch (error) {
         console.error("Failed to fetch nearby users:", error);
       }
@@ -185,6 +236,87 @@ export default function RadarMapScreen() {
   const handleNavigateToDrop = () => {
     if (!selectedDrop) return;
     const url = `https://www.google.com/maps/dir/?api=1&destination=${selectedDrop.latitude},${selectedDrop.longitude}&travelmode=driving`;
+    Linking.openURL(url).catch(() =>
+      showAlert("Couldn't open maps", "No map app available on this device."));
+  };
+
+  const refreshMeetups = async () => {
+    if (!location) return;
+    try {
+      const fresh = await getActiveMeetups(location.latitude, location.longitude);
+      setMeetups(fresh);
+      return fresh;
+    } catch (e) {
+      console.error("Failed to refresh meetups:", e);
+      return null;
+    }
+  };
+
+  const handleCreateMeetup = async () => {
+    if (!meetupTitle.trim() || !meetupCoord || isCreatingMeetup) return;
+    setIsCreatingMeetup(true);
+    try {
+      const start = MEETUP_START_PRESETS.find((p) => p.key === meetupStart).get();
+      const end = new Date(start.getTime() + meetupDuration * 3600e3);
+      const title = meetupTitle.trim();
+      await createMeetup({
+        title,
+        description: meetupDesc.trim() || null,
+        latitude: meetupCoord.latitude,
+        longitude: meetupCoord.longitude,
+        start_time: start.toISOString(),
+        end_time: end.toISOString(),
+      });
+      setMeetupModalVisible(false);
+      setMeetupTitle('');
+      setMeetupDesc('');
+      await refreshMeetups();
+      showAlert("📍 Meetup planned!", `"${title}" is on the map for nearby Jeepers.`);
+    } catch (e) {
+      showAlert("Couldn't create meetup", e.message || "Try again.");
+    } finally {
+      setIsCreatingMeetup(false);
+    }
+  };
+
+  const handleRsvpMeetup = async () => {
+    if (!selectedMeetup || isRsvping) return;
+    setIsRsvping(true);
+    try {
+      if (selectedMeetup.joined_by_me) {
+        await leaveMeetup(selectedMeetup.id);
+      } else {
+        await rsvpMeetup(selectedMeetup.id);
+      }
+      const fresh = await refreshMeetups();
+      setSelectedMeetup((fresh || []).find((x) => x.id === selectedMeetup.id) || null);
+    } catch (e) {
+      showAlert("Couldn't update RSVP", e.message || "Try again.");
+    } finally {
+      setIsRsvping(false);
+    }
+  };
+
+  const handleCancelMeetup = async () => {
+    if (!selectedMeetup) return;
+    if (!confirmingCancel) {
+      setConfirmingCancel(true);
+      return;
+    }
+    try {
+      await cancelMeetup(selectedMeetup.id);
+      setSelectedMeetup(null);
+      setConfirmingCancel(false);
+      await refreshMeetups();
+      showAlert("Meetup cancelled", "It's off the map.");
+    } catch (e) {
+      showAlert("Couldn't cancel", e.message || "Try again.");
+    }
+  };
+
+  const handleNavigateToMeetup = () => {
+    if (!selectedMeetup) return;
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${selectedMeetup.latitude},${selectedMeetup.longitude}&travelmode=driving`;
     Linking.openURL(url).catch(() =>
       showAlert("Couldn't open maps", "No map app available on this device."));
   };
@@ -254,8 +386,8 @@ export default function RadarMapScreen() {
         provider={PROVIDER_GOOGLE}
         initialRegion={location}
         showsUserLocation={true}
-        onPress={() => setSelectedDrop(null)}
-        onLongPress={(e) => openDropModal(e.nativeEvent.coordinate)}
+        onPress={() => { setSelectedDrop(null); setSelectedMeetup(null); setConfirmingCancel(false); }}
+        onLongPress={(e) => { setChooserCoord(e.nativeEvent.coordinate); setChooserVisible(true); }}
       >
         {/* Current User Marker */}
         <Marker
@@ -266,7 +398,7 @@ export default function RadarMapScreen() {
         />
         
         {/* Nearby Users Markers */}
-        {nearbyUsers.map((user) => {
+        {showRigs && nearbyUsers.map((user) => {
           const ownerName = user.settings?.ownerName || 'Fellow Jeeper';
           const vehicleTitle = user.settings?.vehicleTitle || 'Jeep Wrangler';
           return (
@@ -282,14 +414,32 @@ export default function RadarMapScreen() {
         })}
 
         {/* Duck Drop Markers */}
-        {drops.map((drop) => (
+        {showDucks && drops.map((drop) => (
           <Marker
             key={`drop-${drop.id}`}
             coordinate={{ latitude: drop.latitude, longitude: drop.longitude }}
-            onPress={(e) => { e.stopPropagation(); setSelectedDrop(drop); }}
+            onPress={(e) => { e.stopPropagation(); setSelectedMeetup(null); setSelectedDrop(drop); }}
           >
             <View style={[styles.dropMarker, drop.claimed_by_me && { opacity: 0.4 }]}>
               <DuckIcon duck={drop.duck} size={30} />
+            </View>
+          </Marker>
+        ))}
+
+        {/* Meetup Markers */}
+        {showMeetups && meetups.map((m) => (
+          <Marker
+            key={`meetup-${m.id}`}
+            coordinate={{ latitude: m.latitude, longitude: m.longitude }}
+            onPress={(e) => { e.stopPropagation(); setSelectedDrop(null); setConfirmingCancel(false); setSelectedMeetup(m); }}
+          >
+            <View style={styles.meetupMarker}>
+              <Text style={styles.meetupPin}>📍</Text>
+              {m.attendee_count > 0 && (
+                <View style={styles.meetupBadge}>
+                  <Text style={styles.meetupBadgeText}>{m.attendee_count > 99 ? '99+' : m.attendee_count}</Text>
+                </View>
+              )}
             </View>
           </Marker>
         ))}
@@ -365,6 +515,166 @@ export default function RadarMapScreen() {
           </TouchableOpacity>
         </View>
       )}
+
+      {/* Selected meetup detail card */}
+      {selectedMeetup && (
+        <View style={styles.dropCard}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.dropTitle}>📍 {selectedMeetup.title}</Text>
+            <Text style={styles.dropMeta}>
+              {formatMeetupTime(selectedMeetup.start_time)} – {formatMeetupTime(selectedMeetup.end_time)}
+            </Text>
+            <Text style={styles.dropMeta}>
+              Hosted by {selectedMeetup.host_name} • {formatDistance(selectedMeetup.distance_m)}
+            </Text>
+            <Text style={styles.dropHint}>
+              {selectedMeetup.attendee_count} going{selectedMeetup.joined_by_me ? " • You're in ✓" : ''}
+            </Text>
+            {!!selectedMeetup.description && (
+              <Text style={styles.dropClue}>{selectedMeetup.description}</Text>
+            )}
+            <View style={{ flexDirection: 'row', marginTop: 4 }}>
+              <TouchableOpacity style={styles.navBtn} onPress={handleNavigateToMeetup} activeOpacity={0.8}>
+                <Text style={styles.navBtnText}>🧭 Navigate there</Text>
+              </TouchableOpacity>
+              {String(selectedMeetup.created_by) === String(myUserId) && (
+                <TouchableOpacity
+                  style={[styles.navBtn, { marginLeft: 8, borderColor: '#c0392b' }]}
+                  onPress={handleCancelMeetup}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.navBtnText, { color: '#e74c3c' }]}>
+                    {confirmingCancel ? 'Tap to confirm' : 'Cancel meetup'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+          <TouchableOpacity
+            style={[styles.claimBtn, isRsvping && { opacity: 0.4 }]}
+            onPress={handleRsvpMeetup}
+            disabled={isRsvping}
+          >
+            <Text style={styles.claimBtnText}>
+              {isRsvping ? '...' : selectedMeetup.joined_by_me ? 'Leave' : 'Join'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Long-press chooser: duck drop vs meetup */}
+      <Modal visible={chooserVisible} transparent animationType="fade" onRequestClose={() => setChooserVisible(false)}>
+        <TouchableOpacity style={styles.chooserBackdrop} activeOpacity={1} onPress={() => setChooserVisible(false)}>
+          <View style={styles.chooserBox}>
+            <Text style={styles.chooserTitle}>What goes here?</Text>
+            <TouchableOpacity
+              style={styles.chooserBtn}
+              onPress={() => { setChooserVisible(false); if (chooserCoord) openDropModal(chooserCoord); }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.chooserEmoji}>🦆</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.chooserLabel}>Drop a duck</Text>
+                <Text style={styles.chooserDesc}>Hide ducks for nearby Jeepers to find</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.chooserBtn}
+              onPress={() => {
+                setChooserVisible(false);
+                if (chooserCoord) {
+                  setMeetupCoord(chooserCoord);
+                  setMeetupStart('3h');
+                  setMeetupDuration(4);
+                  setMeetupModalVisible(true);
+                }
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.chooserEmoji}>📍</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.chooserLabel}>Plan a meetup</Text>
+                <Text style={styles.chooserDesc}>Rally the crew at this spot</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.modalClose} onPress={() => setChooserVisible(false)}>
+              <Text style={styles.modalCloseText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Meetup creation modal */}
+      <Modal visible={meetupModalVisible} transparent animationType="slide" onRequestClose={() => setMeetupModalVisible(false)}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <View style={styles.modalBox}>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <Text style={styles.modalTitle}>📍 Plan a meetup</Text>
+
+              <TextInput
+                style={styles.labelInput}
+                placeholder="Title (e.g. Sunset Trail Run)"
+                placeholderTextColor="#757575"
+                value={meetupTitle}
+                onChangeText={setMeetupTitle}
+                maxLength={80}
+              />
+              <TextInput
+                style={[styles.labelInput, { marginTop: 10, minHeight: 70, textAlignVertical: 'top' }]}
+                placeholder="Description (optional)"
+                placeholderTextColor="#757575"
+                value={meetupDesc}
+                onChangeText={setMeetupDesc}
+                maxLength={500}
+                multiline
+              />
+
+              <Text style={styles.modalLabel}>Starts</Text>
+              <View style={styles.chipRow}>
+                {MEETUP_START_PRESETS.map((p) => (
+                  <TouchableOpacity
+                    key={p.key}
+                    style={[styles.optChip, meetupStart === p.key && styles.optChipActive]}
+                    onPress={() => setMeetupStart(p.key)}
+                  >
+                    <Text style={[styles.optChipText, meetupStart === p.key && styles.optChipTextActive]}>{p.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.modalLabel}>Lasts</Text>
+              <View style={styles.chipRow}>
+                {MEETUP_DURATION_CHOICES.map((d) => (
+                  <TouchableOpacity
+                    key={d.hours}
+                    style={[styles.optChip, meetupDuration === d.hours && styles.optChipActive]}
+                    onPress={() => setMeetupDuration(d.hours)}
+                  >
+                    <Text style={[styles.optChipText, meetupDuration === d.hours && styles.optChipTextActive]}>{d.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={[styles.dropHint, { marginTop: 10 }]}>
+                {formatMeetupTime(MEETUP_START_PRESETS.find((p) => p.key === meetupStart).get().toISOString())}
+                {'  →  '}
+                {formatMeetupTime(new Date(MEETUP_START_PRESETS.find((p) => p.key === meetupStart).get().getTime() + meetupDuration * 3600e3).toISOString())}
+              </Text>
+
+              <TouchableOpacity
+                style={[styles.dropBtn, (!meetupTitle.trim() || isCreatingMeetup) && { opacity: 0.5 }]}
+                onPress={handleCreateMeetup}
+                disabled={!meetupTitle.trim() || isCreatingMeetup}
+              >
+                <Text style={styles.dropBtnText}>{isCreatingMeetup ? 'Planning...' : 'Create meetup'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalClose} onPress={() => setMeetupModalVisible(false)}>
+                <Text style={styles.modalCloseText}>Cancel</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* Drop creation modal (long-press on map) */}
       <Modal visible={dropModalVisible} transparent animationType="slide" onRequestClose={() => setDropModalVisible(false)}>
@@ -461,6 +771,24 @@ export default function RadarMapScreen() {
         <Text style={styles.helpBtnText}>?</Text>
       </TouchableOpacity>
 
+      {/* Map layer filters */}
+      <View style={styles.filterRow} pointerEvents="box-none">
+        {[
+          { label: 'Rigs', on: showRigs, set: setShowRigs },
+          { label: 'Ducks', on: showDucks, set: setShowDucks },
+          { label: 'Meetups', on: showMeetups, set: setShowMeetups },
+        ].map((f) => (
+          <TouchableOpacity
+            key={f.label}
+            style={[styles.filterChip, !f.on && styles.filterChipOff]}
+            onPress={() => f.set(!f.on)}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.filterChipText, !f.on && styles.filterChipTextOff]}>{f.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       {/* Duck drop tutorial popup */}
       <Modal
         visible={showTutorial}
@@ -475,7 +803,7 @@ export default function RadarMapScreen() {
               Hide ducks on the map for nearby Jeepers to find.
             </Text>
             {[
-              ['📍', 'Long-press anywhere on the map to drop a duck. Pick the duck, how many can claim it, the radius, and how long it lasts.'],
+              ['📍', 'Long-press anywhere on the map, then choose Drop a duck or Plan a meetup. For drops: pick the duck, how many can claim it, the radius, and how long it lasts.'],
               ['🗺️', 'Duck markers appear for Jeepers nearby. Tap one to see what\'s up for grabs and when it expires.'],
               ['🏃', 'Get inside the drop radius and tap Claim to snag a duck for your collection.'],
               ['⏳', 'Drops expire — unclaimed ducks disappear for good, so claim fast!'],
@@ -603,4 +931,45 @@ const styles = StyleSheet.create({
   dropBtnText: { color: '#121212', fontWeight: 'bold', fontSize: 16 },
   modalClose: { marginTop: 8, padding: 12, alignItems: 'center' },
   modalCloseText: { color: '#888', fontSize: 16 },
+  chooserBackdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center', alignItems: 'center', padding: 24,
+  },
+  chooserBox: {
+    width: '100%', backgroundColor: '#1e1e1e', borderRadius: 16, padding: 18,
+    borderWidth: 1, borderColor: '#d4af37',
+  },
+  chooserTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 12 },
+  chooserBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#2c2c2e', borderRadius: 12, padding: 14, marginBottom: 10,
+  },
+  chooserEmoji: { fontSize: 28, marginRight: 12 },
+  chooserLabel: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  chooserDesc: { color: '#888', fontSize: 12, marginTop: 2 },
+  meetupMarker: {
+    backgroundColor: '#d4af37', width: 44, height: 44, borderRadius: 22,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: '#121212',
+  },
+  meetupPin: { fontSize: 24 },
+  meetupBadge: {
+    position: 'absolute', top: -6, right: -6,
+    backgroundColor: '#121212', borderRadius: 10, minWidth: 20, height: 20,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: '#d4af37', paddingHorizontal: 4,
+  },
+  meetupBadgeText: { color: '#d4af37', fontSize: 11, fontWeight: 'bold' },
+  filterRow: {
+    position: 'absolute', top: 64, left: 0, right: 0, zIndex: 2,
+    flexDirection: 'row', justifyContent: 'center',
+  },
+  filterChip: {
+    backgroundColor: 'rgba(18,18,18,0.88)',
+    borderWidth: 1, borderColor: '#d4af37', borderRadius: 16,
+    paddingVertical: 6, paddingHorizontal: 14, marginHorizontal: 4,
+  },
+  filterChipOff: { borderColor: '#444', opacity: 0.6 },
+  filterChipText: { color: '#d4af37', fontSize: 12, fontWeight: '700' },
+  filterChipTextOff: { color: '#888' },
 });
