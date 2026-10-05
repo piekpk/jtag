@@ -7,6 +7,7 @@ export const SOCIAL_PLATFORMS = [
   { id: 'tiktok', name: 'TikTok', icon: '🎵', placeholder: 'tiktok.com/@yourname' },
   { id: 'youtube', name: 'YouTube', icon: '▶️', placeholder: 'youtube.com/@yourchannel' },
   { id: 'x', name: 'X', icon: '✖️', placeholder: 'x.com/yourname' },
+  { id: 'reddit', name: 'Reddit', icon: '👽', placeholder: 'reddit.com/u/yourname' },
 ];
 
 export function platformById(id) {
