@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, View, Text, ActivityIndicator, TouchableOpacity, Modal, TextInput, StatusBar, Platform, KeyboardAvoidingView, ScrollView, Linking } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -18,6 +18,7 @@ const DURATION_CHOICES = [
 ];
 
 export default function RadarMapScreen() {
+  const router = useRouter();
   const [location, setLocation] = useState(null);
   const [nearbyUsers, setNearbyUsers] = useState([]);
   const [errorMsg, setErrorMsg] = useState(null);
@@ -275,6 +276,7 @@ export default function RadarMapScreen() {
               title={ownerName}
               description={vehicleTitle}
               pinColor="red"
+              onCalloutPress={() => router.push(`/rig/${user.id}`)}
             />
           );
         })}
