@@ -37,7 +37,14 @@ export default {
       "barStyle": "light-content"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#D4AF37"
+        }
+      ]
     ],
     "scheme": "jtap",
     "extra": {

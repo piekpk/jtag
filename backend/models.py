@@ -16,6 +16,7 @@ class User(Base):
     longitude = Column(Float, nullable=True)
     is_admin = Column(Boolean, nullable=False, default=False, server_default="0")
     is_banned = Column(Boolean, nullable=False, default=False, server_default="0")
+    push_token = Column(String, nullable=True)  # Expo push token for duck/push notifications
 
 
 # --- Duck Game Models ---
@@ -155,4 +156,17 @@ class MarketListing(Base):
     contact_info = Column(String(200), nullable=False)
     category = Column(String(60), nullable=False, default="Other")
     is_sold = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+class Notification(Base):
+    """In-app notification inbox entries (ducked, etc.). Push mirrors via Expo."""
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True, nullable=False)
+    type = Column(String, nullable=False, default="general")  # ducked | general
+    title = Column(String, nullable=False)
+    body = Column(String, nullable=False, default="")
+    data = Column(JSON, nullable=True)
+    is_read = Column(Boolean, nullable=False, default=False, server_default="0")
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

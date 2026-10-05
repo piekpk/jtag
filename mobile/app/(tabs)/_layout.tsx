@@ -1,7 +1,22 @@
-﻿import { Tabs } from 'expo-router';
+﻿import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useEffect } from 'react';
+import * as Notifications from 'expo-notifications';
+import NotificationBell from '../NotificationBell';
+import { registerPushToken } from '../push';
 
 export default function TabLayout() {
+  const router = useRouter();
+
+  useEffect(() => {
+    registerPushToken();
+    // Tapping a push notification deep-links: ducked -> Ducks tab.
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const type = response?.notification?.request?.content?.data?.type;
+      if (type === 'ducked') router.push('/(tabs)/ducks');
+    });
+    return () => sub.remove();
+  }, []);
   return (
     <Tabs
       initialRouteName="profile"
@@ -67,6 +82,13 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="pricetag-outline" size={size} color={color} />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          title: 'Alerts',
+          tabBarButton: () => <NotificationBell />,
         }}
       />
     </Tabs>

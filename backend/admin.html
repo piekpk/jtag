@@ -172,7 +172,7 @@ const SUMMARY = {
   duck_gives: ['giver_id', 'recipient_id', 'duck_type_id'],
   duck_drops: ['label', 'duck_type_id', 'claims_count'],
   drop_claims: ['drop_id', 'user_id'], trades: ['proposer_id', 'recipient_id', 'status'],
-  user_milestones: ['user_id', 'key'], milestones: ['name', 'target'], photo_reactions: ['photo_owner_id', 'emoji'],
+  user_milestones: ['user_id', 'key'], milestones: ['name', 'target'], notifications: ['title', 'type'], photo_reactions: ['photo_owner_id', 'emoji'],
   messages: ['user_id', 'channel', 'message'],
 };
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));

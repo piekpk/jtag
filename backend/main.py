@@ -17,7 +17,7 @@ from sqlalchemy import create_engine, or_, func
 from sqlalchemy.orm import sessionmaker, Session
 from passlib.context import CryptContext
 from pydantic import BaseModel
-from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, Milestone, PhotoReaction, MarketListing
+from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, Milestone, PhotoReaction, MarketListing, Notification
 from schemas import UserProfileUpdate, UserProfileResponse, UserCreate
 import duck_ai
 
@@ -97,6 +97,19 @@ def _ensure_duck_image_column():
         conn.close()
 
 
+def _ensure_push_token_column():
+    """Lightweight migration: add users.push_token to DBs created before the column existed."""
+    conn = get_raw_db()
+    try:
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(users)")]
+        if "push_token" not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN push_token TEXT")
+            conn.commit()
+            print("Migration: added users.push_token column.")
+    finally:
+        conn.close()
+
+
 def _install_duck_sprites():
     """Copy the bundled duck sprite library into the uploads dir (missing files only)."""
     src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "duck_sprites")
@@ -163,6 +176,7 @@ _ensure_is_admin_column()
 _ensure_is_banned_column()
 _ensure_duck_ai_columns()
 _ensure_duck_image_column()
+_ensure_push_token_column()
 _install_duck_sprites()
 _bootstrap_admins()
 
@@ -1056,7 +1070,7 @@ def give_duck(payload: DuckGiveCreate, db: Session = Depends(get_db), current_us
     recipient = db.query(User).filter(User.id == payload.recipient_id).first()
     if not recipient:
         raise HTTPException(status_code=404, detail="Recipient not found")
-    _duck_type_or_404(db, payload.duck_type_id)
+    dt = _duck_type_or_404(db, payload.duck_type_id)
     _ensure_starter_ducks(db, current_user.id)
 
     _spend_duck(db, current_user.id, payload.duck_type_id, 1)
@@ -1064,10 +1078,106 @@ def give_duck(payload: DuckGiveCreate, db: Session = Depends(get_db), current_us
     db.add(DuckGive(giver_id=current_user.id, recipient_id=recipient.id,
                     duck_type_id=payload.duck_type_id, note=payload.note))
     _bump_legacy_duck_count(db, recipient)
+    _notify_user(db, recipient.id, "ducked",
+                 "🦆 You've been ducked!",
+                 f"{_owner_name(db, current_user.id)} ducked you with {dt.emoji} {dt.name}",
+                 {"giver_id": current_user.id, "duck_type_id": dt.id})
     db.commit()
     done = _check_milestones(db, current_user.id) + _check_milestones(db, recipient.id)
     return {"message": "Duck given!", "recipient_duck_count": (recipient.settings or {}).get("duckCount", 0),
             "milestones_completed": done}
+
+
+def _send_expo_push(push_token: str, title: str, body: str, data: dict = None):
+    """Fire-and-forget push via the Expo Push API. Never raises."""
+    if not push_token or not push_token.startswith("ExponentPushToken["):
+        return
+    try:
+        import urllib.request
+        payload = json.dumps({
+            "to": push_token,
+            "sound": "default",
+            "title": title,
+            "body": body,
+            "data": data or {},
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            "https://exp.host/--/api/v2/push/send",
+            data=payload,
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            resp.read()
+    except Exception as e:
+        print(f"Push send failed: {e}")
+
+
+def _notify_user(db: Session, user_id: int, ntype: str, title: str, body: str, data: dict = None):
+    """Create an in-app notification and mirror it as a push if the user has a token."""
+    db.add(Notification(user_id=user_id, type=ntype, title=title, body=body, data=data))
+    user = db.query(User).filter(User.id == user_id).first()
+    if user and user.push_token:
+        _send_expo_push(user.push_token, title, body, data)
+
+
+def _notification_dict(n: Notification) -> dict:
+    return {
+        "id": n.id, "type": n.type, "title": n.title, "body": n.body,
+        "data": n.data or {}, "is_read": bool(n.is_read),
+        "created_at": n.created_at.isoformat() if n.created_at else None,
+    }
+
+
+@app.get("/notifications")
+def list_notifications(limit: int = 30, offset: int = 0,
+                       db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """The current user's notification inbox, newest first."""
+    base = db.query(Notification).filter(Notification.user_id == current_user.id)
+    unread = base.filter(Notification.is_read == False).count()  # noqa: E712
+    rows = (base.order_by(Notification.id.desc())
+            .limit(min(max(limit, 1), 100)).offset(max(offset, 0)).all())
+    return {"unread": unread, "notifications": [_notification_dict(n) for n in rows]}
+
+
+@app.post("/notifications/read-all")
+def read_all_notifications(db: Session = Depends(get_db),
+                           current_user: User = Depends(get_current_user)):
+    """Mark all of the current user's notifications as read."""
+    db.query(Notification).filter(
+        Notification.user_id == current_user.id,
+        Notification.is_read == False).update({"is_read": True})  # noqa: E712
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/notifications/{notification_id}/read")
+def read_notification(notification_id: int, db: Session = Depends(get_db),
+                      current_user: User = Depends(get_current_user)):
+    """Mark one notification as read."""
+    n = db.query(Notification).filter(
+        Notification.id == notification_id,
+        Notification.user_id == current_user.id).first()
+    if not n:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    n.is_read = True
+    db.commit()
+    return {"ok": True}
+
+
+class PushTokenUpdate(BaseModel):
+    token: str = ""
+
+
+@app.post("/users/me/push-token")
+def set_push_token(payload: PushTokenUpdate, db: Session = Depends(get_db),
+                   current_user: User = Depends(get_current_user)):
+    """Register (or clear) the current device's Expo push token."""
+    token = (payload.token or "").strip()
+    if token and not token.startswith("ExponentPushToken["):
+        raise HTTPException(status_code=400, detail="Not a valid Expo push token")
+    current_user.push_token = token or None
+    db.commit()
+    return {"ok": True}
 
 
 @app.get("/ducks/feed")
@@ -1499,6 +1609,7 @@ ADMIN_TABLES = {
     "trades": Trade,
     "user_milestones": UserMilestone,
     "milestones": Milestone,
+    "notifications": Notification,
     "photo_reactions": PhotoReaction,
     "market_listings": MarketListing,
 }
