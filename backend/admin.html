@@ -333,11 +333,13 @@ async function grantDuck() {
 }
 
 let spriteThemes = {};
+let spriteUsed = {};
 
 async function loadDuckSprites() {
   try {
     const data = await api('/admin/duck-sprites');
     spriteThemes = data.themes || {};
+    spriteUsed = data.used || {};
     const themes = Object.keys(spriteThemes);
     document.getElementById('d_theme').innerHTML =
       `<option value="">No sprite (use emoji)</option>` +
@@ -351,7 +353,8 @@ function fillSpriteOptions() {
   const sprites = spriteThemes[theme] || [];
   document.getElementById('d_sprite').innerHTML = sprites.map(u => {
     const name = u.split('/').pop().replace('.png', '');
-    return `<option value="${esc(u)}">${esc(name)}</option>`;
+    const taken = spriteUsed[u];
+    return `<option value="${esc(u)}"${taken ? ' disabled' : ''}>${esc(name)}${taken ? ` — used by ${esc(taken)}` : ''}</option>`;
   }).join('');
   previewSprite();
 }
@@ -381,6 +384,7 @@ async function createDuckType() {
     document.getElementById('d_desc').value = '';
     document.getElementById('d_seasonal').value = '';
     loadDuckOptions();
+    loadDuckSprites();
   } catch (e) { alert('Create failed: ' + e.message); }
 }
 

@@ -1628,6 +1628,12 @@ def admin_update_row(name: str, row_id: int, payload: dict,
             raise HTTPException(status_code=400, detail=f"Bad value for '{key}'")
     if not updates:
         raise HTTPException(status_code=400, detail="Nothing to update")
+    if name == "duck_types" and updates.get("image_url"):
+        taken = db.query(DuckType).filter(
+            DuckType.image_url == updates["image_url"], DuckType.id != row_id).first()
+        if taken:
+            raise HTTPException(status_code=400,
+                                detail=f"That sprite is already used by '{taken.name}'")
     if name == "messages":
         conn = get_raw_db()
         try:
@@ -1726,7 +1732,8 @@ DUCK_RARITIES = ("common", "rare", "epic", "legendary")
 
 @app.get("/admin/duck-sprites")
 def admin_duck_sprites(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
-    """List the bundled duck sprite library by theme, as URLs served from /uploads/ducks/."""
+    """List the bundled duck sprite library by theme, as URLs served from /uploads/ducks/.
+    Includes which sprite each existing duck type uses."""
     base = os.path.join(UPLOAD_DIR, "ducks")
     themes = {}
     if os.path.isdir(base):
@@ -1737,7 +1744,9 @@ def admin_duck_sprites(db: Session = Depends(get_db), admin: User = Depends(requ
             files = sorted(f for f in os.listdir(tdir) if f.endswith(".png"))
             if files:
                 themes[theme] = [f"/uploads/ducks/{theme}/{f}" for f in files]
-    return {"themes": themes}
+    used = {dt.image_url: dt.name for dt in db.query(DuckType).filter(
+        DuckType.image_url.isnot(None)).all()}
+    return {"themes": themes, "used": used}
 
 
 class DuckTypeCreate(BaseModel):
@@ -1774,6 +1783,11 @@ def admin_create_duck_type(payload: DuckTypeCreate, db: Session = Depends(get_db
     image_url = (payload.image_url or "").strip() or None
     if image_url and not image_url.startswith("/uploads/ducks/"):
         raise HTTPException(status_code=400, detail="image_url must be a bundled duck sprite")
+    if image_url:
+        taken = db.query(DuckType).filter(DuckType.image_url == image_url).first()
+        if taken:
+            raise HTTPException(status_code=400,
+                                detail=f"That sprite is already used by '{taken.name}'")
     dt = DuckType(
         slug=_unique_duck_slug(db, name),
         name=name,
