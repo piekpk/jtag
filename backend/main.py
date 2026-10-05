@@ -1405,6 +1405,25 @@ def create_meetup(payload: MeetupCreate, db: Session = Depends(get_db),
     # The host is automatically on the attendee list.
     db.add(MeetupRsvp(meetup_id=m.id, user_id=current_user.id))
     db.commit()
+    # Alert every user within 25 miles of the meetup (except the host).
+    try:
+        alert_radius_m = 25 * 1609.34
+        host = _owner_name(db, current_user.id)
+        when = m.start_time.strftime("%a %b %d, %I:%M %p")
+        nearby = db.query(User).filter(
+            User.id != current_user.id,
+            User.latitude.isnot(None),
+            User.longitude.isnot(None)).all()
+        for u in nearby:
+            if haversine(payload.latitude, payload.longitude, u.latitude, u.longitude) <= alert_radius_m:
+                _notify_user(
+                    db, u.id, "meetup",
+                    "📍 New meetup nearby!",
+                    f"{host} planned \"{title}\" — {when}",
+                    {"meetup_id": m.id})
+        db.commit()
+    except Exception as e:
+        print(f"Meetup alert fan-out failed: {e}")
     return _meetup_dict(db, m, payload.latitude, payload.longitude, current_user.id)
 
 

@@ -9,10 +9,11 @@ export default function TabLayout() {
 
   useEffect(() => {
     registerPushToken();
-    // Tapping a push notification deep-links: ducked -> Ducks tab.
+    // Tapping a push notification deep-links: ducked -> Ducks tab, meetup -> Map tab.
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
       const type = response?.notification?.request?.content?.data?.type;
       if (type === 'ducked') router.push('/(tabs)/ducks');
+      else if (type === 'meetup') router.push('/(tabs)/map');
     });
     return () => sub.remove();
   }, []);

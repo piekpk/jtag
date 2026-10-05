@@ -92,7 +92,9 @@ export default function NotificationToast() {
   const onTap = () => {
     const n = current;
     dismiss();
-    if (n && n.type === 'ducked') router.push('/(tabs)/ducks');
+    if (!n) return;
+    if (n.type === 'ducked') router.push('/(tabs)/ducks');
+    else if (n.type === 'meetup') router.push('/(tabs)/map');
   };
 
   if (!current) return null;
