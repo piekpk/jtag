@@ -41,7 +41,7 @@ export default function UserPondScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backText}>‹ Back</Text>
+          <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>{name ? `${name}'s Pond` : 'Duck Pond'}</Text>
       </View>
@@ -123,8 +123,8 @@ export default function UserPondScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#121212' },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 12, paddingBottom: 4 },
-  backBtn: { padding: 8, marginRight: 4 },
-  backText: { color: '#d4af37', fontSize: 15, fontWeight: '700' },
+  backBtn: { backgroundColor: '#d4af37', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, marginRight: 8 },
+  backText: { color: '#121212', fontSize: 16, fontWeight: 'bold' },
   title: { color: '#fff', fontSize: 20, fontWeight: '800' },
   scroll: { padding: 16 },
   errorText: { color: '#e0e0e0', fontSize: 14, textAlign: 'center', marginTop: 32 },
