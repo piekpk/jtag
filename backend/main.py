@@ -1623,6 +1623,11 @@ def admin_delete_row(name: str, row_id: int,
     row = db.query(model).filter(model.id == row_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Row not found")
+    if name == "market_listings" and getattr(row, "photo_url", None):
+        try:
+            os.remove(os.path.join(UPLOAD_DIR, "marketplace", os.path.basename(row.photo_url)))
+        except OSError:
+            pass
     db.delete(row)
     db.commit()
     return {"deleted": True}
@@ -1773,6 +1778,20 @@ def admin_stats(db: Session = Depends(get_db), admin: User = Depends(require_adm
         },
         "messages": {"total": msg_total},
     }
+
+
+@app.get("/admin/marketplace/queue")
+def admin_marketplace_queue(limit: int = 20, db: Session = Depends(get_db),
+                            admin: User = Depends(require_admin)):
+    """Newest marketplace listings with seller email, for quick moderation."""
+    limit = max(1, min(limit, 50))
+    out = []
+    for l in db.query(MarketListing).order_by(MarketListing.id.desc()).limit(limit).all():
+        d = _listing_dict(db, l)
+        seller = db.query(User).filter(User.id == l.user_id).first()
+        d["seller_email"] = seller.email if seller else None
+        out.append(d)
+    return {"listings": out}
 
 
 @app.get("/admin/users/lookup")
