@@ -116,7 +116,12 @@ export default function MyRigScreen() {
         });
 
         if (!response.ok) {
-          showAlert("Save Failed", "Could not save your profile changes.");
+          let msg = "Could not save your profile changes.";
+          try {
+            const err = await response.json();
+            if (err && typeof err.detail === "string" && err.detail) msg = err.detail;
+          } catch (_) {}
+          showAlert("Save Failed", msg);
           setIsSaving(false);
           return; // Don't exit edit mode if save failed[cite: 9]
         }

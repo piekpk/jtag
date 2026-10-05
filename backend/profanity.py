@@ -12,7 +12,7 @@ _WORDS = {
     "fuck", "fucker", "fuckers", "fucking", "fucked", "motherfucker",
     "motherfuckers", "motherfucking", "fuckboy", "fuckface", "clusterfuck",
     "shit", "shits", "shitty", "shitting", "bullshit", "shitbox", "shithead",
-    "shitshow",
+    "shitshow", "shitlord",
     "bitch", "bitches", "bitchy", "bitching",
     "ass", "asses", "asshole", "assholes", "jackass", "dumbass", "smartass",
     "asshat", "assclown",

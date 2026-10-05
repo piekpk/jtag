@@ -341,6 +341,24 @@ def get_profile(user_id: int, db: Session = Depends(get_db), current_user: User 
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
+def _require_clean_profile_settings(settings: dict) -> None:
+    """Profanity check on the free-text fields of a profile settings payload."""
+    if not isinstance(settings, dict):
+        return
+    texts = []
+    for key in ("ownerName", "vehicleTitle", "mods"):
+        if settings.get(key):
+            texts.append(settings[key])
+    specs = settings.get("specs")
+    if isinstance(specs, dict):
+        texts.extend(v for v in specs.values() if isinstance(v, str) and v)
+    links = settings.get("socialLinks")
+    if isinstance(links, list):
+        texts.extend(l.get("url") for l in links
+                     if isinstance(l, dict) and l.get("url"))
+    _require_clean(*texts)
+
+
 @app.patch("/users/{user_id}/profile", response_model=UserProfileResponse)
 def update_profile(user_id: int, profile_data: UserProfileUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     require_self(user_id, current_user)
@@ -348,6 +366,7 @@ def update_profile(user_id: int, profile_data: UserProfileUpdate, db: Session = 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if profile_data.settings is not None:
+        _require_clean_profile_settings(profile_data.settings)
         # Merge, don't replace: the app only sends the fields it edits, and
         # server-managed keys (duckCount, ...) must survive a profile save.
         merged = dict(user.settings or {})
