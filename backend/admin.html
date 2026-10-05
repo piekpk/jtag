@@ -40,6 +40,9 @@
   <h1>&#128737; Jtap Database Admin</h1>
   <p id="sub">Sign in with an admin account</p>
   <div id="crumb"></div>
+  <div id="aitools" style="display:none; margin-top:10px;">
+    <button style="padding:8px 16px; font-size:13px;" onclick="backfillLore()">✨ Backfill duck lore</button>
+  </div>
 </header>
 <main id="app"></main>
 <script>
@@ -100,11 +103,20 @@ async function loadTables() {
     tables = data.tables;
     sub.textContent = 'Browse every table in the app database';
     crumb.innerHTML = '';
+    document.getElementById('aitools').style.display = 'block';
     app.innerHTML = tables.map(t =>
       `<div class="card" onclick="openTable('${t.table}')">
          <span class="name">${esc(t.table)}</span><span class="count">${t.count}</span><span>&#8250;</span>
        </div>`).join('');
   } catch (e) { /* showLogin already handled auth */ }
+}
+
+async function backfillLore() {
+  if (!confirm('Generate AI lore for every duck missing it? Takes a few minutes on CPU.')) return;
+  try {
+    const data = await api('/admin/duck-types/backfill-lore', { method: 'POST' });
+    alert(`Lore generation started for ${data.ducks} duck(s). Check back in a few minutes, then tap a duck in the pond.`);
+  } catch (e) { alert('Backfill failed: ' + e.message); }
 }
 
 async function openTable(name) {
