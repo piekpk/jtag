@@ -1411,12 +1411,15 @@ def create_listing(photo: UploadFile = File(...), title: str = Form(...),
 
 @app.get("/marketplace")
 def list_marketplace(q: str = None, category: str = None, include_sold: bool = False,
+                     seller_id: int = None,
                      limit: int = 50, offset: int = 0,
                      db: Session = Depends(get_db),
                      current_user: User = Depends(get_current_user)):
     query = db.query(MarketListing)
     if not include_sold:
         query = query.filter(MarketListing.is_sold == False)  # noqa: E712
+    if seller_id:
+        query = query.filter(MarketListing.user_id == seller_id)
     if category and category.lower() != "all":
         query = query.filter(MarketListing.category == category)
     if q and q.strip():

@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { API_URL } from '../config.js';
 import { getAuthHeaders } from '../auth.js';
 import { getInventory, giveDuck, getUserPond, proposeTrade, rarityColor, celebrateMilestones } from '../duckApi.js';
+import { listMarketplace, photoUrl } from '../marketApi.js';
 import { showAlert } from '../themedAlert.js';
 import { platformById, validSocialLinks, normalizeSocialUrl } from '../socialLinks.js';
 
@@ -36,6 +37,10 @@ export default function PublicRigScreen() {
   const [isTrading, setIsTrading] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(null); // index into availablePhotos, null = closed
   const [photoReactions, setPhotoReactions] = useState({ counts: {}, mine: {} });
+  const [listingsVisible, setListingsVisible] = useState(false);
+  const [sellerListings, setSellerListings] = useState([]);
+  const [loadingListings, setLoadingListings] = useState(false);
+  const [selectedListing, setSelectedListing] = useState(null);
 
   const PHOTO_EMOJIS = [
     { key: 'like', emoji: '❤️' },
@@ -201,6 +206,27 @@ export default function PublicRigScreen() {
     if (idx >= 0) setLightboxIndex(idx);
   };
 
+  const formatPrice = (p) => {
+    const n = Number(p);
+    if (!n) return 'Free';
+    return `$${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  };
+
+  const openListings = async () => {
+    setSelectedListing(null);
+    setListingsVisible(true);
+    setLoadingListings(true);
+    try {
+      const data = await listMarketplace({ sellerId: rigId, includeSold: true, limit: 50 });
+      setSellerListings(data.listings || []);
+    } catch (e) {
+      console.error('Failed to load seller listings:', e);
+      setSellerListings([]);
+    } finally {
+      setLoadingListings(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
     <ScrollView style={{ flex: 1 }}>
@@ -253,6 +279,9 @@ export default function PublicRigScreen() {
             <TouchableOpacity style={styles.tradeBtn} onPress={openTradeModal}>
               <Text style={styles.tradeBtnText}>⇄ Propose Duck Trade</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={[styles.tradeBtn, { marginTop: 8 }]} onPress={openListings}>
+              <Text style={styles.tradeBtnText}>🏷️ Marketplace listings</Text>
+            </TouchableOpacity>
           </View>
         </>
       ) : (
@@ -294,6 +323,11 @@ export default function PublicRigScreen() {
         {/* Propose Trade Button */}
         <TouchableOpacity style={styles.tradeBtn} onPress={openTradeModal}>
           <Text style={styles.tradeBtnText}>⇄ Propose Duck Trade</Text>
+        </TouchableOpacity>
+
+        {/* Seller's marketplace listings */}
+        <TouchableOpacity style={[styles.tradeBtn, { marginTop: 8 }]} onPress={openListings}>
+          <Text style={styles.tradeBtnText}>🏷️ Marketplace listings</Text>
         </TouchableOpacity>
       </View>
       )}
@@ -388,6 +422,72 @@ export default function PublicRigScreen() {
             </>
           )}
         </TouchableOpacity>
+      </Modal>
+
+      {/* Seller's marketplace listings */}
+      <Modal
+        visible={listingsVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setListingsVisible(false)}
+      >
+        <View style={styles.listingsOverlay}>
+          <View style={styles.listingsBox}>
+            <Text style={styles.listingsTitle}>
+              {selectedListing ? selectedListing.title : `${ownerName}'s listings`}
+            </Text>
+            {selectedListing ? (
+              <ScrollView style={{ flex: 1 }}>
+                {photoUrl(selectedListing.photo_url) && (
+                  <Image source={{ uri: photoUrl(selectedListing.photo_url) }} style={styles.listingDetailPhoto} resizeMode="cover" />
+                )}
+                <View style={styles.listingDetailBody}>
+                  <View style={styles.listingRow1}>
+                    <Text style={styles.listingDetailTitle}>{selectedListing.title}</Text>
+                    <Text style={styles.listingPrice}>{formatPrice(selectedListing.price)}</Text>
+                  </View>
+                  <Text style={styles.listingMeta}>
+                    {selectedListing.category}{selectedListing.is_sold ? ' · SOLD' : ''}
+                  </Text>
+                  <Text style={styles.listingDesc}>{selectedListing.description}</Text>
+                  <Text style={styles.listingContactLabel}>CONTACT</Text>
+                  <Text style={styles.listingContact}>{selectedListing.contact_info}</Text>
+                  <TouchableOpacity style={styles.listingsBackBtn} onPress={() => setSelectedListing(null)}>
+                    <Text style={styles.listingsBackText}>‹ Back to listings</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            ) : loadingListings ? (
+              <ActivityIndicator size="large" color="#d4af37" style={{ marginVertical: 30 }} />
+            ) : sellerListings.length === 0 ? (
+              <Text style={styles.listingsEmpty}>No marketplace listings yet.</Text>
+            ) : (
+              <FlatList
+                data={sellerListings}
+                keyExtractor={(item) => String(item.id)}
+                renderItem={({ item }) => (
+                  <TouchableOpacity style={styles.listingRow} onPress={() => setSelectedListing(item)} activeOpacity={0.8}>
+                    {photoUrl(item.photo_url) ? (
+                      <Image source={{ uri: photoUrl(item.photo_url) }} style={styles.listingThumb} resizeMode="cover" />
+                    ) : (
+                      <View style={styles.listingThumb} />
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.listingTitle} numberOfLines={1}>{item.title}</Text>
+                      <Text style={styles.listingMeta}>
+                        {formatPrice(item.price)} · {item.category}{item.is_sold ? ' · SOLD' : ''}
+                      </Text>
+                    </View>
+                    <Text style={styles.listingGo}>›</Text>
+                  </TouchableOpacity>
+                )}
+              />
+            )}
+            <TouchableOpacity style={styles.listingsCloseBtn} onPress={() => setListingsVisible(false)}>
+              <Text style={styles.listingsCloseText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
       
       <View style={styles.section}>
@@ -568,6 +668,27 @@ const styles = StyleSheet.create({
   modText: { fontSize: 16, paddingVertical: 6, color: '#ccc', lineHeight: 24 },
   tradeBtn: { marginTop: 12, backgroundColor: '#2c2c2e', borderWidth: 1, borderColor: '#d4af37', paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
   tradeBtnText: { color: '#d4af37', fontWeight: 'bold', fontSize: 15 },
+  listingsOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  listingsBox: { backgroundColor: '#1e1e1e', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 16, paddingHorizontal: 16, paddingBottom: 20, maxHeight: '85%', minHeight: 300 },
+  listingsTitle: { color: '#fff', fontSize: 18, fontWeight: '800', marginBottom: 12, textAlign: 'center' },
+  listingsEmpty: { color: '#888', fontSize: 14, textAlign: 'center', marginVertical: 30 },
+  listingRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#2c2c2e' },
+  listingThumb: { width: 56, height: 56, borderRadius: 10, backgroundColor: '#2c2c2e', marginRight: 12 },
+  listingTitle: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  listingMeta: { color: '#888', fontSize: 12, marginTop: 3 },
+  listingGo: { color: '#d4af37', fontSize: 22, marginLeft: 8 },
+  listingPrice: { color: '#d4af37', fontSize: 16, fontWeight: '800' },
+  listingsCloseBtn: { marginTop: 12, backgroundColor: '#2c2c2e', borderRadius: 10, padding: 12, alignItems: 'center' },
+  listingsCloseText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  listingDetailPhoto: { width: '100%', height: 240, borderRadius: 12, backgroundColor: '#2c2c2e' },
+  listingDetailBody: { paddingVertical: 12 },
+  listingRow1: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  listingDetailTitle: { color: '#fff', fontSize: 17, fontWeight: '800', flex: 1, marginRight: 10 },
+  listingDesc: { color: '#ccc', fontSize: 14, lineHeight: 20, marginTop: 10 },
+  listingContactLabel: { color: '#d4af37', fontSize: 11, fontWeight: '700', letterSpacing: 1, marginTop: 14 },
+  listingContact: { color: '#fff', fontSize: 14, marginTop: 4 },
+  listingsBackBtn: { marginTop: 16, padding: 10, alignItems: 'center' },
+  listingsBackText: { color: '#d4af37', fontSize: 15, fontWeight: '600' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
   modalBox: { backgroundColor: '#1e1e1e', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '80%' },
   modalTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold', marginBottom: 15, textAlign: 'center' },

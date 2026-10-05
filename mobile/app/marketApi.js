@@ -39,11 +39,12 @@ async function reqJson(path, options = {}) {
   }
 }
 
-export function listMarketplace({ q = '', category = 'All', includeSold = false, limit = 50, offset = 0 } = {}) {
+export function listMarketplace({ q = '', category = 'All', includeSold = false, sellerId = null, limit = 50, offset = 0 } = {}) {
   const params = new URLSearchParams({
     q, category, limit: String(limit), offset: String(offset),
   });
   if (includeSold) params.set('include_sold', 'true');
+  if (sellerId) params.set('seller_id', String(sellerId));
   return reqJson(`/marketplace?${params.toString()}`);
 }
 
