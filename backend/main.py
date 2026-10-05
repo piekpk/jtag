@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, Milestone, PhotoReaction, MarketListing, Notification, Meetup, MeetupRsvp
 from schemas import UserProfileUpdate, UserProfileResponse, UserCreate
 import duck_ai
+import profanity
 
 # Password hashing setup
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -1405,6 +1406,16 @@ def _fan_out_meetup_alerts(db: Session, m: Meetup, title: str, host_name: str):
         print(f"Meetup alert fan-out failed: {e}")
 
 
+def _require_clean(*texts: str) -> None:
+    """Reject postings containing vulgar language (marketplace, meetups)."""
+    try:
+        profanity.assert_clean(*texts)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Please keep postings family-friendly — remove the profanity and try again.")
+
+
 @app.post("/meetups")
 def create_meetup(payload: MeetupCreate, db: Session = Depends(get_db),
                   current_user: User = Depends(get_current_user)):
@@ -1413,6 +1424,7 @@ def create_meetup(payload: MeetupCreate, db: Session = Depends(get_db),
         raise HTTPException(status_code=400, detail="Give your meetup a title")
     if len(title) > 80:
         raise HTTPException(status_code=400, detail="Title is too long (max 80 characters)")
+    _require_clean(title, payload.description)
     now = datetime.utcnow()
     start_time = _as_naive_utc(payload.start_time)
     end_time = _as_naive_utc(payload.end_time)
@@ -1663,6 +1675,7 @@ def create_listing(photo: UploadFile = File(...), title: str = Form(...),
         raise HTTPException(status_code=400, detail="Title, description, and contact info are required")
     if len(title) > 120:
         raise HTTPException(status_code=400, detail="Title too long (120 chars max)")
+    _require_clean(title, description, contact_info)
     if price < 0:
         raise HTTPException(status_code=400, detail="Price cannot be negative")
     if not photo.content_type or not photo.content_type.startswith("image/"):
@@ -2403,6 +2416,7 @@ def admin_create_meetup(payload: AdminMeetupCreate,
         raise HTTPException(status_code=400, detail="Give the meetup a title")
     if len(title) > 80:
         raise HTTPException(status_code=400, detail="Title is too long (max 80 characters)")
+    _require_clean(title, payload.description)
     if not (-90 <= payload.latitude <= 90) or not (-180 <= payload.longitude <= 180):
         raise HTTPException(status_code=400, detail="Invalid coordinates")
     now = datetime.utcnow()
