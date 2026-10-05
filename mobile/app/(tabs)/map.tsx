@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, View, Text, ActivityIndicator, TouchableOpacity, Modal, TextInput, StatusBar, Platform, KeyboardAvoidingView, ScrollView } from 'react-native';
+import { StyleSheet, View, Text, ActivityIndicator, TouchableOpacity, Modal, TextInput, StatusBar, Platform, KeyboardAvoidingView, ScrollView, Linking } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -181,6 +181,13 @@ export default function RadarMapScreen() {
     }
   };
 
+  const handleNavigateToDrop = () => {
+    if (!selectedDrop) return;
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${selectedDrop.latitude},${selectedDrop.longitude}&travelmode=driving`;
+    Linking.openURL(url).catch(() =>
+      showAlert("Couldn't open maps", "No map app available on this device."));
+  };
+
   if (errorMsg) {
     return <View style={styles.centerContainer}><Text>{errorMsg}</Text></View>;
   }
@@ -337,6 +344,11 @@ export default function RadarMapScreen() {
               <Text style={styles.dropHint}>
                 {Math.round(selectedDrop.distance_m)}m away — get within {Math.round(selectedDrop.radius_m)}m to claim
               </Text>
+            )}
+            {!inRange && !selectedDrop.claimed_by_me && (
+              <TouchableOpacity style={styles.navBtn} onPress={handleNavigateToDrop} activeOpacity={0.8}>
+                <Text style={styles.navBtnText}>🧭 Navigate there</Text>
+              </TouchableOpacity>
             )}
             {selectedDrop.claimed_by_me && (
               <Text style={styles.dropHint}>Already claimed ✓</Text>
@@ -563,6 +575,8 @@ const styles = StyleSheet.create({
   dropHint: { color: '#888', fontSize: 12, marginTop: 4 },
   dropClue: { color: '#d4af37', fontSize: 13, fontStyle: 'italic', marginTop: 6, lineHeight: 18 },
   claimBtn: { backgroundColor: '#d4af37', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 10, marginLeft: 10 },
+  navBtn: { marginTop: 8, alignSelf: 'flex-start', borderWidth: 1, borderColor: '#d4af37', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14 },
+  navBtnText: { color: '#d4af37', fontWeight: 'bold', fontSize: 13 },
   claimBtnText: { color: '#121212', fontWeight: 'bold', fontSize: 15 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
   modalBox: { backgroundColor: '#1e1e1e', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '85%' },
