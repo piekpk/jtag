@@ -21,6 +21,9 @@ export default function TabLayout() {
       initialRouteName="profile"
       screenOptions={{
         headerShown: false,
+        // Hide the tab bar while the keyboard is open so it can't cover
+        // text inputs (e.g. the Trail Chat message box).
+        tabBarHideOnKeyboard: true,
         tabBarStyle: {
           backgroundColor: '#1a1a1a',
           borderTopColor: '#2c2c2e',
