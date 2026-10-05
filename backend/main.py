@@ -2106,7 +2106,31 @@ def admin_delete_row(name: str, row_id: int,
     """Delete a single row. The duck catalog and your own admin account are protected."""
     _admin_table_or_404(name)
     if name == "duck_types":
-        raise HTTPException(status_code=403, detail="The duck catalog cannot be deleted")
+        # Guarded delete: a duck with no references can go; one that's owned,
+        # dropped, traded, or in the give history is blocked with the reason.
+        row = db.query(model).filter(model.id == row_id).first() if (model := ADMIN_TABLES.get(name)) else None
+        if not row:
+            raise HTTPException(status_code=404, detail="Row not found")
+        blockers = []
+        if db.query(UserDuck).filter(UserDuck.duck_type_id == row_id, UserDuck.count > 0).count():
+            blockers.append("owned by users")
+        if db.query(DuckDrop).filter(DuckDrop.duck_type_id == row_id).count():
+            blockers.append("used by duck drops")
+        if db.query(Trade).filter(
+                or_(Trade.offered_duck_type_id == row_id,
+                    Trade.requested_duck_type_id == row_id),
+                Trade.status == "pending").count():
+            blockers.append("in open trades")
+        if db.query(DuckGive).filter(DuckGive.duck_type_id == row_id).count():
+            blockers.append("in give history")
+        if blockers:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Can't delete this duck: {', '.join(blockers)}. "
+                       f"Remove those references first.")
+        db.delete(row)
+        db.commit()
+        return {"deleted": True}
     if name == "users" and row_id == admin.id:
         raise HTTPException(status_code=403, detail="You cannot delete your own admin account")
     if name == "messages":

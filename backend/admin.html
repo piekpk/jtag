@@ -195,7 +195,12 @@ async function api(path, opts = {}) {
   const token = sessionStorage.getItem('jtap_admin_token');
   const res = await fetch(path, { ...opts,
     headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } });
-  if (res.status === 401 || res.status === 403) { showLogin('Not signed in as admin.'); throw new Error('auth'); }
+  if (res.status === 401) { showLogin('Not signed in as admin.'); throw new Error('auth'); }
+  if (res.status === 403) {
+    let msg = 'forbidden';
+    try { const j = await res.json(); if (j && j.detail) msg = j.detail; } catch (e) {}
+    throw new Error(msg);
+  }
   if (!res.ok) throw new Error(await res.text().catch(() => res.status));
   return res.json();
 }
