@@ -1888,3 +1888,29 @@ def admin_create_drop(payload: AdminDropCreate, background_tasks: BackgroundTask
     db.refresh(drop)
     background_tasks.add_task(duck_ai.generate_clue_for_drop, drop.id)
     return {"id": drop.id, "message": "Drop is live!"}
+
+
+class BroadcastCreate(BaseModel):
+    message: str
+
+
+@app.post("/admin/broadcast")
+def admin_broadcast(payload: BroadcastCreate, db: Session = Depends(get_db),
+                    admin: User = Depends(require_admin)):
+    """Post a message to global chat as the admin."""
+    text = (payload.message or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Message is required")
+    if len(text) > 500:
+        raise HTTPException(status_code=400, detail="Message too long (500 chars max)")
+    conn = get_raw_db()
+    try:
+        conn.execute(MESSAGE_TABLE_DDL)
+        cur = conn.execute(
+            "INSERT INTO messages (user_id, message, timestamp, reactions, channel) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (admin.id, text, datetime.utcnow(), "{}", "global"))
+        conn.commit()
+        return {"id": cur.lastrowid, "message": text}
+    finally:
+        conn.close()
