@@ -1,14 +1,26 @@
 // Shared social-link platform config for profile edit + public profile views.
 // Stored on the user as settings.socialLinks: [{ platform: 'instagram', url: 'https://...' }]
 
+// Brand icons bundled in mobile/assets/social/ (Simple Icons, brand colors;
+// X / TikTok / Threads in white since their brand color is black-on-dark).
+const ICONS = {
+  instagram: require('../assets/social/instagram.png'),
+  facebook: require('../assets/social/facebook.png'),
+  tiktok: require('../assets/social/tiktok.png'),
+  youtube: require('../assets/social/youtube.png'),
+  x: require('../assets/social/x.png'),
+  reddit: require('../assets/social/reddit.png'),
+  threads: require('../assets/social/threads.png'),
+};
+
 export const SOCIAL_PLATFORMS = [
-  { id: 'instagram', name: 'Instagram', icon: '📸', placeholder: 'instagram.com/yourname' },
-  { id: 'facebook', name: 'Facebook', icon: '📘', placeholder: 'facebook.com/yourname' },
-  { id: 'tiktok', name: 'TikTok', icon: '🎵', placeholder: 'tiktok.com/@yourname' },
-  { id: 'youtube', name: 'YouTube', icon: '▶️', placeholder: 'youtube.com/@yourchannel' },
-  { id: 'x', name: 'X', icon: '✖️', placeholder: 'x.com/yourname' },
-  { id: 'reddit', name: 'Reddit', icon: '👽', placeholder: 'reddit.com/u/yourname' },
-  { id: 'threads', name: 'Threads', icon: '🧵', placeholder: 'threads.com/@yourname' },
+  { id: 'instagram', name: 'Instagram', icon: ICONS.instagram, placeholder: 'instagram.com/yourname' },
+  { id: 'facebook', name: 'Facebook', icon: ICONS.facebook, placeholder: 'facebook.com/yourname' },
+  { id: 'tiktok', name: 'TikTok', icon: ICONS.tiktok, placeholder: 'tiktok.com/@yourname' },
+  { id: 'youtube', name: 'YouTube', icon: ICONS.youtube, placeholder: 'youtube.com/@yourchannel' },
+  { id: 'x', name: 'X', icon: ICONS.x, placeholder: 'x.com/yourname' },
+  { id: 'reddit', name: 'Reddit', icon: ICONS.reddit, placeholder: 'reddit.com/u/yourname' },
+  { id: 'threads', name: 'Threads', icon: ICONS.threads, placeholder: 'threads.com/@yourname' },
 ];
 
 export function platformById(id) {

@@ -265,7 +265,7 @@ export default function MyRigScreen() {
                   style={styles.socBtn}
                   onPress={() => Linking.openURL(normalizeSocialUrl(l.url)).catch(() => {})}
                 >
-                  <Text style={styles.socIcon}>{p.icon}</Text>
+                  <Image source={p.icon} style={styles.socImg} />
                 </TouchableOpacity>
               );
             })}
@@ -314,7 +314,7 @@ export default function MyRigScreen() {
             if (!p) return null;
             return (
               <View key={l.platform} style={styles.socialItem}>
-                <View style={styles.socialItemIcon}><Text style={styles.socIcon}>{p.icon}</Text></View>
+                <View style={styles.socialItemIcon}><Image source={p.icon} style={styles.socImg} /></View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.socialItemName}>{p.name}</Text>
                   <Text style={styles.socialItemUrl} numberOfLines={1}>{l.url}</Text>
@@ -409,7 +409,7 @@ export default function MyRigScreen() {
                   disabled={added}
                   onPress={() => { setUrlPlatform(p.id); setUrlValue(''); setShowPicker(false); }}
                 >
-                  <View style={styles.socialItemIcon}><Text style={styles.socIcon}>{p.icon}</Text></View>
+                  <View style={styles.socialItemIcon}><Image source={p.icon} style={styles.socImg} /></View>
                   <Text style={styles.platformName}>{p.name}</Text>
                   <Text style={styles.platformGo}>{added ? 'Added ✓' : '›'}</Text>
                 </TouchableOpacity>
@@ -430,7 +430,7 @@ export default function MyRigScreen() {
               const p = platformById(urlPlatform);
               return (
                 <>
-                  <View style={styles.urlIconWrap}><Text style={styles.urlIcon}>{p.icon}</Text></View>
+                  <View style={styles.urlIconWrap}><Image source={p.icon} style={styles.urlImg} /></View>
                   <Text style={styles.modalTitle}>{p.name}</Text>
                   <TextInput
                     style={styles.urlInput}
@@ -488,7 +488,7 @@ const styles = StyleSheet.create({
   coverLabel: { color: '#d4af37', fontWeight: '600', fontSize: 13, marginBottom: 8 },
   socialRow: { flexDirection: 'row', marginTop: 12 },
   socBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#1e1e1e', borderWidth: 1, borderColor: '#2c2c2e', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
-  socIcon: { fontSize: 19 },
+  socImg: { width: 22, height: 22, resizeMode: 'contain' },
   socialSection: { paddingHorizontal: 10, marginBottom: 12 },
   socialItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1e1e1e', borderRadius: 12, padding: 10, marginBottom: 8 },
   socialItemIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#2c2c2e', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
@@ -508,7 +508,7 @@ const styles = StyleSheet.create({
   modalCancel: { marginTop: 14, padding: 12, alignItems: 'center' },
   modalCancelText: { color: '#888', fontSize: 15, fontWeight: '600' },
   urlIconWrap: { width: 64, height: 64, borderRadius: 18, backgroundColor: '#2c2c2e', borderWidth: 1, borderColor: '#d4af37', justifyContent: 'center', alignItems: 'center', alignSelf: 'center', marginBottom: 8 },
-  urlIcon: { fontSize: 30 },
+  urlImg: { width: 34, height: 34, resizeMode: 'contain' },
   urlInput: { backgroundColor: '#2c2c2e', borderRadius: 10, padding: 14, color: '#fff', fontSize: 15, marginTop: 12 },
   urlHint: { color: '#888', fontSize: 12, marginTop: 6, textAlign: 'center' },
   urlAddBtn: { backgroundColor: '#d4af37', borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 14 },

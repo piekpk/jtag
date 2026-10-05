@@ -242,7 +242,7 @@ export default function PublicRigScreen() {
                       style={styles.socBtn}
                       onPress={() => Linking.openURL(normalizeSocialUrl(l.url)).catch(() => {})}
                     >
-                      <Text style={styles.socIcon}>{platformById(l.platform).icon}</Text>
+                      <Image source={platformById(l.platform).icon} style={styles.socImg} />
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -273,7 +273,7 @@ export default function PublicRigScreen() {
                     style={styles.socBtn}
                     onPress={() => Linking.openURL(normalizeSocialUrl(l.url)).catch(() => {})}
                   >
-                    <Text style={styles.socIcon}>{platformById(l.platform).icon}</Text>
+                    <Image source={platformById(l.platform).icon} style={styles.socImg} />
                   </TouchableOpacity>
                 ))}
               </View>
@@ -511,7 +511,7 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 15, color: '#d4af37', marginTop: 4, fontWeight: '600' },
   socialRow: { flexDirection: 'row', marginTop: 10 },
   socBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(30,30,30,0.85)', borderWidth: 1, borderColor: '#2c2c2e', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
-  socIcon: { fontSize: 19 },
+  socImg: { width: 22, height: 22, resizeMode: 'contain' },
   duckBtn: { 
     flexDirection: 'row', 
     alignItems: 'center', 
