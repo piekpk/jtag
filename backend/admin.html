@@ -26,6 +26,9 @@
   .rowline .sum { color: #ccc; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   button { background: var(--gold); color: #121212; border: 0; border-radius: 10px; padding: 12px 20px; font-weight: 700; cursor: pointer; font-size: 14px; }
   button.ghost { background: var(--surface); color: #fff; }
+  .tooltab { background: transparent; border: 1px solid #555; color: #ccc; border-radius: 20px;
+    padding: 8px 14px; font-size: 13px; white-space: nowrap; margin-top: 0; width: auto; flex: none; }
+  .tooltab.active { background: var(--gold); border-color: var(--gold); color: #111; font-weight: 700; }
   button.danger { background: transparent; border: 1px solid #5a2a2a; color: #ff5a5a; width: 100%; margin-top: 12px; }
   input { width: 100%; background: var(--surface); border: 1px solid #444; color: #fff; border-radius: 10px; padding: 12px; margin-bottom: 10px; font-size: 14px; }
   textarea { width: 100%; background: var(--surface); border: 1px solid #444; color: #fff; border-radius: 10px; padding: 12px; margin-bottom: 10px; font-size: 14px; font-family: inherit; }
@@ -43,24 +46,25 @@
   <p id="sub">Sign in with an admin account</p>
   <div id="crumb"></div>
   <div id="aitools" style="display:none; margin-top:10px;">
-    <div style="display:flex; gap:10px; flex-wrap:wrap;">
-    <div style="background:var(--card); border-radius:10px; padding:12px; flex:1; min-width:280px; max-width:420px;">
+    <div id="toolmenu" style="display:flex; gap:8px; overflow-x:auto; padding-bottom:4px;"></div>
+    <div id="toolpanes" style="margin-top:10px;">
+    <div id="tool-broadcast" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:480px; display:none;">
       <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">📢 Broadcast to global chat</div>
       <input id="b_msg" placeholder="Announcement message…" maxlength="500" style="margin-bottom:8px;">
       <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="broadcast()">Send broadcast</button>
     </div>
-    <div style="background:var(--card); border-radius:10px; padding:12px; flex:1; min-width:280px; max-width:420px;">
+    <div id="tool-lookup" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:480px; display:none;">
       <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">🔍 Find a user</div>
       <div style="display:flex; gap:8px;">
         <input id="l_email" type="email" placeholder="User email" style="margin-bottom:8px; flex:1;">
         <button style="padding:8px 16px; font-size:13px; margin-bottom:8px;" onclick="lookupUser()">Go</button>
       </div>
     </div>
-    <div style="background:var(--card); border-radius:10px; padding:12px; flex:1; min-width:280px; max-width:420px;">
+    <div id="tool-mod" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:480px; display:none;">
       <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">🛒 Marketplace moderation</div>
       <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="reviewListings()">Review newest listings</button>
     </div>
-    <div style="background:var(--card); border-radius:10px; padding:12px; flex:1; min-width:280px; max-width:420px;">
+    <div id="tool-drop" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:480px; display:none;">
       <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">📍 Create duck drop</div>
       <select id="p_duck" style="margin-bottom:8px;"></select>
       <div style="display:flex; gap:8px;">
@@ -75,7 +79,7 @@
       <input id="p_label" placeholder="Label (optional)" style="margin-bottom:8px;">
       <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="createDrop()">Drop it</button>
     </div>
-    <div style="background:var(--card); border-radius:10px; padding:12px; flex:1; min-width:280px; max-width:420px;">
+    <div id="tool-give" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:480px; display:none;">
       <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">🎁 Give or take ducks</div>
       <input id="g_email" type="email" placeholder="User email" style="margin-bottom:8px;">
       <div style="display:flex; gap:8px;">
@@ -85,7 +89,7 @@
       <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="grantDuck()">Give / take ducks</button>
       <button style="padding:8px 16px; font-size:13px; width:100%; margin-top:8px;" onclick="backfillLore()">✨ Backfill duck lore</button>
     </div>
-    <div style="background:var(--card); border-radius:10px; padding:12px; flex:1; min-width:280px; max-width:420px;">
+    <div id="tool-create" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:480px; display:none;">
       <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">➕ Create duck type</div>
       <input id="d_name" placeholder="Name (e.g. Trail Boss Duck)" style="margin-bottom:8px;">
       <div style="display:flex; gap:8px;">
@@ -107,7 +111,6 @@
       </div>
       <div style="margin-bottom:8px;"></div>
       <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="createDuckType()">Create duck type</button>
-    </div>
     </div>
   </div>
 </header>
@@ -164,6 +167,30 @@ function showLogin(msg) {
   document.getElementById('pw').onkeydown = e => { if (e.key === 'Enter') doLogin(); };
 }
 
+const TOOLS = [
+  ["tool-broadcast", "📢 Broadcast"],
+  ["tool-lookup", "🔍 Find user"],
+  ["tool-mod", "🛒 Moderation"],
+  ["tool-drop", "📍 Create drop"],
+  ["tool-give", "🎁 Give ducks"],
+  ["tool-create", "➕ New duck"],
+];
+
+function buildToolMenu() {
+  const menu = document.getElementById('toolmenu');
+  menu.innerHTML = TOOLS.map(([id, label]) =>
+    `<button class="tooltab" id="tab-${id}" onclick="showTool('${id}')">${label}</button>`).join('');
+}
+
+function showTool(id) {
+  document.querySelectorAll('.toolcard').forEach(el => {
+    el.style.display = el.id === id ? 'block' : 'none';
+  });
+  document.querySelectorAll('.tooltab').forEach(el => {
+    el.classList.toggle('active', el.id === 'tab-' + id);
+  });
+}
+
 async function loadTables() {
   try {
     const data = await api('/admin/overview');
@@ -171,6 +198,8 @@ async function loadTables() {
     sub.textContent = 'Browse every table in the app database';
     crumb.innerHTML = '';
     document.getElementById('aitools').style.display = 'block';
+    buildToolMenu();
+    showTool('tool-broadcast');
     loadDuckOptions();
     loadDuckSprites();
     let statsHtml = '';
