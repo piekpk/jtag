@@ -346,7 +346,11 @@ def update_profile(user_id: int, profile_data: UserProfileUpdate, db: Session = 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if profile_data.settings is not None:
-        user.settings = profile_data.settings
+        # Merge, don't replace: the app only sends the fields it edits, and
+        # server-managed keys (duckCount, ...) must survive a profile save.
+        merged = dict(user.settings or {})
+        merged.update(profile_data.settings)
+        user.settings = merged
     db.commit()
     db.refresh(user)
     return user
