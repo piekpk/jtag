@@ -2,6 +2,7 @@ export default {
   "expo": {
     "name": "Jtap",
     "slug": "jtap",
+    "owner": "piekpks-team",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
