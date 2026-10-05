@@ -29,3 +29,10 @@ export const setPushToken = (token) =>
     method: 'POST',
     body: JSON.stringify({ token: token || '' }),
   });
+
+/** Register this device's native FCM token for direct push (empty clears it). */
+export const setFcmToken = (token) =>
+  req('/users/me/fcm-token', {
+    method: 'POST',
+    body: JSON.stringify({ fcm_token: token || '' }),
+  });

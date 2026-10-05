@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
-import { setPushToken } from './notificationsApi.js';
+import { setPushToken, setFcmToken } from './notificationsApi.js';
 
 // In-app floating toasts (NotificationToast) are the foreground alert now,
 // so the OS does not banner or chime while the app is open. Background
@@ -57,6 +57,17 @@ export async function registerPushToken() {
     const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
     await setPushToken(token);
     console.log('Push token registered.');
+    // Native FCM token lets the backend deliver pushes directly through
+    // Firebase (no Expo middleman). Best-effort: failures are logged only.
+    try {
+      const dev = await Notifications.getDevicePushTokenAsync();
+      if (dev && dev.type === 'android' && dev.data) {
+        await setFcmToken(dev.data);
+        console.log('Native FCM token registered.');
+      }
+    } catch (e) {
+      console.log('Native FCM token failed:', e?.message || e);
+    }
     return token;
   } catch (e) {
     console.log('Push registration failed:', e?.message || e);

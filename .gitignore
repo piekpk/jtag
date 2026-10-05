@@ -24,3 +24,7 @@ mobile/android/.gradle/
 Thumbs.db
 # Firebase (contains API keys - add locally, do not commit)
 mobile/android/app/google-services.json
+# Firebase service-account private keys - NEVER commit
+backend/fcm-service-account.json
+fcm-service-account*.json
+*-firebase-adminsdk-*.json

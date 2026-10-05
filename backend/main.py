@@ -23,6 +23,7 @@ import duck_ai
 import profanity
 import holiday_ducks
 import jtapbot
+import fcm_direct
 
 # Password hashing setup
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -113,6 +114,19 @@ def _ensure_push_token_column():
         conn.close()
 
 
+def _ensure_fcm_token_column():
+    """Lightweight migration: add users.fcm_token for direct FCM delivery."""
+    conn = get_raw_db()
+    try:
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(users)")]
+        if "fcm_token" not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN fcm_token TEXT")
+            conn.commit()
+            print("Migration: added users.fcm_token column.")
+    finally:
+        conn.close()
+
+
 def _install_duck_sprites():
     """Copy the bundled duck sprite library into the uploads dir.
 
@@ -185,6 +199,7 @@ _ensure_is_banned_column()
 _ensure_duck_ai_columns()
 _ensure_duck_image_column()
 _ensure_push_token_column()
+_ensure_fcm_token_column()
 _install_duck_sprites()
 _bootstrap_admins()
 
@@ -1233,7 +1248,12 @@ def _notify_user(db: Session, user_id: int, ntype: str, title: str, body: str, d
     """Create an in-app notification and mirror it as a push if the user has a token."""
     db.add(Notification(user_id=user_id, type=ntype, title=title, body=body, data=data))
     user = db.query(User).filter(User.id == user_id).first()
-    if user and user.push_token:
+    if not user:
+        return
+    # Direct FCM first (no Expo middleman); fall back to the Expo Push API.
+    if user.fcm_token and fcm_direct.send_fcm_direct(user.fcm_token, title, body, data):
+        return
+    if user.push_token:
         _send_expo_push(user.push_token, title, body, data)
 
 
@@ -1294,6 +1314,22 @@ def set_push_token(payload: PushTokenUpdate, db: Session = Depends(get_db),
     if token and not token.startswith("ExponentPushToken["):
         raise HTTPException(status_code=400, detail="Not a valid Expo push token")
     current_user.push_token = token or None
+    db.commit()
+    return {"ok": True}
+
+
+class FCMTokenUpdate(BaseModel):
+    fcm_token: str = ""
+
+
+@app.post("/users/me/fcm-token")
+def set_fcm_token(payload: FCMTokenUpdate, db: Session = Depends(get_db),
+                  current_user: User = Depends(get_current_user)):
+    """Register (or clear) the current device's native FCM token for direct push."""
+    token = (payload.fcm_token or "").strip()
+    if token and len(token) < 20:
+        raise HTTPException(status_code=400, detail="Not a valid FCM token")
+    current_user.fcm_token = token or None
     db.commit()
     return {"ok": True}
 

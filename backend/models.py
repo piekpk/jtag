@@ -17,6 +17,7 @@ class User(Base):
     is_admin = Column(Boolean, nullable=False, default=False, server_default="0")
     is_banned = Column(Boolean, nullable=False, default=False, server_default="0")
     push_token = Column(String, nullable=True)  # Expo push token for duck/push notifications
+    fcm_token = Column(String, nullable=True)  # native Android FCM token (direct push, no Expo)
 
 
 # --- Duck Game Models ---
