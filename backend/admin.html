@@ -52,13 +52,13 @@
       </div>
     </div>
     <div style="background:var(--card); border-radius:10px; padding:12px; flex:1; min-width:280px; max-width:420px;">
-      <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">🎁 Give ducks to a user</div>
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">🎁 Give or take ducks</div>
       <input id="g_email" type="email" placeholder="User email" style="margin-bottom:8px;">
       <div style="display:flex; gap:8px;">
         <select id="g_duck" style="flex:1;"></select>
-        <input id="g_qty" type="number" value="1" min="1" max="100" style="width:70px; margin-bottom:8px;">
+        <input id="g_qty" type="number" value="1" min="-100" max="100" style="width:70px; margin-bottom:8px;" title="Negative removes ducks">
       </div>
-      <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="grantDuck()">Give ducks</button>
+      <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="grantDuck()">Give / take ducks</button>
       <button style="padding:8px 16px; font-size:13px; width:100%; margin-top:8px;" onclick="backfillLore()">✨ Backfill duck lore</button>
     </div>
     <div style="background:var(--card); border-radius:10px; padding:12px; flex:1; min-width:280px; max-width:420px;">
@@ -232,7 +232,7 @@ async function grantDuck() {
   try {
     const data = await api('/admin/ducks/grant', { method: 'POST',
       body: JSON.stringify({ email, duck_type_id, qty }) });
-    alert(`Gave ${data.qty}x duck to ${data.email}.`);
+    alert(qty < 0 ? `Removed ${data.removed}x duck from ${data.email}.` : `Gave ${data.qty}x duck to ${data.email}.`);
     document.getElementById('g_email').value = '';
   } catch (e) { alert('Grant failed: ' + e.message); }
 }

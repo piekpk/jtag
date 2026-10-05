@@ -863,6 +863,17 @@ def _grant_duck(db: Session, user_id: int, duck_type_id: int, qty: int = 1):
                         count=qty, first_received_at=now))
 
 
+def _remove_duck(db: Session, user_id: int, duck_type_id: int, qty: int) -> int:
+    """Remove up to qty ducks from a user's inventory. Clamps at zero. Returns removed."""
+    row = db.query(UserDuck).filter(
+        UserDuck.user_id == user_id, UserDuck.duck_type_id == duck_type_id).first()
+    if not row or row.count <= 0:
+        return 0
+    removed = min(qty, row.count)
+    row.count -= removed
+    return removed
+
+
 def _spend_duck(db: Session, user_id: int, duck_type_id: int, qty: int = 1):
     row = db.query(UserDuck).filter(
         UserDuck.user_id == user_id, UserDuck.duck_type_id == duck_type_id).first()
@@ -1704,16 +1715,23 @@ def admin_create_duck_type(payload: DuckTypeCreate, db: Session = Depends(get_db
 @app.post("/admin/ducks/grant")
 def admin_grant_duck(payload: DuckGrant, db: Session = Depends(get_db),
                      admin: User = Depends(require_admin)):
-    """Give ducks to a user by email. Unlocks the pond entry and adds spendable ducks."""
+    """Give ducks to a user by email, or take them away with a negative qty.
+    Unlocks the pond entry and adds spendable ducks. Removal clamps at zero."""
     user = db.query(User).filter(User.email == (payload.email or "").strip().lower()).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     _duck_type_or_404(db, payload.duck_type_id)
-    qty = max(1, min(payload.qty or 1, 100))
-    _grant_duck(db, user.id, payload.duck_type_id, qty)
+    qty = payload.qty or 0
+    if qty == 0 or abs(qty) > 100:
+        raise HTTPException(status_code=400, detail="Qty must be between -100 and 100, excluding 0")
+    removed = 0
+    if qty > 0:
+        _grant_duck(db, user.id, payload.duck_type_id, qty)
+    else:
+        removed = _remove_duck(db, user.id, payload.duck_type_id, -qty)
     db.commit()
     return {"granted": True, "email": user.email,
-            "duck_type_id": payload.duck_type_id, "qty": qty}
+            "duck_type_id": payload.duck_type_id, "qty": qty, "removed": removed}
 
 
 @app.get("/admin/stats")
