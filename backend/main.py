@@ -662,23 +662,32 @@ def react_to_message(message_id: int, reaction: ReactionCreate, current_user: Us
 
 DUCK_CATALOG = [
     {"slug": "classic_yellow", "name": "Classic Duck", "rarity": "common", "emoji": "🐤",
-     "description": "The original. Every Jeeper starts here.", "seasonal": None},
+     "description": "The original. Every Jeeper starts here.", "seasonal": None,
+     "image_url": "/uploads/ducks/classic/classic-plain.png"},
     {"slug": "mud_duck", "name": "Mud Duck", "rarity": "common", "emoji": "🦆",
-     "description": "Fresh from the pit.", "seasonal": None},
+     "description": "Fresh from the pit.", "seasonal": None,
+     "image_url": "/uploads/ducks/classic/classic-mud.png"},
     {"slug": "golden_duck", "name": "Golden Duck", "rarity": "rare", "emoji": "🐥",
-     "description": "24-karat trail bling.", "seasonal": None},
+     "description": "24-karat trail bling.", "seasonal": None,
+     "image_url": "/uploads/ducks/classic/classic-07.png"},
     {"slug": "glow_duck", "name": "Glow Duck", "rarity": "rare", "emoji": "✨",
-     "description": "Charges by day, glows by night.", "seasonal": None},
+     "description": "Charges by day, glows by night.", "seasonal": None,
+     "image_url": "/uploads/ducks/classic/classic-08.png"},
     {"slug": "frost_duck", "name": "Frost Duck", "rarity": "rare", "emoji": "❄️",
-     "description": "Only drops in the cold months.", "seasonal": "winter"},
+     "description": "Only drops in the cold months.", "seasonal": "winter",
+     "image_url": "/uploads/ducks/holidays/holidays-12.png"},
     {"slug": "black_gold", "name": "Black & Gold Duck", "rarity": "epic", "emoji": "🖤",
-     "description": "Matches the app. Obviously the best one.", "seasonal": None},
+     "description": "Matches the app. Obviously the best one.", "seasonal": None,
+     "image_url": "/uploads/ducks/classic/classic-20.png"},
     {"slug": "camo_duck", "name": "Camo Duck", "rarity": "epic", "emoji": "🪖",
-     "description": "You didn't see it. That's the point.", "seasonal": None},
+     "description": "You didn't see it. That's the point.", "seasonal": None,
+     "image_url": "/uploads/ducks/classic/classic-03.png"},
     {"slug": "diamond_duck", "name": "Diamond Duck", "rarity": "legendary", "emoji": "💎",
-     "description": "One in a thousand.", "seasonal": None},
+     "description": "One in a thousand.", "seasonal": None,
+     "image_url": "/uploads/ducks/classic/classic-18.png"},
     {"slug": "spooky_duck", "name": "Spooky Duck", "rarity": "legendary", "emoji": "🎃",
-     "description": "Only drops in October.", "seasonal": "halloween"},
+     "description": "Only drops in October.", "seasonal": "halloween",
+     "image_url": "/uploads/ducks/horror/horror-10.png"},
 ]
 
 STARTER_DUCK_SLUG = "classic_yellow"
@@ -698,13 +707,18 @@ def seed_duck_types():
                 db.add(dt)
                 db.flush()
                 new_ids.append(dt.id)
+            elif not existing.image_url and d.get("image_url"):
+                # Backfill sprites for ducks seeded before image_url existed.
+                existing.image_url = d["image_url"]
         if new_ids:
             db.commit()
             print(f"Seeded {len(new_ids)} new duck type(s).")
+        else:
+            db.commit()
+    finally:
         # AI lore for newcomers (background; no-op if the LLM is unreachable).
         for duck_id in new_ids:
             duck_ai.generate_lore_for_duck(duck_id)
-    finally:
         db.close()
 
 
