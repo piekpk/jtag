@@ -548,9 +548,18 @@ export default function RadarMapScreen() {
         <View style={styles.dropCard}>
           <View style={{ flex: 1 }}>
             <Text style={styles.dropTitle}>📍 {selectedMeetup.title}</Text>
-            <Text style={styles.dropMeta}>
-              {formatMeetupTime(selectedMeetup.start_time)} – {formatMeetupTime(selectedMeetup.end_time)}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={[styles.dropMeta, { flex: 1 }]}>
+                {formatMeetupTime(selectedMeetup.start_time)} – {formatMeetupTime(selectedMeetup.end_time)}
+              </Text>
+              <TouchableOpacity
+                style={styles.calChip}
+                onPress={handleAddToCalendar}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.calChipText}>📅 Add</Text>
+              </TouchableOpacity>
+            </View>
             <Text style={styles.dropMeta}>
               Hosted by {selectedMeetup.host_name} • {formatDistance(selectedMeetup.distance_m)}
             </Text>
@@ -567,13 +576,6 @@ export default function RadarMapScreen() {
                 activeOpacity={0.8}
               >
                 <Text style={styles.navBtnText}>🧭 Navigate there</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.navBtn, { marginRight: 8, marginBottom: 8 }]}
-                onPress={handleAddToCalendar}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.navBtnText}>📅 Add to calendar</Text>
               </TouchableOpacity>
               {String(selectedMeetup.created_by) === String(myUserId) && (
                 <TouchableOpacity
@@ -1033,4 +1035,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12, alignItems: 'center',
   },
   dateTimeBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  calChip: {
+    flexDirection: 'row', alignItems: 'center', flexShrink: 0,
+    borderWidth: 1, borderColor: '#d4af37', borderRadius: 14,
+    paddingVertical: 5, paddingHorizontal: 10, marginLeft: 8,
+  },
+  calChipText: { color: '#d4af37', fontSize: 12, fontWeight: '700' },
 });
