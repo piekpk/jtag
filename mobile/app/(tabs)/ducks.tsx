@@ -7,6 +7,7 @@ import {
   getMyPond, getTrades, acceptTrade, declineTrade, cancelTrade,
   getLeaderboard, getDuckFeed, rarityColor, getMilestones, celebrateMilestones,
 } from '../duckApi.js';
+import DuckIcon from '../DuckIcon.js';
 
 const SECTIONS = ['Pond', 'Trades', 'Ranks', 'Feed', 'Rewards'];
 
@@ -90,9 +91,8 @@ export default function DucksScreen() {
               <TouchableOpacity key={d.id} style={[styles.duckCell, { borderColor: slot.unlocked ? c : '#333' }]}
                 onPress={() => slot.unlocked && setSelectedDuck({ ...d, count: slot.count })}
                 activeOpacity={slot.unlocked ? 0.7 : 1}>
-                <Text style={[styles.duckEmoji, !slot.unlocked && { opacity: 0.25 }]}>
-                  {slot.unlocked ? d.emoji : '🦆'}
-                </Text>
+                <DuckIcon duck={slot.unlocked ? d : { emoji: '🦆' }} size={40}
+                  style={[!slot.unlocked && { opacity: 0.25 }]} />
                 <Text style={styles.duckName} numberOfLines={1}>
                   {slot.unlocked ? d.name : '???'}
                 </Text>
@@ -249,7 +249,7 @@ export default function DucksScreen() {
             <Text style={{ fontWeight: 'bold', color: '#fff' }}>{item.giver_name}</Text>
             {' ducked '}
             <Text style={{ fontWeight: 'bold', color: '#fff' }}>{item.recipient_name}</Text>
-            {' with '}{item.duck.emoji} {item.duck.name}
+            {' with '}<DuckIcon duck={item.duck} size={16} /> {item.duck.name}
           </Text>
           {item.note ? <Text style={styles.feedNote}>"{item.note}"</Text> : null}
         </View>
@@ -304,7 +304,7 @@ export default function DucksScreen() {
           <View style={styles.loreBox}>
             {selectedDuck && (
               <>
-                <Text style={styles.loreEmoji}>{selectedDuck.emoji}</Text>
+                <DuckIcon duck={selectedDuck} size={72} />
                 <Text style={styles.loreName}>{selectedDuck.name}</Text>
                 <Text style={[styles.loreRarity, { color: rarityColor(selectedDuck.rarity) }]}>
                   {selectedDuck.rarity}{selectedDuck.count > 0 ? ` • ×${selectedDuck.count}` : ''}

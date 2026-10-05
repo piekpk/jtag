@@ -99,6 +99,13 @@
       </div>
       <input id="d_desc" placeholder="Short description (optional)" style="margin-bottom:8px;">
       <input id="d_seasonal" placeholder="Seasonal tag, e.g. halloween (optional)" style="margin-bottom:8px;">
+      <div style="color:var(--muted); font-size:12px; margin-bottom:6px;">Sprite (optional — overrides emoji)</div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <select id="d_theme" style="flex:1;" onchange="fillSpriteOptions()"></select>
+        <select id="d_sprite" style="flex:1;" onchange="previewSprite()"></select>
+        <img id="d_preview" style="width:48px; height:48px; border-radius:8px; background:var(--surface); display:none;">
+      </div>
+      <div style="margin-bottom:8px;"></div>
       <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="createDuckType()">Create duck type</button>
     </div>
     </div>
@@ -165,6 +172,7 @@ async function loadTables() {
     crumb.innerHTML = '';
     document.getElementById('aitools').style.display = 'block';
     loadDuckOptions();
+    loadDuckSprites();
     let statsHtml = '';
     try {
       const s = await api('/admin/stats');
@@ -324,6 +332,37 @@ async function grantDuck() {
   } catch (e) { alert('Grant failed: ' + e.message); }
 }
 
+let spriteThemes = {};
+
+async function loadDuckSprites() {
+  try {
+    const data = await api('/admin/duck-sprites');
+    spriteThemes = data.themes || {};
+    const themes = Object.keys(spriteThemes);
+    document.getElementById('d_theme').innerHTML =
+      `<option value="">No sprite (use emoji)</option>` +
+      themes.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+    fillSpriteOptions();
+  } catch (e) { /* sprites are optional */ }
+}
+
+function fillSpriteOptions() {
+  const theme = document.getElementById('d_theme').value;
+  const sprites = spriteThemes[theme] || [];
+  document.getElementById('d_sprite').innerHTML = sprites.map(u => {
+    const name = u.split('/').pop().replace('.png', '');
+    return `<option value="${esc(u)}">${esc(name)}</option>`;
+  }).join('');
+  previewSprite();
+}
+
+function previewSprite() {
+  const url = document.getElementById('d_sprite').value;
+  const img = document.getElementById('d_preview');
+  if (url) { img.src = url; img.style.display = 'block'; }
+  else { img.style.display = 'none'; }
+}
+
 async function createDuckType() {
   const name = document.getElementById('d_name').value.trim();
   if (!name) { alert('Enter a duck name.'); return; }
@@ -333,6 +372,7 @@ async function createDuckType() {
     emoji: document.getElementById('d_emoji').value.trim() || '🐤',
     description: document.getElementById('d_desc').value.trim() || null,
     seasonal: document.getElementById('d_seasonal').value.trim() || null,
+    image_url: document.getElementById('d_sprite').value || null,
   };
   try {
     const data = await api('/admin/duck-types', { method: 'POST', body: JSON.stringify(body) });

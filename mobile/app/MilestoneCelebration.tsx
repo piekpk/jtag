@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Modal, TouchableOpacity, StyleSheet } from 'react-native';
 import { onCelebration } from './celebration';
+import DuckIcon from './DuckIcon.js';
 
 // Themed replacement for the native Alert.alert milestone popup:
 // black & gold, rounded card, mounted once in the root layout so it can
@@ -27,9 +28,10 @@ export default function MilestoneCelebration() {
         <View style={styles.card}>
           <Text style={styles.title}>{title}</Text>
           {current.map((c, i) => (
-            <Text key={i} style={styles.duckLine}>
-              {c.duck.emoji} {c.duck.name}
-            </Text>
+            <View key={i} style={styles.duckLineWrap}>
+              <DuckIcon duck={c.duck} size={22} />
+              <Text style={styles.duckLine}> {c.duck.name}</Text>
+            </View>
           ))}
           <Text style={styles.subtitle}>Added to your inventory</Text>
           <TouchableOpacity style={styles.btn} onPress={dismiss} activeOpacity={0.85}>
@@ -74,6 +76,12 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 17,
     fontWeight: '600',
+    marginVertical: 3,
+  },
+  duckLineWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginVertical: 3,
   },
   subtitle: {

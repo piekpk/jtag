@@ -8,6 +8,7 @@ import { API_URL } from '../config.js';
 import { getAuthHeaders } from '../auth.js';
 import { showAlert } from '../themedAlert.js';
 import { getActiveDrops, createDrop, claimDrop, getInventory, formatExpiry, rarityColor, celebrateMilestones } from '../duckApi.js';
+import DuckIcon from '../DuckIcon.js';
 
 const RADIUS_CHOICES = [50, 100, 200, 500];
 const DURATION_CHOICES = [
@@ -279,7 +280,7 @@ export default function RadarMapScreen() {
             onPress={(e) => { e.stopPropagation(); setSelectedDrop(drop); }}
           >
             <View style={[styles.dropMarker, drop.claimed_by_me && { opacity: 0.4 }]}>
-              <Text style={styles.dropEmoji}>{drop.duck.emoji}</Text>
+              <DuckIcon duck={drop.duck} size={30} />
             </View>
           </Marker>
         ))}
@@ -323,7 +324,7 @@ export default function RadarMapScreen() {
         <View style={styles.dropCard}>
           <View style={{ flex: 1 }}>
             <Text style={styles.dropTitle}>
-              {selectedDrop.duck.emoji} {selectedDrop.duck.name}
+              <DuckIcon duck={selectedDrop.duck} size={18} /> {selectedDrop.duck.name}
             </Text>
             <Text style={styles.dropMeta}>
               {formatExpiry(selectedDrop.expires_at)} • {selectedDrop.claims_left} left
@@ -365,7 +366,7 @@ export default function RadarMapScreen() {
                   style={[styles.pickChip, dropDuck?.duck.id === item.duck.id && styles.pickChipActive]}
                   onPress={() => { setDropDuck(item); setDropClaims(1); }}
                 >
-                  <Text style={styles.pickEmoji}>{item.duck.emoji}</Text>
+                  <DuckIcon duck={item.duck} size={28} />
                   <Text style={styles.pickCount}>×{item.count}</Text>
                 </TouchableOpacity>
               ))}

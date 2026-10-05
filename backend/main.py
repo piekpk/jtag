@@ -84,6 +84,42 @@ def _ensure_is_banned_column():
         conn.close()
 
 
+def _ensure_duck_image_column():
+    """Lightweight migration: add duck_types.image_url to DBs created before it existed."""
+    conn = get_raw_db()
+    try:
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(duck_types)")]
+        if "image_url" not in cols:
+            conn.execute("ALTER TABLE duck_types ADD COLUMN image_url TEXT")
+            conn.commit()
+            print("Migration: added duck_types.image_url column.")
+    finally:
+        conn.close()
+
+
+def _install_duck_sprites():
+    """Copy the bundled duck sprite library into the uploads dir (missing files only)."""
+    src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "duck_sprites")
+    dst = os.path.join(UPLOAD_DIR, "ducks")
+    if not os.path.isdir(src):
+        return
+    count = 0
+    for theme in sorted(os.listdir(src)):
+        tdir = os.path.join(src, theme)
+        if not os.path.isdir(tdir):
+            continue
+        os.makedirs(os.path.join(dst, theme), exist_ok=True)
+        for f in sorted(os.listdir(tdir)):
+            if not f.endswith(".png"):
+                continue
+            target = os.path.join(dst, theme, f)
+            if not os.path.exists(target):
+                shutil.copyfile(os.path.join(tdir, f), target)
+                count += 1
+    if count:
+        print(f"Installed {count} duck sprite(s) into uploads/ducks.")
+
+
 def _admin_emails() -> set:
     """Emails granted admin via ADMIN_EMAILS (comma-separated) or the owner default."""
     return {e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "glichxp@gmail.com").split(",") if e.strip()}
@@ -126,6 +162,8 @@ def get_raw_db():
 _ensure_is_admin_column()
 _ensure_is_banned_column()
 _ensure_duck_ai_columns()
+_ensure_duck_image_column()
+_install_duck_sprites()
 _bootstrap_admins()
 
 # --- Helper Functions ---
@@ -683,7 +721,7 @@ def _duck_type_or_404(db: Session, duck_type_id: int) -> DuckType:
 def _duck_type_dict(dt: DuckType) -> dict:
     return {"id": dt.id, "slug": dt.slug, "name": dt.name, "rarity": dt.rarity,
             "emoji": dt.emoji, "description": dt.description, "lore": dt.lore,
-            "seasonal": dt.seasonal}
+            "seasonal": dt.seasonal, "image_url": dt.image_url}
 
 
 def _owner_name(db: Session, user_id: int) -> str:
@@ -1672,12 +1710,29 @@ class DuckGrant(BaseModel):
 DUCK_RARITIES = ("common", "rare", "epic", "legendary")
 
 
+@app.get("/admin/duck-sprites")
+def admin_duck_sprites(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """List the bundled duck sprite library by theme, as URLs served from /uploads/ducks/."""
+    base = os.path.join(UPLOAD_DIR, "ducks")
+    themes = {}
+    if os.path.isdir(base):
+        for theme in sorted(os.listdir(base)):
+            tdir = os.path.join(base, theme)
+            if not os.path.isdir(tdir):
+                continue
+            files = sorted(f for f in os.listdir(tdir) if f.endswith(".png"))
+            if files:
+                themes[theme] = [f"/uploads/ducks/{theme}/{f}" for f in files]
+    return {"themes": themes}
+
+
 class DuckTypeCreate(BaseModel):
     name: str
     rarity: str = "common"
     emoji: str = "🐤"
     description: Optional[str] = None
     seasonal: Optional[str] = None
+    image_url: Optional[str] = None
 
 
 def _unique_duck_slug(db: Session, name: str) -> str:
@@ -1702,6 +1757,9 @@ def admin_create_duck_type(payload: DuckTypeCreate, db: Session = Depends(get_db
     if rarity not in DUCK_RARITIES:
         raise HTTPException(status_code=400,
                             detail=f"Rarity must be one of: {', '.join(DUCK_RARITIES)}")
+    image_url = (payload.image_url or "").strip() or None
+    if image_url and not image_url.startswith("/uploads/ducks/"):
+        raise HTTPException(status_code=400, detail="image_url must be a bundled duck sprite")
     dt = DuckType(
         slug=_unique_duck_slug(db, name),
         name=name,
@@ -1709,6 +1767,7 @@ def admin_create_duck_type(payload: DuckTypeCreate, db: Session = Depends(get_db
         emoji=(payload.emoji or "🐤").strip() or "🐤",
         description=(payload.description or "").strip() or None,
         seasonal=(payload.seasonal or "").strip() or None,
+        image_url=image_url,
     )
     db.add(dt)
     db.commit()

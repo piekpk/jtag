@@ -31,6 +31,7 @@ class DuckType(Base):
     description = Column(String, nullable=True)
     lore = Column(Text, nullable=True)  # AI-generated backstory (duck_ai)
     seasonal = Column(String, nullable=True)  # e.g. "halloween", "winter", or None
+    image_url = Column(String, nullable=True)  # custom sprite, e.g. /uploads/ducks/pirates/pirates-01.png
 
 
 class UserDuck(Base):
