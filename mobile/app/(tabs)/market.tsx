@@ -73,13 +73,13 @@ export default function MarketScreen() {
 
   const onRefresh = () => { setRefreshing(true); load(); };
 
-  const pickPhoto = async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  const takePhoto = async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) {
-      showAlert('Permission needed', 'Allow photo access to add a listing photo.');
+      showAlert('Permission needed', 'Allow camera access to snap a photo of your item. Listings use live camera photos only, so buyers know every listing is real.');
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
+    const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [4, 3],
@@ -287,17 +287,18 @@ export default function MarketScreen() {
           <View style={styles.detailBox}>
             <ScrollView contentContainerStyle={{ paddingBottom: 8 }}>
               <Text style={styles.createTitle}>New Listing</Text>
-              <TouchableOpacity style={styles.photoBox} onPress={pickPhoto} activeOpacity={0.8}>
+              <TouchableOpacity style={styles.photoBox} onPress={takePhoto} activeOpacity={0.8}>
                 {cPhoto ? (
                   <Image source={{ uri: cPhoto }} style={styles.photoPreview} resizeMode="cover" />
                 ) : (
                   <>
                     <Text style={styles.photoBoxCam}>📷</Text>
-                    <Text style={styles.photoBoxT1}>Tap to add photo</Text>
+                    <Text style={styles.photoBoxT1}>Tap to take a photo</Text>
                     <Text style={styles.photoBoxT2}>1 photo per listing</Text>
                   </>
                 )}
               </TouchableOpacity>
+              <Text style={styles.camNote}>📷 Camera only — no gallery uploads, so buyers know every listing is real.</Text>
               <Text style={styles.flabel}>Title</Text>
               <TextInput style={styles.field} placeholder="What are you selling?"
                 placeholderTextColor="#8e8e93" value={cTitle} onChangeText={setCTitle} maxLength={120} />
@@ -394,6 +395,7 @@ const styles = StyleSheet.create({
   photoBoxCam: { fontSize: 34 },
   photoBoxT1: { color: '#d4af37', fontWeight: '700', fontSize: 14, marginTop: 6 },
   photoBoxT2: { color: '#8e8e93', fontSize: 12, marginTop: 2 },
+  camNote: { color: '#d4af37', fontSize: 12, marginTop: 6, marginBottom: 4 },
   photoPreview: { width: '100%', height: '100%' },
   flabel: { color: '#d4af37', fontSize: 12.5, fontWeight: '700', marginHorizontal: 18, marginTop: 14, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.6 },
   field: { marginHorizontal: 18, backgroundColor: '#2c2c2e', borderRadius: 10, padding: 13, color: '#fff', fontSize: 14.5 },
