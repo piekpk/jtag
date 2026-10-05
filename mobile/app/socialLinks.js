@@ -8,6 +8,7 @@ export const SOCIAL_PLATFORMS = [
   { id: 'youtube', name: 'YouTube', icon: '▶️', placeholder: 'youtube.com/@yourchannel' },
   { id: 'x', name: 'X', icon: '✖️', placeholder: 'x.com/yourname' },
   { id: 'reddit', name: 'Reddit', icon: '👽', placeholder: 'reddit.com/u/yourname' },
+  { id: 'threads', name: 'Threads', icon: '🧵', placeholder: 'threads.com/@yourname' },
 ];
 
 export function platformById(id) {
