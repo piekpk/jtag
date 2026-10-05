@@ -780,7 +780,7 @@ MILESTONES = [
      "description": "Unlock 6 ducks in your pond", "target": 6,
      "counter": "pond_unlocked", "reward_pool": ["epic"], "prefer_unowned": True},
     {"key": "pond_9", "track": "Collection", "name": "Diamond Pond",
-     "description": "Complete the full pond — all 9 ducks", "target": 9,
+     "description": "Unlock 10 different ducks in your pond", "target": 10,
      "counter": "pond_unlocked", "reward_slug": "diamond_duck"},
 ]
 
