@@ -80,7 +80,7 @@ export default function RadarMapScreen() {
   // Tutorial popup (duck drops)
   const [showTutorial, setShowTutorial] = useState(false);
   const [dontShowTutorial, setDontShowTutorial] = useState(false);
-  const TUTORIAL_KEY = 'jtap_map_tutorial_dismissed';
+  const TUTORIAL_KEY = 'jtap_map_tutorial_dismissed_v2';
 
   const openTutorial = () => {
     setDontShowTutorial(false);
@@ -798,15 +798,15 @@ export default function RadarMapScreen() {
       >
         <View style={styles.tutorialBackdrop}>
           <View style={styles.tutorialCard}>
-            <Text style={styles.tutorialTitle}>🦆 Duck Drops</Text>
+            <Text style={styles.tutorialTitle}>🗺️ Drops & Meetups</Text>
             <Text style={styles.tutorialSubtitle}>
-              Hide ducks on the map for nearby Jeepers to find.
+              Hide ducks and rally the crew — all from the map.
             </Text>
             {[
-              ['📍', 'Long-press anywhere on the map, then choose Drop a duck or Plan a meetup. For drops: pick the duck, how many can claim it, the radius, and how long it lasts.'],
-              ['🗺️', 'Duck markers appear for Jeepers nearby. Tap one to see what\'s up for grabs and when it expires.'],
-              ['🏃', 'Get inside the drop radius and tap Claim to snag a duck for your collection.'],
-              ['⏳', 'Drops expire — unclaimed ducks disappear for good, so claim fast!'],
+              ['📍', 'Long-press anywhere on the map, then choose Drop a duck or Plan a meetup.'],
+              ['🦆', 'Drops: pick the duck, how many can claim it, the radius, and how long it lasts. Get inside the radius and tap Claim — unclaimed ducks disappear at expiry.'],
+              ['📍', 'Meetups: give it a title and a start time. Everyone within 25 miles gets an alert, and the gold pin shows who\'s going. Tap it to Join.'],
+              ['🔍', 'Use the Rigs / Ducks / Meetups chips at the top to declutter the map.'],
             ].map(([emoji, text], idx) => (
               <View key={idx} style={styles.tutorialStep}>
                 <Text style={styles.tutorialStepEmoji}>{emoji}</Text>
