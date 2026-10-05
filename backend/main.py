@@ -237,6 +237,8 @@ app.add_middleware(
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+# Bundled bot assets (JtapBot profile photos) ship with the repo, not DATA_DIR.
+app.mount("/bot-assets", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "bot_assets")), name="bot-assets")
 
 # --- JWT Auth Setup ---
 SECRET_KEY = os.environ.get("JTAP_SECRET_KEY", "jtap-dev-secret-change-me")

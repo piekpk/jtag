@@ -21,6 +21,18 @@ from models import User
 
 BOT_EMAIL = "jtapbot@jtap.local"
 BOT_NAME = "JtapBot"
+BOT_AVATAR_URL = "/bot-assets/jtapbot-avatar.webp"
+BOT_COVER_URL = "/bot-assets/jtapbot-cover.webp"
+BOT_PROFILE = {
+    "vehicleTitle": "The Command Rig",
+    "specs": {
+        "engine": "Twin-turbo joke engine",
+        "wheels": '35" dad-joke radials',
+        "interior": "Rubber duck command center",
+    },
+    "mods": "Joke cannon, trail-tip radar, unlimited duck dispenser. Runs on premium sarcasm and 87 octane.",
+    "coverPhoto": BOT_COVER_URL,
+}
 POST_INTERVAL_HOURS = float(os.environ.get("JTBOT_POST_HOURS", "6"))
 REPLY_COOLDOWN_S = 60
 
@@ -57,16 +69,29 @@ def init_bot(SessionLocal):
             bot = User(
                 email=BOT_EMAIL,
                 hashed_password=secrets.token_hex(32),  # never used to log in
-                settings={"ownerName": BOT_NAME},
+                settings={"ownerName": BOT_NAME, **BOT_PROFILE},
+                profile_picture_url=BOT_AVATAR_URL,
             )
             db.add(bot)
             db.commit()
             db.refresh(bot)
         else:
+            # Fill in the profile, but never overwrite fields Pawel customized.
             settings = dict(bot.settings or {})
+            changed = False
             if settings.get("ownerName") != BOT_NAME:
                 settings["ownerName"] = BOT_NAME
+                changed = True
+            for key, value in BOT_PROFILE.items():
+                if not settings.get(key):
+                    settings[key] = value
+                    changed = True
+            if changed:
                 bot.settings = settings
+            if not bot.profile_picture_url:
+                bot.profile_picture_url = BOT_AVATAR_URL
+                changed = True
+            if changed:
                 db.commit()
         BOT_USER_ID = bot.id
         print(f"JtapBot ready (user id {BOT_USER_ID}).")
