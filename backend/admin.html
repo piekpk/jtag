@@ -28,6 +28,7 @@
   button.ghost { background: var(--surface); color: #fff; }
   button.danger { background: transparent; border: 1px solid #5a2a2a; color: #ff5a5a; width: 100%; margin-top: 12px; }
   input { width: 100%; background: var(--surface); border: 1px solid #444; color: #fff; border-radius: 10px; padding: 12px; margin-bottom: 10px; font-size: 14px; }
+  textarea { width: 100%; background: var(--surface); border: 1px solid #444; color: #fff; border-radius: 10px; padding: 12px; margin-bottom: 10px; font-size: 14px; font-family: inherit; }
   select { width: 100%; background: var(--surface); border: 1px solid #444; color: #fff; border-radius: 10px; padding: 12px; margin-bottom: 10px; font-size: 14px; }
   .login { max-width: 380px; margin: 60px auto; background: var(--card); padding: 24px; border-radius: 12px; }
   .login h2 { color: var(--gold); margin-top: 0; }
@@ -77,7 +78,7 @@
 const app = document.getElementById('app');
 const crumb = document.getElementById('crumb');
 const sub = document.getElementById('sub');
-let tables = [], table = null, rows = [], offset = 0, hasMore = false;
+let tables = [], table = null, rows = [], offset = 0, hasMore = false, detailEditable = [];
 const PAGE = 50;
 
 const SUMMARY = {
@@ -232,13 +233,63 @@ async function openDetail(id) {
   try {
     const data = await api(`/admin/tables/${table}/${id}`);
     const row = data.row;
+    detailEditable = data.editable || [];
     sub.textContent = `${table} · full record`;
     crumb.innerHTML = `<a onclick="loadTables()">tables</a> / <a onclick="openTable('${table}')">${esc(table)}</a> / #${id}`;
     app.innerHTML = `<div class="card" style="cursor:default; display:block">` +
       Object.entries(row).map(([k, v]) =>
         `<div class="kv"><span class="k">${esc(k)}</span><span class="v">${esc(typeof v === 'object' ? JSON.stringify(v) : v)}</span></div>`).join('') +
-      `</div><button class="danger" onclick="delRow(${id})">Delete this row</button>`;
+      `</div>
+      <div style="display:flex; gap:10px;">
+        ${detailEditable.length ? `<button class="ghost" style="flex:1;" onclick="editRow(${id})">Edit</button>` : ''}
+        <button class="danger" style="flex:1; margin-top:0;" onclick="delRow(${id})">Delete this row</button>
+      </div>`;
   } catch (e) { alert('Could not load row: ' + e.message); }
+}
+
+function editInput(col, value) {
+  const v = value === null || value === undefined ? '' : value;
+  const idAttr = `id="f_${col.name}"`;
+  if (col.type === 'boolean') {
+    return `<input type="checkbox" ${idAttr} ${v ? 'checked' : ''} style="width:auto; transform:scale(1.4);">`;
+  }
+  const str = typeof v === 'object' ? JSON.stringify(v) : String(v);
+  if (str.length > 80 || col.type === 'json') {
+    return `<textarea ${idAttr} rows="3">${esc(str)}</textarea>`;
+  }
+  return `<input ${idAttr} value="${esc(str).replace(/"/g, '&quot;')}">`;
+}
+
+async function editRow(id) {
+  try {
+    const data = await api(`/admin/tables/${table}/${id}`);
+    const row = data.row;
+    detailEditable = data.editable || [];
+    sub.textContent = `${table} · edit record`;
+    crumb.innerHTML = `<a onclick="loadTables()">tables</a> / <a onclick="openTable('${table}')">${esc(table)}</a> / <a onclick="openDetail(${id})">#${id}</a> / edit`;
+    app.innerHTML = `<div class="card" style="cursor:default; display:block">` +
+      detailEditable.map(col =>
+        `<div class="kv"><span class="k">${esc(col.name)}<br><small style="color:var(--muted)">${col.type}</small></span>` +
+        `<span class="v">${editInput(col, row[col.name])}</span></div>`).join('') +
+      `</div>
+      <div style="display:flex; gap:10px;">
+        <button style="flex:1;" onclick="saveRow(${id})">Save</button>
+        <button class="ghost" style="flex:1;" onclick="openDetail(${id})">Cancel</button>
+      </div>`;
+  } catch (e) { alert('Could not load row: ' + e.message); }
+}
+
+async function saveRow(id) {
+  const payload = {};
+  for (const col of detailEditable) {
+    const el = document.getElementById('f_' + col.name);
+    if (!el) continue;
+    payload[col.name] = col.type === 'boolean' ? el.checked : el.value;
+  }
+  try {
+    await api(`/admin/tables/${table}/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+    openDetail(id);
+  } catch (e) { alert('Save failed: ' + e.message); }
 }
 
 async function delRow(id) {

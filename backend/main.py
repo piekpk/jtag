@@ -1413,6 +1413,61 @@ def _row_to_dict(row, hidden: set) -> dict:
     return out
 
 
+def _editable_columns(name: str) -> list:
+    """Column metadata for the admin edit form: name, type, nullable. Skips id + hidden."""
+    from sqlalchemy import Boolean, Integer, Float, DateTime, JSON
+    hidden = ADMIN_HIDDEN_COLUMNS.get(name, set()) | {"id"}
+    if name == "messages":
+        types = {"user_id": "integer", "message": "string", "timestamp": "datetime",
+                 "reactions": "string", "channel": "string",
+                 "latitude": "float", "longitude": "float"}
+        return [{"name": c, "type": types.get(c, "string"), "nullable": True}
+                for c in MESSAGE_COLUMNS if c not in hidden]
+    model = ADMIN_TABLES[name]
+    cols = []
+    for col in model.__table__.columns:
+        if col.name in hidden:
+            continue
+        t = col.type
+        if isinstance(t, Boolean):
+            ctype = "boolean"
+        elif isinstance(t, Integer):
+            ctype = "integer"
+        elif isinstance(t, Float):
+            ctype = "float"
+        elif isinstance(t, DateTime):
+            ctype = "datetime"
+        elif isinstance(t, JSON):
+            ctype = "json"
+        else:
+            ctype = "string"
+        cols.append({"name": col.name, "type": ctype, "nullable": col.nullable})
+    return cols
+
+
+def _coerce_value(ctype: str, value):
+    """Coerce a JSON value to a column type. Raises ValueError on bad input."""
+    if value is None or (isinstance(value, str) and value.strip() == ""):
+        return None
+    if ctype == "boolean":
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().lower() in ("1", "true", "yes", "on")
+    if ctype == "integer":
+        return int(value)
+    if ctype == "float":
+        return float(value)
+    if ctype == "datetime":
+        if isinstance(value, str):
+            return datetime.fromisoformat(value.strip())
+        return value
+    if ctype == "json":
+        if isinstance(value, str):
+            return json.loads(value) if value.strip() else None
+        return value
+    return str(value)
+
+
 @app.get("/admin/overview")
 def admin_overview(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     """Row counts for every table."""
@@ -1463,7 +1518,7 @@ def admin_row_detail(name: str, row_id: int,
             r = conn.execute("SELECT * FROM messages WHERE id = ?", (row_id,)).fetchone()
             if not r:
                 raise HTTPException(status_code=404, detail="Row not found")
-            return {"row": dict(r)}
+            return {"row": dict(r), "editable": _editable_columns(name)}
         finally:
             conn.close()
     model = ADMIN_TABLES[name]
@@ -1471,6 +1526,48 @@ def admin_row_detail(name: str, row_id: int,
     row = db.query(model).filter(model.id == row_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Row not found")
+    return {"row": _row_to_dict(row, hidden), "editable": _editable_columns(name)}
+
+
+@app.put("/admin/tables/{name}/{row_id}")
+def admin_update_row(name: str, row_id: int, payload: dict,
+                     db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """Update a single row. Only real, non-hidden columns; id is immutable."""
+    _admin_table_or_404(name)
+    if name == "users" and row_id == admin.id and "is_admin" in payload and not payload["is_admin"]:
+        raise HTTPException(status_code=403, detail="You cannot remove your own admin access")
+    editable = {c["name"]: c["type"] for c in _editable_columns(name)}
+    updates = {}
+    for key, value in (payload or {}).items():
+        if key not in editable:
+            continue
+        try:
+            updates[key] = _coerce_value(editable[key], value)
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail=f"Bad value for '{key}'")
+    if not updates:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    if name == "messages":
+        conn = get_raw_db()
+        try:
+            r = conn.execute("SELECT id FROM messages WHERE id = ?", (row_id,)).fetchone()
+            if not r:
+                raise HTTPException(status_code=404, detail="Row not found")
+            sets = ", ".join(f"{k} = ?" for k in updates)
+            conn.execute(f"UPDATE messages SET {sets} WHERE id = ?", (*updates.values(), row_id))
+            conn.commit()
+            return {"row": dict(conn.execute("SELECT * FROM messages WHERE id = ?", (row_id,)).fetchone())}
+        finally:
+            conn.close()
+    model = ADMIN_TABLES[name]
+    row = db.query(model).filter(model.id == row_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Row not found")
+    for key, value in updates.items():
+        setattr(row, key, value)
+    db.commit()
+    db.refresh(row)
+    hidden = ADMIN_HIDDEN_COLUMNS.get(name, set())
     return {"row": _row_to_dict(row, hidden)}
 
 
