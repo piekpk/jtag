@@ -2397,6 +2397,15 @@ def admin_grant_duck(payload: DuckGrant, db: Session = Depends(get_db),
             "duck_type_id": payload.duck_type_id, "qty": qty, "removed": removed}
 
 
+@app.get("/admin/duck-types/options")
+def admin_duck_type_options(db: Session = Depends(get_db),
+                            admin: User = Depends(require_admin)):
+    """Full duck-type list for admin dropdowns (no pagination cap)."""
+    rows = db.query(DuckType).order_by(DuckType.name).all()
+    return [{"id": d.id, "name": d.name, "emoji": d.emoji,
+             "rarity": d.rarity} for d in rows]
+
+
 @app.get("/admin/stats")
 def admin_stats(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     """App health at a glance: users, ducks, drops, trades, marketplace, chat."""
