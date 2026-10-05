@@ -19,6 +19,7 @@ from datetime import datetime, timedelta
 import llm
 import profanity
 import duck_ai
+import places
 from models import User, DuckType, UserDuck, DuckGive, DuckDrop
 
 BOT_EMAIL = "jtapbot@jtap.local"
@@ -403,6 +404,11 @@ def _reply_worker(user_id, message):
                     "Come back tomorrow! \U0001F986"
                 )
             return
+        # Real place data — never let the LLM guess at gas stations or shops.
+        category = _wants_places(message)
+        if category:
+            _say(_places_reply(user_id, category))
+            return
         if not llm.is_available():
             return
         text = llm.generate(
@@ -414,3 +420,64 @@ def _reply_worker(user_id, message):
         _say(text)
     except Exception as e:
         print(f"JtapBot reply failed: {e}")
+
+
+# --- JtapBot nearby places --------------------------------------------------
+
+_PLACES_KEYWORDS = {
+    "gas": {"gas", "fuel", "diesel"},
+    "mechanic": {"mechanic", "repair", "autorepair"},
+    "tow": {"tow", "towing"},
+    "food": {"food", "restaurant", "restaurants", "eat", "eating", "hungry",
+             "pizza", "burger", "burgers", "taco", "tacos", "diner", "breakfast",
+             "lunch", "dinner", "sandwich", "bbq"},
+}
+
+_PLACES_EMOJI = {"gas": "⛽", "mechanic": "🔧", "tow": "🪝", "food": "🍔"}
+
+
+def _wants_places(message):
+    """Return a places category if the message asks for nearby places."""
+    words = set(re.findall(r"[a-z]+", (message or "").lower()))
+    for category, keywords in _PLACES_KEYWORDS.items():
+        if words & keywords:
+            return category
+    return None
+
+
+def _places_reply(user_id, category):
+    db = _SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        lat = user.latitude if user else None
+        lng = user.longitude if user else None
+    finally:
+        db.close()
+    if lat is None or lng is None:
+        return (
+            "I don't have your location yet — open the Map tab so the app saves it, "
+            "then ask me again! \U0001F5FA\uFE0F"
+        )
+    try:
+        results = places.search_nearby(lat, lng, category)
+    except Exception as e:
+        print(f"JtapBot places lookup failed: {e}")
+        return (
+            "Couldn't reach the map data right now — try again in a bit! \U0001F5FA\uFE0F"
+        )
+    emoji = _PLACES_EMOJI[category]
+    label = places.CATEGORY_LABEL[category]
+    if not results:
+        return f"{emoji} No {label} found within 5 miles of you."
+    lines = [f"{emoji} {label.capitalize()} near you:"]
+    for r in results:
+        line = f"• {r['name']} — {r['distance_mi']:.1f} mi"
+        if r["is_24_7"]:
+            line += " — open 24 hours"
+        elif r["hours"]:
+            line += f" — {r['hours']}"
+        if r.get("phone"):
+            line += f" — {r['phone']}"
+        lines.append(line)
+    lines.append("24/7 spots listed first — call ahead to confirm hours.")
+    return "\n".join(lines)
