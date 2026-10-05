@@ -22,3 +22,5 @@ mobile/android/.gradle/
 # OS Files
 .DS_Store
 Thumbs.db
+# Firebase (contains API keys - add locally, do not commit)
+mobile/android/app/google-services.json
