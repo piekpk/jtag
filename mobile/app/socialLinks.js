@@ -11,6 +11,7 @@ const ICONS = {
   x: require('../assets/social/x.png'),
   reddit: require('../assets/social/reddit.png'),
   threads: require('../assets/social/threads.png'),
+  website: require('../assets/social/website.png'),
 };
 
 export const SOCIAL_PLATFORMS = [
@@ -21,6 +22,7 @@ export const SOCIAL_PLATFORMS = [
   { id: 'x', name: 'X', icon: ICONS.x, placeholder: 'x.com/yourname' },
   { id: 'reddit', name: 'Reddit', icon: ICONS.reddit, placeholder: 'reddit.com/u/yourname' },
   { id: 'threads', name: 'Threads', icon: ICONS.threads, placeholder: 'threads.com/@yourname' },
+  { id: 'website', name: 'Website', icon: ICONS.website, placeholder: 'yourwebsite.com' },
 ];
 
 export function platformById(id) {
