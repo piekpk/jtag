@@ -1696,3 +1696,38 @@ def admin_grant_duck(payload: DuckGrant, db: Session = Depends(get_db),
     db.commit()
     return {"granted": True, "email": user.email,
             "duck_type_id": payload.duck_type_id, "qty": qty}
+
+
+@app.get("/admin/users/lookup")
+def admin_user_lookup(email: str, db: Session = Depends(get_db),
+                      admin: User = Depends(require_admin)):
+    """Find a user by email and see their ducks, listings, trades, and drops in one view."""
+    user = db.query(User).filter(User.email == (email or "").strip().lower()).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    hidden = ADMIN_HIDDEN_COLUMNS.get("users", set())
+    ducks = []
+    for row in db.query(UserDuck).filter(UserDuck.user_id == user.id).all():
+        dt = db.query(DuckType).filter(DuckType.id == row.duck_type_id).first()
+        ducks.append({"duck": _duck_type_dict(dt) if dt else {"id": row.duck_type_id},
+                      "count": row.count})
+    listings = [_listing_dict(db, l) for l in
+                db.query(MarketListing).filter(MarketListing.user_id == user.id)
+                .order_by(MarketListing.id.desc()).limit(20).all()]
+    trades = []
+    for t in db.query(Trade).filter(
+            or_(Trade.proposer_id == user.id, Trade.recipient_id == user.id)).order_by(
+            Trade.id.desc()).limit(20).all():
+        trades.append({"id": t.id, "status": t.status,
+                       "proposer_id": t.proposer_id, "recipient_id": t.recipient_id})
+    drops = db.query(DuckDrop).filter(DuckDrop.created_by == user.id).count()
+    milestones = db.query(UserMilestone).filter(UserMilestone.user_id == user.id).count()
+    return {
+        "user": _row_to_dict(user, hidden),
+        "ducks": ducks,
+        "pond_unlocked": sum(1 for d in ducks),
+        "listings": listings,
+        "trades": trades,
+        "drops_created": drops,
+        "milestones": milestones,
+    }

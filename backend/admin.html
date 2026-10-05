@@ -45,6 +45,13 @@
   <div id="aitools" style="display:none; margin-top:10px;">
     <div style="display:flex; gap:10px; flex-wrap:wrap;">
     <div style="background:var(--card); border-radius:10px; padding:12px; flex:1; min-width:280px; max-width:420px;">
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">🔍 Find a user</div>
+      <div style="display:flex; gap:8px;">
+        <input id="l_email" type="email" placeholder="User email" style="margin-bottom:8px; flex:1;">
+        <button style="padding:8px 16px; font-size:13px; margin-bottom:8px;" onclick="lookupUser()">Go</button>
+      </div>
+    </div>
+    <div style="background:var(--card); border-radius:10px; padding:12px; flex:1; min-width:280px; max-width:420px;">
       <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">🎁 Give ducks to a user</div>
       <input id="g_email" type="email" placeholder="User email" style="margin-bottom:8px;">
       <div style="display:flex; gap:8px;">
@@ -155,6 +162,42 @@ async function loadDuckOptions() {
     document.getElementById('g_duck').innerHTML = data.rows.map(r =>
       `<option value="${r.id}">${esc(r.emoji || '🦆')} ${esc(r.name)} (${esc(r.rarity)})</option>`).join('');
   } catch (e) { /* auth handled elsewhere */ }
+}
+
+async function lookupUser() {
+  const email = document.getElementById('l_email').value.trim();
+  if (!email) { alert('Enter the user\'s email.'); return; }
+  try {
+    const data = await api('/admin/users/lookup?email=' + encodeURIComponent(email));
+    const u = data.user;
+    sub.textContent = `user lookup · ${u.email}`;
+    crumb.innerHTML = `<a onclick="loadTables()">tables</a> / user lookup`;
+    const duckRows = data.ducks.length ? data.ducks.map(d =>
+      `<div class="kv"><span class="k">${esc(d.duck.emoji || '🐤')} ${esc(d.duck.name || '#' + d.duck.id)}</span><span class="v">×${d.count}</span></div>`).join('')
+      : '<div style="color:var(--muted); font-size:13px;">No ducks yet.</div>';
+    const listingRows = data.listings.length ? data.listings.map(l =>
+      `<div class="kv"><span class="k">${esc(l.title)}</span><span class="v">$${esc(l.price)} · ${l.is_sold ? 'sold' : 'active'}</span></div>`).join('')
+      : '<div style="color:var(--muted); font-size:13px;">No listings.</div>';
+    const tradeRows = data.trades.length ? data.trades.map(t =>
+      `<div class="kv"><span class="k">trade #${t.id}</span><span class="v">${esc(t.status)}</span></div>`).join('')
+      : '<div style="color:var(--muted); font-size:13px;">No trades.</div>';
+    app.innerHTML =
+      `<div class="card" style="cursor:default; display:block">
+        <div class="kv"><span class="k">email</span><span class="v">${esc(u.email)}</span></div>
+        <div class="kv"><span class="k">id</span><span class="v">${u.id}</span></div>
+        <div class="kv"><span class="k">admin</span><span class="v">${u.is_admin ? 'yes' : 'no'}</span></div>
+        <div class="kv"><span class="k">ducks unlocked</span><span class="v">${data.pond_unlocked}</span></div>
+        <div class="kv"><span class="k">drops created</span><span class="v">${data.drops_created}</span></div>
+        <div class="kv"><span class="k">milestones</span><span class="v">${data.milestones}</span></div>
+      </div>
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin:14px 0 6px;">Duck inventory</div>
+      <div class="card" style="cursor:default; display:block">${duckRows}</div>
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin:14px 0 6px;">Marketplace listings</div>
+      <div class="card" style="cursor:default; display:block">${listingRows}</div>
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin:14px 0 6px;">Trades</div>
+      <div class="card" style="cursor:default; display:block">${tradeRows}</div>
+      <button class="ghost" onclick="openTable('users')">Back to users table</button>`;
+  } catch (e) { alert('Lookup failed: ' + e.message); }
 }
 
 async function grantDuck() {
