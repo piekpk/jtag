@@ -13,7 +13,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import jwt
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import create_engine, or_
+from sqlalchemy import create_engine, or_, func
 from sqlalchemy.orm import sessionmaker, Session
 from passlib.context import CryptContext
 from pydantic import BaseModel
@@ -1714,6 +1714,47 @@ def admin_grant_duck(payload: DuckGrant, db: Session = Depends(get_db),
     db.commit()
     return {"granted": True, "email": user.email,
             "duck_type_id": payload.duck_type_id, "qty": qty}
+
+
+@app.get("/admin/stats")
+def admin_stats(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """App health at a glance: users, ducks, drops, trades, marketplace, chat."""
+    now = datetime.utcnow()
+    week_ago = now - timedelta(days=7)
+    conn = get_raw_db()
+    try:
+        conn.execute(MESSAGE_TABLE_DDL)
+        msg_total = conn.execute("SELECT COUNT(*) AS c FROM messages").fetchone()["c"]
+    finally:
+        conn.close()
+    return {
+        "users": {
+            "total": db.query(User).count(),
+            "admins": db.query(User).filter(User.is_admin == True).count(),  # noqa: E712
+            "banned": db.query(User).filter(User.is_banned == True).count(),  # noqa: E712
+        },
+        "ducks": {
+            "types": db.query(DuckType).count(),
+            "inventory": db.query(func.sum(UserDuck.count)).scalar() or 0,
+            "pond_unlocks": db.query(UserDuck).count(),
+        },
+        "drops": {
+            "total": db.query(DuckDrop).count(),
+            "active": db.query(DuckDrop).filter(DuckDrop.expires_at > now).count(),
+            "created_7d": db.query(DuckDrop).filter(DuckDrop.created_at >= week_ago).count(),
+        },
+        "trades": {
+            "total": db.query(Trade).count(),
+            "pending": db.query(Trade).filter(Trade.status == "pending").count(),
+            "created_7d": db.query(Trade).filter(Trade.created_at >= week_ago).count(),
+        },
+        "marketplace": {
+            "active": db.query(MarketListing).filter(MarketListing.is_sold == False).count(),  # noqa: E712
+            "sold": db.query(MarketListing).filter(MarketListing.is_sold == True).count(),  # noqa: E712
+            "created_7d": db.query(MarketListing).filter(MarketListing.created_at >= week_ago).count(),
+        },
+        "messages": {"total": msg_total},
+    }
 
 
 @app.get("/admin/users/lookup")

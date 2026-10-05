@@ -141,7 +141,26 @@ async function loadTables() {
     crumb.innerHTML = '';
     document.getElementById('aitools').style.display = 'block';
     loadDuckOptions();
-    app.innerHTML = tables.map(t =>
+    let statsHtml = '';
+    try {
+      const s = await api('/admin/stats');
+      const card = (label, big, small) =>
+        `<div style="background:var(--card); border-radius:10px; padding:12px; flex:1; min-width:140px;">
+           <div style="font-size:22px; font-weight:800; color:var(--gold);">${big}</div>
+           <div style="font-size:12px; color:var(--muted);">${label}</div>
+           ${small ? `<div style="font-size:11px; color:#888; margin-top:4px;">${small}</div>` : ''}
+         </div>`;
+      statsHtml = `<div style="color:var(--gold); font-weight:700; font-size:13px; margin:4px 0 8px;">📊 App health</div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;">` +
+        card('Users', s.users.total, `${s.users.admins} admin · ${s.users.banned} banned`) +
+        card('Ducks in circulation', s.ducks.inventory, `${s.ducks.types} types · ${s.ducks.pond_unlocks} pond unlocks`) +
+        card('Active drops', s.drops.active, `${s.drops.total} total · ${s.drops.created_7d} this week`) +
+        card('Pending trades', s.trades.pending, `${s.trades.total} total · ${s.trades.created_7d} this week`) +
+        card('Active listings', s.marketplace.active, `${s.marketplace.sold} sold · ${s.marketplace.created_7d} this week`) +
+        card('Chat messages', s.messages.total, '') +
+        `</div>`;
+    } catch (e) { /* stats are a bonus; tables still work */ }
+    app.innerHTML = statsHtml + tables.map(t =>
       `<div class="card" onclick="openTable('${t.table}')">
          <span class="name">${esc(t.table)}</span><span class="count">${t.count}</span><span>&#8250;</span>
        </div>`).join('');
