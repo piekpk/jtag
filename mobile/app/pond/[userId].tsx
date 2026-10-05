@@ -1,8 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, ActivityIndicator, Image } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { getUserPond, rarityColor } from '../duckApi.js';
+import { API_URL } from '../config.js';
 import DuckIcon from '../DuckIcon';
+
+// Same image-URL handling as the public profile screen.
+const getImageUrl = (imagePath) => {
+  if (!imagePath) return null;
+  if (imagePath.includes('http://192.168.')) {
+    return imagePath.replace(/http:\/\/192\.168\.\d+\.\d+:\d+/, API_URL);
+  }
+  if (imagePath.startsWith('http')) return imagePath;
+  return `${API_URL}/${imagePath.startsWith('/') ? imagePath.slice(1) : imagePath}`;
+};
 
 /**
  * Another user's duck pond. Opened by tapping the featured-duck row
@@ -10,7 +21,7 @@ import DuckIcon from '../DuckIcon';
  * ducks they haven't unlocked stay hidden as ???.
  */
 export default function UserPondScreen() {
-  const { userId, name } = useLocalSearchParams();
+  const { userId, name, coverPhoto } = useLocalSearchParams();
   const router = useRouter();
   const [pond, setPond] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -39,12 +50,36 @@ export default function UserPondScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backText}>Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>{name ? `${name}'s Pond` : 'Duck Pond'}</Text>
-      </View>
+      {coverPhoto ? (
+        <View style={styles.coverWrap}>
+          <Image
+            source={{
+              uri: getImageUrl(Array.isArray(coverPhoto) ? coverPhoto[0] : coverPhoto),
+              headers: {
+                'ngrok-skip-browser-warning': 'true',
+                'User-Agent': 'JtapApp/1.0'
+              }
+            }}
+            style={styles.coverImg}
+          />
+          <View style={styles.coverDim} />
+          <View style={styles.coverTopRow}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+              <Text style={styles.backText}>Back</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.coverTitleWrap}>
+            <Text style={styles.coverTitle}>{name ? `${name}'s Pond` : 'Duck Pond'}</Text>
+          </View>
+        </View>
+      ) : (
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <Text style={styles.backText}>Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>{name ? `${name}'s Pond` : 'Duck Pond'}</Text>
+        </View>
+      )}
 
       <ScrollView contentContainerStyle={styles.scroll}>
         {!pond ? (
@@ -125,6 +160,12 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 12, paddingBottom: 4 },
   backBtn: { backgroundColor: '#d4af37', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, marginRight: 8 },
   backText: { color: '#121212', fontSize: 16, fontWeight: 'bold' },
+  coverWrap: { height: 220, position: 'relative' },
+  coverImg: { width: '100%', height: '100%' },
+  coverDim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.15)' },
+  coverTopRow: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 50 },
+  coverTitleWrap: { position: 'absolute', left: 16, right: 16, bottom: 14 },
+  coverTitle: { fontSize: 26, fontWeight: '900', color: '#ffffff', letterSpacing: 1, textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 6 },
   title: { color: '#fff', fontSize: 20, fontWeight: '800' },
   scroll: { padding: 16 },
   errorText: { color: '#e0e0e0', fontSize: 14, textAlign: 'center', marginTop: 32 },

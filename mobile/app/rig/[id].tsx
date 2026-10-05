@@ -110,7 +110,7 @@ export default function PublicRigScreen() {
 
   // Featured-duck showcase tap: open this user's full pond.
   const openTheirPond = () => {
-    router.push({ pathname: '/pond/[userId]', params: { userId: String(rigId), name: ownerName } });
+    router.push({ pathname: '/pond/[userId]', params: { userId: String(rigId), name: ownerName, coverPhoto: coverPhoto || '' } });
   };
 
   const openDuckPicker = async () => {
