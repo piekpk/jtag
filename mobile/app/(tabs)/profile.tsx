@@ -25,6 +25,7 @@ export default function MyRigScreen() {
   });
   const [mods, setMods] = useState('');
   const [photos, setPhotos] = useState<string[]>(['', '', '', '']);
+  const [coverPhoto, setCoverPhoto] = useState('');
 
   // 1. Load the user's profile from the database when the screen opens[cite: 9]
   useEffect(() => {
@@ -51,6 +52,7 @@ export default function MyRigScreen() {
             if (data.settings.specs) setSpecs(data.settings.specs);
             if (data.settings.mods) setMods(data.settings.mods);
             if (data.settings.photos) setPhotos(data.settings.photos);
+            if (data.settings.coverPhoto) setCoverPhoto(data.settings.coverPhoto);
             if (data.settings.discoverable === false) setDiscoverable(false);
           } else {
             // Default placeholder data for brand new users[cite: 9]
@@ -85,6 +87,7 @@ export default function MyRigScreen() {
               specs,
               mods,
               photos,
+              coverPhoto,
               discoverable
             }
           }),
@@ -115,9 +118,42 @@ export default function MyRigScreen() {
     }
   };
 
+  const uploadPhoto = async (localUri: string) => {
+    const filename = localUri.split('/').pop() || `photo_${Date.now()}.jpg`;
+    const match = /\.(\w+)$/.exec(filename);
+    const type = match ? `image/${match[1]}` : `image/jpeg`;
+
+    const formData = new FormData();
+    // @ts-ignore - React Native FormData expects this specific structure
+    formData.append('file', {
+      uri: localUri,
+      name: filename,
+      type: type,
+    });
+
+    try {
+      const response = await fetch(`${API_URL}/users/${userId}/profile-picture`, {
+        method: 'POST',
+        body: formData,
+        headers: await getAuthHeaders(false),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return data.url;
+      } else {
+        showAlert("Upload Failed", "Could not upload the image to the server.");
+      }
+    } catch (error) {
+      console.error("Upload error:", error);
+      showAlert("Network Error", "Could not connect to the server.");
+    }
+    return null;
+  };
+
   const pickImage = async (index: number) => {
     if (!isEditing || !userId) return;
-    
+
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
@@ -126,41 +162,28 @@ export default function MyRigScreen() {
     });
 
     if (!result.canceled) {
-      const localUri = result.assets[0].uri;
-      const filename = localUri.split('/').pop() || `photo_${index}.jpg`;
-      const match = /\.(\w+)$/.exec(filename);
-      const type = match ? `image/${match[1]}` : `image/jpeg`;
-
-      // 1. Format the image for the backend[cite: 9]
-      const formData = new FormData();
-      // @ts-ignore - React Native FormData expects this specific structure[cite: 9]
-      formData.append('file', {
-        uri: localUri,
-        name: filename,
-        type: type,
-      });
-
-      try {
-        // 2. Upload it to your backend via Ngrok[cite: 9]
-        const response = await fetch(`${API_URL}/users/${userId}/profile-picture`, {
-          method: 'POST',
-          body: formData,
-          headers: await getAuthHeaders(false),
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          // 3. Update the state with the new network URL from the server[cite: 9]
-          const newPhotos = [...photos];
-          newPhotos[index] = data.url; 
-          setPhotos(newPhotos);
-        } else {
-          showAlert("Upload Failed", "Could not upload the image to the server.");
-        }
-      } catch (error) {
-        console.error("Upload error:", error);
-        showAlert("Network Error", "Could not connect to the server.");
+      const url = await uploadPhoto(result.assets[0].uri);
+      if (url) {
+        const newPhotos = [...photos];
+        newPhotos[index] = url;
+        setPhotos(newPhotos);
       }
+    }
+  };
+
+  const pickCover = async () => {
+    if (!isEditing || !userId) return;
+
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      const url = await uploadPhoto(result.assets[0].uri);
+      if (url) setCoverPhoto(url);
     }
   };
 
@@ -237,6 +260,28 @@ export default function MyRigScreen() {
           </View>
         )}
       </View>
+
+      {isEditing && (
+        <View style={styles.coverWrap}>
+          <Text style={styles.coverLabel}>Cover photo — shown at the top of your public profile</Text>
+          <TouchableOpacity style={styles.coverBox} onPress={pickCover}>
+            {coverPhoto ? (
+              <Image
+                source={{
+                  uri: getImageUrl(coverPhoto),
+                  headers: {
+                    'ngrok-skip-browser-warning': 'true',
+                    'User-Agent': 'JtapApp/1.0'
+                  }
+                }}
+                style={styles.photo}
+              />
+            ) : (
+              <Text style={styles.photoPlaceholder}>+ Add cover photo</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
 
       <View style={styles.photoGrid}>
         {[0, 1, 2, 3].map((i) => (
@@ -317,6 +362,9 @@ const styles = StyleSheet.create({
   discoverLabel: { color: '#fff', fontSize: 14, fontWeight: '600' },
   editSubtitleInput: { fontSize: 16, color: '#d4af37', marginTop: 8, fontWeight: '600', backgroundColor: '#333', padding: 5, borderRadius: 6 },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', padding: 10, justifyContent: 'space-between' },
+  coverWrap: { paddingHorizontal: 10, marginBottom: 4 },
+  coverLabel: { color: '#d4af37', fontWeight: '600', fontSize: 13, marginBottom: 8 },
+  coverBox: { width: '100%', height: 170, backgroundColor: '#2c2c2e', borderRadius: 8, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   photoBox: { width: '48%', height: 120, backgroundColor: '#2c2c2e', marginBottom: 10, borderRadius: 8, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   photoPlaceholder: { color: '#757575', fontWeight: '600' },
   photo: { width: '100%', height: '100%' },

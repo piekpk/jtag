@@ -191,6 +191,7 @@ export default function PublicRigScreen() {
   const specs = settings.specs || { engine: 'N/A', wheels: 'N/A', interior: 'N/A' };
   const mods = settings.mods || 'No mods listed.';
   const photos = settings.photos || [];
+  const coverPhoto = settings.coverPhoto || null;
   const availablePhotos = photos.filter(Boolean); // non-empty slots only, for the lightbox
 
   const openLightbox = (slotIndex) => {
@@ -201,6 +202,45 @@ export default function PublicRigScreen() {
   return (
     <View style={styles.container}>
     <ScrollView style={{ flex: 1 }}>
+      {coverPhoto ? (
+        <>
+          <View style={styles.coverWrap}>
+            <Image
+              source={{
+                uri: getImageUrl(coverPhoto),
+                headers: {
+                  'ngrok-skip-browser-warning': 'true',
+                  'User-Agent': 'JtapApp/1.0'
+                }
+              }}
+              style={styles.coverImg}
+            />
+            <View style={styles.coverDim} />
+            <View style={styles.coverTopRow}>
+              <TouchableOpacity onPress={() => router.back()} style={styles.coverBackBtn}>
+                <Text style={styles.coverBackText}>‹ Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.duckBtn, isDucking && { opacity: 0.6 }]}
+                onPress={openDuckPicker}
+                disabled={isDucking}
+              >
+                <Text style={styles.duckBtnIcon}>🦆</Text>
+                <Text style={styles.duckBtnCount}>{duckCount}</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.coverTitleWrap}>
+              <Text style={styles.coverTitle}>{ownerName}'s Rig</Text>
+              <Text style={styles.coverSubtitle}>{vehicleTitle}</Text>
+            </View>
+          </View>
+          <View style={styles.coverTradeWrap}>
+            <TouchableOpacity style={styles.tradeBtn} onPress={openTradeModal}>
+              <Text style={styles.tradeBtnText}>⇄ Propose Duck Trade</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      ) : (
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Text style={styles.backBtnText}>Back</Text>
@@ -228,6 +268,7 @@ export default function PublicRigScreen() {
           <Text style={styles.tradeBtnText}>⇄ Propose Duck Trade</Text>
         </TouchableOpacity>
       </View>
+      )}
 
       <View style={styles.photoGrid}>
         {[0, 1, 2, 3].map((i) => (
@@ -424,6 +465,16 @@ export default function PublicRigScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#121212' },
+  coverWrap: { height: 264 },
+  coverImg: { width: '100%', height: '100%' },
+  coverDim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.15)' },
+  coverTopRow: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 12, paddingTop: 50 },
+  coverBackBtn: { backgroundColor: 'rgba(0,0,0,0.55)', borderWidth: 1, borderColor: '#d4af37', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8 },
+  coverBackText: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
+  coverTitleWrap: { position: 'absolute', left: 16, right: 16, bottom: 14 },
+  coverTitle: { fontSize: 26, fontWeight: '900', color: '#ffffff', letterSpacing: 1, textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 6 },
+  coverSubtitle: { fontSize: 15, color: '#d4af37', marginTop: 4, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
+  coverTradeWrap: { paddingHorizontal: 15, paddingTop: 4 },
   header: { padding: 25, paddingTop: 50, backgroundColor: '#1a1a1a' },
   backBtn: { marginBottom: 15, backgroundColor: '#d4af37', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8, alignSelf: 'flex-start' },
   backBtnText: { color: '#121212', fontSize: 16, fontWeight: 'bold' },
