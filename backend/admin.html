@@ -52,6 +52,22 @@
       </div>
       <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="grantDuck()">Give ducks</button>
     </div>
+    <div style="background:var(--card); border-radius:10px; padding:12px; margin-top:10px; max-width:420px;">
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">➕ Create duck type</div>
+      <input id="d_name" placeholder="Name (e.g. Trail Boss Duck)" style="margin-bottom:8px;">
+      <div style="display:flex; gap:8px;">
+        <select id="d_rarity" style="flex:1;">
+          <option value="common">common</option>
+          <option value="rare">rare</option>
+          <option value="epic">epic</option>
+          <option value="legendary">legendary</option>
+        </select>
+        <input id="d_emoji" placeholder="🐤" style="width:70px; margin-bottom:8px;">
+      </div>
+      <input id="d_desc" placeholder="Short description (optional)" style="margin-bottom:8px;">
+      <input id="d_seasonal" placeholder="Seasonal tag, e.g. halloween (optional)" style="margin-bottom:8px;">
+      <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="createDuckType()">Create duck type</button>
+    </div>
   </div>
 </header>
 <main id="app"></main>
@@ -150,6 +166,26 @@ async function grantDuck() {
     alert(`Gave ${data.qty}x duck to ${data.email}.`);
     document.getElementById('g_email').value = '';
   } catch (e) { alert('Grant failed: ' + e.message); }
+}
+
+async function createDuckType() {
+  const name = document.getElementById('d_name').value.trim();
+  if (!name) { alert('Enter a duck name.'); return; }
+  const body = {
+    name,
+    rarity: document.getElementById('d_rarity').value,
+    emoji: document.getElementById('d_emoji').value.trim() || '🐤',
+    description: document.getElementById('d_desc').value.trim() || null,
+    seasonal: document.getElementById('d_seasonal').value.trim() || null,
+  };
+  try {
+    const data = await api('/admin/duck-types', { method: 'POST', body: JSON.stringify(body) });
+    alert(`Created "${data.name}" (${data.rarity})! Lore is generating in the background.`);
+    document.getElementById('d_name').value = '';
+    document.getElementById('d_desc').value = '';
+    document.getElementById('d_seasonal').value = '';
+    loadDuckOptions();
+  } catch (e) { alert('Create failed: ' + e.message); }
 }
 
 async function openTable(name) {

@@ -2,7 +2,9 @@ import shutil
 import os
 import json
 import random
+import re
 import sqlite3
+from typing import Optional
 from datetime import datetime, timedelta
 from uuid import uuid4
 from math import radians, cos, sin, asin, sqrt
@@ -1534,6 +1536,54 @@ class DuckGrant(BaseModel):
     email: str
     duck_type_id: int
     qty: int = 1
+
+
+DUCK_RARITIES = ("common", "rare", "epic", "legendary")
+
+
+class DuckTypeCreate(BaseModel):
+    name: str
+    rarity: str = "common"
+    emoji: str = "🐤"
+    description: Optional[str] = None
+    seasonal: Optional[str] = None
+
+
+def _unique_duck_slug(db: Session, name: str) -> str:
+    base = re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_") or "duck"
+    slug, i = base, 2
+    while db.query(DuckType).filter(DuckType.slug == slug).first():
+        slug = f"{base}_{i}"
+        i += 1
+    return slug
+
+
+@app.post("/admin/duck-types")
+def admin_create_duck_type(payload: DuckTypeCreate, db: Session = Depends(get_db),
+                           admin: User = Depends(require_admin)):
+    """Create a new duck type. Slug is auto-generated; lore generates in the background."""
+    name = (payload.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+    if len(name) > 60:
+        raise HTTPException(status_code=400, detail="Name too long (60 chars max)")
+    rarity = (payload.rarity or "common").strip().lower()
+    if rarity not in DUCK_RARITIES:
+        raise HTTPException(status_code=400,
+                            detail=f"Rarity must be one of: {', '.join(DUCK_RARITIES)}")
+    dt = DuckType(
+        slug=_unique_duck_slug(db, name),
+        name=name,
+        rarity=rarity,
+        emoji=(payload.emoji or "🐤").strip() or "🐤",
+        description=(payload.description or "").strip() or None,
+        seasonal=(payload.seasonal or "").strip() or None,
+    )
+    db.add(dt)
+    db.commit()
+    db.refresh(dt)
+    duck_ai.generate_lore_for_duck(dt.id)
+    return _duck_type_dict(dt)
 
 
 @app.post("/admin/ducks/grant")
