@@ -2383,13 +2383,18 @@ def admin_grant_duck(payload: DuckGrant, db: Session = Depends(get_db),
     user = db.query(User).filter(User.email == (payload.email or "").strip().lower()).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    _duck_type_or_404(db, payload.duck_type_id)
+    dt = _duck_type_or_404(db, payload.duck_type_id)
     qty = payload.qty or 0
     if qty == 0 or abs(qty) > 100:
         raise HTTPException(status_code=400, detail="Qty must be between -100 and 100, excluding 0")
     removed = 0
     if qty > 0:
         _grant_duck(db, user.id, payload.duck_type_id, qty)
+        # Same duck-received alert as any other gift; removals stay silent.
+        _notify_user(db, user.id, "ducked",
+                     "🦆 You've been ducked!",
+                     f"An admin gifted you {dt.emoji or '🦆'} {dt.name}" + (f" ×{qty}" if qty > 1 else ""),
+                     {"giver_id": admin.id, "duck_type_id": dt.id})
     else:
         removed = _remove_duck(db, user.id, payload.duck_type_id, -qty)
     db.commit()
