@@ -327,6 +327,27 @@ export default function RadarMapScreen() {
       showAlert("Couldn't open maps", "No map app available on this device."));
   };
 
+  const handleAddToCalendar = () => {
+    if (!selectedMeetup) return;
+    // Backend times are UTC; format as UTC for the calendar template.
+    const asUtc = (iso) => new Date(/Z|[+-]\d{2}:?\d{2}$/.test(iso) ? iso : iso + 'Z');
+    const fmt = (iso) => {
+      const d = asUtc(iso);
+      const p = (n) => String(n).padStart(2, '0');
+      return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}` +
+        `T${p(d.getUTCHours())}${p(d.getUTCMinutes())}00Z`;
+    };
+    const params = new URLSearchParams({
+      action: 'TEMPLATE',
+      text: selectedMeetup.title,
+      dates: `${fmt(selectedMeetup.start_time)}/${fmt(selectedMeetup.end_time)}`,
+      details: `Hosted by ${selectedMeetup.host_name} via Jtap${selectedMeetup.description ? '\n\n' + selectedMeetup.description : ''}`,
+      location: `${selectedMeetup.latitude},${selectedMeetup.longitude}`,
+    });
+    Linking.openURL(`https://calendar.google.com/calendar/render?${params.toString()}`).catch(() =>
+      showAlert("Couldn't open calendar", "No browser available on this device."));
+  };
+
   if (errorMsg) {
     return <View style={styles.centerContainer}><Text>{errorMsg}</Text></View>;
   }
@@ -539,13 +560,24 @@ export default function RadarMapScreen() {
             {!!selectedMeetup.description && (
               <Text style={styles.dropClue}>{selectedMeetup.description}</Text>
             )}
-            <View style={{ flexDirection: 'row', marginTop: 4 }}>
-              <TouchableOpacity style={styles.navBtn} onPress={handleNavigateToMeetup} activeOpacity={0.8}>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 }}>
+              <TouchableOpacity
+                style={[styles.navBtn, { marginRight: 8, marginBottom: 8 }]}
+                onPress={handleNavigateToMeetup}
+                activeOpacity={0.8}
+              >
                 <Text style={styles.navBtnText}>🧭 Navigate there</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.navBtn, { marginRight: 8, marginBottom: 8 }]}
+                onPress={handleAddToCalendar}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.navBtnText}>📅 Add to calendar</Text>
               </TouchableOpacity>
               {String(selectedMeetup.created_by) === String(myUserId) && (
                 <TouchableOpacity
-                  style={[styles.navBtn, { marginLeft: 8, borderColor: '#c0392b' }]}
+                  style={[styles.navBtn, { marginBottom: 8, borderColor: '#c0392b' }]}
                   onPress={handleCancelMeetup}
                   activeOpacity={0.8}
                 >

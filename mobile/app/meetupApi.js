@@ -35,7 +35,8 @@ export const cancelMeetup = (meetupId) =>
   req(`/meetups/${meetupId}`, { method: 'DELETE' });
 
 export function formatMeetupTime(isoString) {
-  const d = new Date(isoString);
+  // Backend stores naive UTC; parse as UTC so local display is correct.
+  const d = new Date(/Z|[+-]\d{2}:?\d{2}$/.test(isoString) ? isoString : isoString + 'Z');
   const now = new Date();
   const sameDay = d.toDateString() === now.toDateString();
   const tomorrow = new Date(now);
