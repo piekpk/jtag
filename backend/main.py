@@ -111,7 +111,11 @@ def _ensure_push_token_column():
 
 
 def _install_duck_sprites():
-    """Copy the bundled duck sprite library into the uploads dir (missing files only)."""
+    """Copy the bundled duck sprite library into the uploads dir.
+
+    Copies files that are missing, and refreshes files whose bundled copy
+    is newer (e.g. after the library's backgrounds were made transparent).
+    """
     src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "duck_sprites")
     dst = os.path.join(UPLOAD_DIR, "ducks")
     if not os.path.isdir(src):
@@ -125,9 +129,10 @@ def _install_duck_sprites():
         for f in sorted(os.listdir(tdir)):
             if not f.endswith(".png"):
                 continue
+            src_file = os.path.join(tdir, f)
             target = os.path.join(dst, theme, f)
-            if not os.path.exists(target):
-                shutil.copyfile(os.path.join(tdir, f), target)
+            if not os.path.exists(target) or os.path.getmtime(src_file) > os.path.getmtime(target):
+                shutil.copyfile(src_file, target)
                 count += 1
     if count:
         print(f"Installed {count} duck sprite(s) into uploads/ducks.")
