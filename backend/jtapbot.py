@@ -9,15 +9,16 @@
 
 import os
 import random
+import re
 import secrets
 import sqlite3
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import llm
 import profanity
-from models import User
+from models import User, DuckType, UserDuck, DuckGive
 
 BOT_EMAIL = "jtapbot@jtap.local"
 BOT_NAME = "JtapBot"
@@ -37,6 +38,7 @@ POST_INTERVAL_HOURS = float(os.environ.get("JTBOT_POST_HOURS", "6"))
 REPLY_COOLDOWN_S = 60
 
 BOT_USER_ID = None
+_SessionLocal = None
 _last_reply_at = 0.0
 _thread_started = False
 
@@ -61,7 +63,8 @@ def _db_path():
 
 def init_bot(SessionLocal):
     """Create the bot user if missing; remember its id. Call once at startup."""
-    global BOT_USER_ID
+    global BOT_USER_ID, _SessionLocal
+    _SessionLocal = SessionLocal
     db = SessionLocal()
     try:
         bot = db.query(User).filter(User.email == BOT_EMAIL).first()
@@ -171,11 +174,107 @@ def maybe_reply(user_id, channel, message):
     if now - _last_reply_at < REPLY_COOLDOWN_S:
         return
     _last_reply_at = now
-    threading.Thread(target=_reply_worker, args=(message,), daemon=True).start()
+    threading.Thread(target=_reply_worker, args=(user_id, message), daemon=True).start()
 
 
-def _reply_worker(message):
+_DUCK_ASK_WORDS = {"give", "want", "please", "gift", "me", "quack", "need", "send", "drop", "got"}
+DUCK_GIFT_COOLDOWN_HOURS = 24
+
+
+def _wants_duck(message):
+    """Does this @JtapBot message ask for a duck?"""
+    words = set(re.findall(r"[a-z]+", (message or "").lower()))
+    return "duck" in words and bool(words & _DUCK_ASK_WORDS)
+
+
+def _grant_bot_duck(user_id):
+    """Grant a bot duck. Returns (DuckType, 'granted') or (None, reason)."""
+    import main  # lazy: main imports jtapbot at module level
+
+    db = _SessionLocal()
     try:
+        since = datetime.utcnow() - timedelta(hours=DUCK_GIFT_COOLDOWN_HOURS)
+        recent = (
+            db.query(DuckGive)
+            .filter(
+                DuckGive.giver_id == BOT_USER_ID,
+                DuckGive.recipient_id == user_id,
+                DuckGive.created_at >= since,
+            )
+            .first()
+        )
+        if recent:
+            return None, "cooldown"
+
+        pool = (
+            db.query(DuckType)
+            .filter(DuckType.rarity.in_(("common", "uncommon")))
+            .order_by(DuckType.id)
+            .all()
+        )
+        if not pool:
+            return None, "empty"
+
+        owned = {
+            r.duck_type_id
+            for r in db.query(UserDuck).filter(UserDuck.user_id == user_id).all()
+        }
+        candidates = [d for d in pool if d.id not in owned] or pool
+        weights = [4 if d.rarity == "common" else 1 for d in candidates]
+        dt = random.choices(candidates, weights=weights, k=1)[0]
+
+        main._grant_duck(db, user_id, dt.id, 1)
+        db.add(
+            DuckGive(
+                giver_id=BOT_USER_ID,
+                recipient_id=user_id,
+                duck_type_id=dt.id,
+                note="JtapBot gift",
+            )
+        )
+        recipient = db.query(User).filter(User.id == user_id).first()
+        main._bump_legacy_duck_count(db, recipient)
+        main._notify_user(
+            db,
+            user_id,
+            "ducked",
+            "🦆 JtapBot ducked you!",
+            f"JtapBot gifted you a {dt.emoji} {dt.name}",
+            {"giver_id": BOT_USER_ID, "duck_type_id": dt.id},
+        )
+        db.commit()
+        main._check_milestones(db, user_id)
+        db.commit()
+        # Capture display fields before the session closes (dt detaches).
+        granted = {"name": dt.name, "emoji": dt.emoji or "🦆"}
+        return granted, "granted"
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def _reply_worker(user_id, message):
+    try:
+        # Duck dispensing works even when the LLM is down.
+        if _wants_duck(message):
+            import main  # lazy: main imports jtapbot at module level
+
+            db = _SessionLocal()
+            try:
+                name = main._owner_name(db, user_id)
+            finally:
+                db.close()
+            dt, status = _grant_bot_duck(user_id)
+            if status == "granted":
+                _say(f"\U0001F986 {name} — a wild {dt['emoji']} {dt['name']} waddled into your pond! Quack!")
+            elif status == "cooldown":
+                _say(
+                    f"Easy there, {name}! My duck bag refills every 24 hours. "
+                    "Come back tomorrow! \U0001F986"
+                )
+            return
         if not llm.is_available():
             return
         text = llm.generate(
