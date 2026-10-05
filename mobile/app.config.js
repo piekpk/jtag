@@ -49,7 +49,7 @@ export default {
     "scheme": "jtap",
     "extra": {
       "eas": {
-        "projectId": "4ea1c11e-16e9-4174-9c9d-26f0b34bbfe8"
+        "projectId": "9624fd45-2657-443f-a384-bad43f4ff215"
       }
     }
   }
