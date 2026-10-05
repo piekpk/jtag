@@ -1215,7 +1215,16 @@ def _send_expo_push(push_token: str, title: str, body: str, data: dict = None):
             headers={"Content-Type": "application/json", "Accept": "application/json"},
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
-            resp.read()
+            raw = resp.read().decode("utf-8", "replace")
+        try:
+            ticket = json.loads(raw).get("data", {})
+            if isinstance(ticket, dict) and ticket.get("status") == "error":
+                print(f"Push ticket error: {ticket.get('message')} "
+                      f"({ticket.get('details')})")
+            else:
+                print(f"Push ticket ok: {ticket.get('id') or ticket.get('status')}")
+        except Exception:
+            print(f"Push ticket unparseable: {raw[:200]}")
     except Exception as e:
         print(f"Push send failed: {e}")
 
