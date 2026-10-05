@@ -8,6 +8,7 @@
 """
 
 import os
+import json
 import random
 import re
 import secrets
@@ -20,7 +21,7 @@ import llm
 import profanity
 import duck_ai
 import places
-from models import User, DuckType, UserDuck, DuckGive, DuckDrop
+from models import User, DuckType, UserDuck, DuckGive, DuckDrop, PlaceSearch
 
 BOT_EMAIL = "jtapbot@jtap.local"
 BOT_NAME = "JtapBot"
@@ -480,4 +481,20 @@ def _places_reply(user_id, category):
             line += f" — {r['phone']}"
         lines.append(line)
     lines.append("24/7 spots listed first — call ahead to confirm hours.")
+    # Persist the search so chat can deep-link it onto the map.
+    try:
+        db = _SessionLocal()
+        try:
+            ps = PlaceSearch(user_id=user_id, category=category, results=results)
+            db.add(ps)
+            db.commit()
+            db.refresh(ps)
+            search_id = ps.id
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"JtapBot place-search save failed: {e}")
+        search_id = None
+    if search_id:
+        lines.append(f"[map:{search_id}]")
     return "\n".join(lines)

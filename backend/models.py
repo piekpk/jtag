@@ -195,3 +195,14 @@ class MeetupRsvp(Base):
     meetup_id = Column(Integer, index=True, nullable=False)
     user_id = Column(Integer, index=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class PlaceSearch(Base):
+    """A JtapBot nearby-places answer, so chat can deep-link it onto the map."""
+    __tablename__ = "place_searches"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True, nullable=False)  # who asked
+    category = Column(String(20), nullable=False)  # gas | mechanic | tow | food
+    results = Column(JSON, nullable=False, default=list)  # [{name,lat,lng,distance_mi,hours,phone}]
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

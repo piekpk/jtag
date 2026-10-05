@@ -159,12 +159,30 @@ export default function ChatScreen() {
     }
   };
 
+  const openPlaceSearchOnMap = async (searchId) => {
+    try {
+      const response = await fetch(`${API_URL}/places/searches/${searchId}`, {
+        headers: await getAuthHeaders(),
+      });
+      if (!response.ok) return;
+      const search = await response.json();
+      router.push({
+        pathname: '/(tabs)/map',
+        params: { placePins: JSON.stringify({ category: search.category, results: search.results }) },
+      });
+    } catch (e) {
+      console.log('openPlaceSearchOnMap failed', e);
+    }
+  };
+
   const renderMessageItem = ({ item }) => {
     const isMe = item.user_id?.toString() === userId?.toString();
     const reactions = item.reactions || {};
     const hasReactions = Object.values(reactions).some(count => count > 0);
     const isPickerOpen = activeMessageId === item.id;
 
+    const mapMatch = !isMe && typeof item.message === 'string' && item.message.match(/\[map:(\d+)\]/);
+    const cleanMessage = typeof item.message === 'string' ? item.message.replace(/\[map:\d+\]/g, '').trim() : item.message;
     return (
       <View style={[styles.messageBubble, isMe ? styles.myMessage : styles.theirMessage]}>
         {!isMe && (
@@ -173,8 +191,13 @@ export default function ChatScreen() {
           </TouchableOpacity>
         )}
         <Text style={[styles.messageText, isMe ? styles.myMessageText : styles.theirMessageText]}>
-          {item.message}
+          {cleanMessage}
         </Text>
+        {mapMatch && (
+          <TouchableOpacity style={styles.mapLinkButton} onPress={() => openPlaceSearchOnMap(mapMatch[1])}>
+            <Text style={styles.mapLinkText}>🗺️ View on map</Text>
+          </TouchableOpacity>
+        )}
 
         {hasReactions && (
           <View style={styles.reactionDisplayRow}>
@@ -368,6 +391,11 @@ const styles = StyleSheet.create({
   theirMessage: { alignSelf: 'flex-start', backgroundColor: '#1e1e1e', borderWidth: 1, borderColor: '#333' },
   senderName: { fontSize: 12, fontWeight: 'bold', color: '#d4af37', marginBottom: 4 },
   messageText: { fontSize: 16 },
+  mapLinkButton: {
+    marginTop: 8, alignSelf: 'flex-start', backgroundColor: '#2a2417',
+    borderWidth: 1, borderColor: '#d4af37', borderRadius: 16, paddingVertical: 6, paddingHorizontal: 12,
+  },
+  mapLinkText: { color: '#d4af37', fontSize: 14, fontWeight: '600' },
   myMessageText: { color: '#ffffff' },
   theirMessageText: { color: '#e0e0e0' },
   reactionDisplayRow: { flexDirection: 'row', marginTop: 6, flexWrap: 'wrap' },

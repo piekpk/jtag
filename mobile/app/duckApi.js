@@ -51,6 +51,7 @@ export function celebrateMilestones(completed) {
   emitCelebration(completed);
 }
 export const getUserPond = (userId) => req(`/users/${userId}/pond`);
+export const getPlaceSearch = (id) => req(`/places/searches/${id}`);
 export const giveDuck = (recipientId, duckTypeId, note) =>
   req('/ducks/give', { body: JSON.stringify({ recipient_id: recipientId, duck_type_id: duckTypeId, note }) });
 export const getDuckFeed = (limit = 50) => req(`/ducks/feed?limit=${limit}`);

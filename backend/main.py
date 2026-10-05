@@ -17,7 +17,7 @@ from sqlalchemy import create_engine, or_, func
 from sqlalchemy.orm import sessionmaker, Session
 from passlib.context import CryptContext
 from pydantic import BaseModel
-from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, Milestone, PhotoReaction, MarketListing, Notification, Meetup, MeetupRsvp
+from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, Milestone, PhotoReaction, MarketListing, Notification, Meetup, MeetupRsvp, PlaceSearch
 from schemas import UserProfileUpdate, UserProfileResponse, UserCreate
 import duck_ai
 import profanity
@@ -828,6 +828,16 @@ seed_duck_types()
 # JtapBot: global-chat bot user + scheduled Jeep jokes/tips.
 jtapbot.init_bot(SessionLocal)
 jtapbot.start()
+
+
+@app.get("/places/searches/{search_id}")
+def get_place_search(search_id: int, db: Session = Depends(get_db),
+                     current_user: User = Depends(get_current_user)):
+    """Fetch a JtapBot nearby-places answer so chat can pin it on the map."""
+    s = db.query(PlaceSearch).filter(PlaceSearch.id == search_id).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="Search not found")
+    return {"id": s.id, "category": s.category, "results": s.results or []}
 
 
 def _duck_type_or_404(db: Session, duck_type_id: int) -> DuckType:

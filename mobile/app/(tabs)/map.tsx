@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StyleSheet, View, Text, ActivityIndicator, TouchableOpacity, Modal, TextInput, StatusBar, Platform, KeyboardAvoidingView, ScrollView, Linking } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -52,7 +52,30 @@ export default function RadarMapScreen() {
   const [myUserId, setMyUserId] = useState(null);
   // Meetup state
   const [meetups, setMeetups] = useState([]);
+  const [placePins, setPlacePins] = useState([]);
+  const [placeCategory, setPlaceCategory] = useState(null);
+  const routeParams = useLocalSearchParams();
   const [selectedMeetup, setSelectedMeetup] = useState(null);
+  const mapRef = useRef(null);
+
+  useEffect(() => {
+    if (routeParams.placePins) {
+      try {
+        const parsed = JSON.parse(routeParams.placePins);
+        const pins = (parsed.results || []).filter((r) => r.lat && r.lng);
+        setPlacePins(pins);
+        setPlaceCategory(parsed.category || null);
+        if (pins.length > 0 && mapRef.current) {
+          mapRef.current.fitToCoordinates(
+            pins.map((r) => ({ latitude: r.lat, longitude: r.lng })),
+            { edgePadding: { top: 120, right: 60, bottom: 120, left: 60 }, animated: true }
+          );
+        }
+      } catch (e) {
+        console.log('bad placePins param', e);
+      }
+    }
+  }, [routeParams.placePins]);
   const [chooserVisible, setChooserVisible] = useState(false);
   const [chooserCoord, setChooserCoord] = useState(null);
   const [meetupModalVisible, setMeetupModalVisible] = useState(false);
@@ -409,6 +432,7 @@ export default function RadarMapScreen() {
   return (
     <View style={styles.container}>
       <MapView
+        ref={mapRef}
         style={styles.map}
         provider={PROVIDER_GOOGLE}
         initialRegion={location}
@@ -451,6 +475,17 @@ export default function RadarMapScreen() {
               <DuckIcon duck={drop.duck} size={30} />
             </View>
           </Marker>
+        ))}
+
+        {/* JtapBot place pins */}
+        {placePins.map((r, i) => (
+          <Marker
+            key={`place-${i}`}
+            coordinate={{ latitude: r.lat, longitude: r.lng }}
+            title={r.name}
+            description={[r.hours, r.phone].filter(Boolean).join(' • ')}
+            pinColor="#d4af37"
+          />
         ))}
 
         {/* Meetup Markers */}
@@ -847,6 +882,16 @@ export default function RadarMapScreen() {
         ))}
       </View>
 
+      {placePins.length > 0 && (
+        <TouchableOpacity
+          style={styles.clearPlacesChip}
+          onPress={() => { setPlacePins([]); setPlaceCategory(null); }}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.clearPlacesText}>✕ Clear {placeCategory || 'places'}</Text>
+        </TouchableOpacity>
+      )}
+
       {/* Duck drop tutorial popup */}
       <Modal
         visible={showTutorial}
@@ -1029,6 +1074,11 @@ const styles = StyleSheet.create({
   },
   filterChipOff: { borderColor: '#444', opacity: 0.6 },
   filterChipText: { color: '#d4af37', fontSize: 12, fontWeight: '700' },
+  clearPlacesChip: {
+    position: 'absolute', top: 104, alignSelf: 'center', backgroundColor: '#1e1e1e',
+    borderWidth: 1, borderColor: '#d4af37', borderRadius: 16, paddingVertical: 6, paddingHorizontal: 12, zIndex: 5,
+  },
+  clearPlacesText: { color: '#d4af37', fontSize: 13, fontWeight: '600' },
   filterChipTextOff: { color: '#888' },
   dateTimeBtn: {
     backgroundColor: '#2c2c2e', borderRadius: 10, borderWidth: 1, borderColor: '#d4af37',
