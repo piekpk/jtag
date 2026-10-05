@@ -112,6 +112,21 @@ class UserMilestone(Base):
     key = Column(String, index=True, nullable=False)
     claimed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
+class Milestone(Base):
+    """Admin-created custom milestones. Key is derived as f"custom_{id}"."""
+    __tablename__ = "milestones"
+
+    id = Column(Integer, primary_key=True, index=True)
+    track = Column(String, nullable=False, default="Activity")
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=False, default="")
+    target = Column(Integer, nullable=False, default=1)
+    counter = Column(String, nullable=False)  # ducks_given | drops_claimed | drops_created | trades_completed | pond_unlocked | photo_reactions
+    reward_pool = Column(Text, nullable=True)  # JSON list of rarities, e.g. ["rare", "epic"]
+    reward_slug = Column(String, nullable=True)  # specific duck type slug
+    prefer_unowned = Column(Boolean, nullable=False, default=False, server_default="0")
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
 class PhotoReaction(Base):
     """Likes/emoji reactions on a specific photo slot of another user's profile."""
     __tablename__ = "photo_reactions"

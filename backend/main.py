@@ -17,7 +17,7 @@ from sqlalchemy import create_engine, or_, func
 from sqlalchemy.orm import sessionmaker, Session
 from passlib.context import CryptContext
 from pydantic import BaseModel
-from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, PhotoReaction, MarketListing
+from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, Milestone, PhotoReaction, MarketListing
 from schemas import UserProfileUpdate, UserProfileResponse, UserCreate
 import duck_ai
 
@@ -785,6 +785,47 @@ MILESTONES = [
 ]
 
 
+# Counters usable by admin-created milestones (same queries as _milestone_progress).
+MILESTONE_COUNTERS = {
+    "ducks_given": "Ducks given to others",
+    "drops_claimed": "Location drops claimed",
+    "drops_created": "Location drops created",
+    "trades_completed": "Trades completed",
+    "pond_unlocked": "Different ducks in pond",
+    "photo_reactions": "Photo reactions given",
+}
+
+
+def _db_milestone_dict(row: Milestone) -> dict:
+    """Convert an admin-created Milestone row to the milestone dict format."""
+    d = {
+        "key": f"custom_{row.id}",
+        "track": row.track,
+        "name": row.name,
+        "description": row.description or "",
+        "target": row.target,
+        "counter": row.counter,
+    }
+    if row.reward_slug:
+        d["reward_slug"] = row.reward_slug
+    else:
+        try:
+            pool = json.loads(row.reward_pool) if row.reward_pool else []
+        except Exception:
+            pool = []
+        d["reward_pool"] = [r for r in pool if r in DUCK_RARITIES] or ["common"]
+    if row.prefer_unowned:
+        d["prefer_unowned"] = True
+    return d
+
+
+def _all_milestones(db: Session) -> list:
+    """Built-in milestones plus admin-created ones."""
+    return MILESTONES + [
+        _db_milestone_dict(r) for r in db.query(Milestone).order_by(Milestone.id).all()
+    ]
+
+
 def _milestone_progress(db: Session, user_id: int, m: dict) -> int:
     c = m["counter"]
     if c == "ducks_given":
@@ -873,7 +914,7 @@ def _check_milestones(db: Session, user_id: int) -> list:
         claimed_keys = {r.key for r in
                         db.query(UserMilestone).filter(UserMilestone.user_id == user_id).all()}
         found = False
-        for m in MILESTONES + _photo_reaction_tiers(db, user_id):
+        for m in _all_milestones(db) + _photo_reaction_tiers(db, user_id):
             if m["key"] in claimed_keys or m["key"] in skipped:
                 continue
             if _milestone_progress(db, user_id, m) < m["target"]:
@@ -993,7 +1034,7 @@ def list_milestones(db: Session = Depends(get_db), current_user: User = Depends(
     claimed_keys = {r.key for r in
                     db.query(UserMilestone).filter(UserMilestone.user_id == current_user.id).all()}
     out = []
-    for m in MILESTONES + _photo_reaction_tiers(db, current_user.id):
+    for m in _all_milestones(db) + _photo_reaction_tiers(db, current_user.id):
         d = _milestone_dict(db, m)
         d["progress"] = _milestone_progress(db, current_user.id, m)
         d["claimed"] = m["key"] in claimed_keys
@@ -1454,6 +1495,7 @@ ADMIN_TABLES = {
     "drop_claims": DropClaim,
     "trades": Trade,
     "user_milestones": UserMilestone,
+    "milestones": Milestone,
     "photo_reactions": PhotoReaction,
     "market_listings": MarketListing,
 }
@@ -1725,6 +1767,88 @@ class DuckGrant(BaseModel):
     email: str
     duck_type_id: int
     qty: int = 1
+
+
+class MilestoneCreate(BaseModel):
+    name: str
+    description: str = ""
+    track: str = "Activity"
+    target: int = 1
+    counter: str = "ducks_given"
+    reward_mode: str = "pool"  # "pool" | "duck"
+    reward_pool: list = []
+    reward_slug: str = ""
+    prefer_unowned: bool = False
+
+
+@app.get("/admin/milestones")
+def admin_list_milestones(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """List admin-created milestones (built-ins are hardcoded, not listed here)."""
+    out = []
+    for r in db.query(Milestone).order_by(Milestone.id).all():
+        d = _db_milestone_dict(r)
+        d["id"] = r.id
+        d["created_at"] = r.created_at.isoformat() if r.created_at else None
+        out.append(d)
+    return out
+
+
+@app.post("/admin/milestones")
+def admin_create_milestone(payload: MilestoneCreate, db: Session = Depends(get_db),
+                           admin: User = Depends(require_admin)):
+    """Create a custom milestone. Claim key is auto-derived as custom_<id>."""
+    name = (payload.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+    if len(name) > 80:
+        raise HTTPException(status_code=400, detail="Name too long (80 chars max)")
+    description = (payload.description or "").strip()
+    if len(description) > 200:
+        raise HTTPException(status_code=400, detail="Description too long (200 chars max)")
+    track = (payload.track or "Activity").strip() or "Activity"
+    if len(track) > 40:
+        raise HTTPException(status_code=400, detail="Track too long (40 chars max)")
+    target = payload.target
+    if not isinstance(target, int) or isinstance(target, bool) or target < 1:
+        raise HTTPException(status_code=400, detail="Target must be a whole number of at least 1")
+    counter = (payload.counter or "").strip()
+    if counter not in MILESTONE_COUNTERS:
+        raise HTTPException(status_code=400,
+                            detail=f"Counter must be one of: {', '.join(MILESTONE_COUNTERS)}")
+    reward_pool = None
+    reward_slug = None
+    if (payload.reward_mode or "pool").strip() == "duck":
+        slug = (payload.reward_slug or "").strip()
+        dt = db.query(DuckType).filter(DuckType.slug == slug).first()
+        if not dt:
+            raise HTTPException(status_code=400, detail="Reward duck not found")
+        reward_slug = dt.slug
+    else:
+        pool = [r for r in (payload.reward_pool or []) if r in DUCK_RARITIES]
+        if not pool:
+            raise HTTPException(status_code=400, detail="Pick at least one reward rarity")
+        reward_pool = json.dumps(pool)
+    row = Milestone(track=track, name=name, description=description, target=target,
+                    counter=counter, reward_pool=reward_pool, reward_slug=reward_slug,
+                    prefer_unowned=bool(payload.prefer_unowned))
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    d = _db_milestone_dict(row)
+    d["id"] = row.id
+    return d
+
+
+@app.delete("/admin/milestones/{milestone_id}")
+def admin_delete_milestone(milestone_id: int, db: Session = Depends(get_db),
+                           admin: User = Depends(require_admin)):
+    """Delete a custom milestone. Users who already claimed it keep the reward."""
+    row = db.query(Milestone).filter(Milestone.id == milestone_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Milestone not found")
+    db.delete(row)
+    db.commit()
+    return {"deleted": True}
 
 
 DUCK_RARITIES = ("common", "rare", "epic", "legendary")

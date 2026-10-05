@@ -117,6 +117,45 @@
       <div style="margin-bottom:8px;"></div>
       <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="createDuckType()">Create duck type</button>
     </div>
+    <div id="tool-milestone" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:480px; display:none;">
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">🏆 Create milestone</div>
+      <input id="m_name" placeholder="Name (e.g. Wave Master)" style="margin-bottom:8px;">
+      <input id="m_desc" placeholder="Description (e.g. Give 10 ducks to fellow Jeepers)" style="margin-bottom:8px;">
+      <div style="display:flex; gap:8px;">
+        <select id="m_track" style="flex:1;">
+          <option value="Activity">Activity</option>
+          <option value="Collection">Collection</option>
+        </select>
+        <select id="m_counter" style="flex:1;">
+          <option value="ducks_given">Ducks given</option>
+          <option value="drops_claimed">Drops claimed</option>
+          <option value="drops_created">Drops created</option>
+          <option value="trades_completed">Trades completed</option>
+          <option value="pond_unlocked">Pond ducks unlocked</option>
+          <option value="photo_reactions">Photo reactions</option>
+        </select>
+        <input id="m_target" type="number" value="5" min="1" style="width:70px; margin-bottom:8px;" title="Target count">
+      </div>
+      <div style="display:flex; gap:8px; margin-bottom:8px;">
+        <select id="m_reward_mode" style="flex:1;" onchange="toggleMilestoneReward()">
+          <option value="pool">Random rarity reward</option>
+          <option value="duck">Specific duck reward</option>
+        </select>
+        <select id="m_duck" style="flex:1; display:none;"></select>
+      </div>
+      <div id="m_pool" style="margin-bottom:8px; color:var(--muted); font-size:12px;">
+        Reward rarities:
+        <label><input type="checkbox" class="m_rar" value="common" checked style="width:auto;"> common</label>
+        <label><input type="checkbox" class="m_rar" value="rare" style="width:auto;"> rare</label>
+        <label><input type="checkbox" class="m_rar" value="epic" style="width:auto;"> epic</label>
+        <label><input type="checkbox" class="m_rar" value="legendary" style="width:auto;"> legendary</label>
+      </div>
+      <label style="color:var(--muted); font-size:12px; display:block; margin-bottom:8px;">
+        <input type="checkbox" id="m_prefer" style="width:auto;"> Prefer ducks the user doesn't own yet
+      </label>
+      <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="createMilestone()">Create milestone</button>
+      <div id="m_list" style="margin-top:10px;"></div>
+    </div>
   </div>
 </header>
 <main id="app"></main>
@@ -133,7 +172,7 @@ const SUMMARY = {
   duck_gives: ['giver_id', 'recipient_id', 'duck_type_id'],
   duck_drops: ['label', 'duck_type_id', 'claims_count'],
   drop_claims: ['drop_id', 'user_id'], trades: ['proposer_id', 'recipient_id', 'status'],
-  user_milestones: ['user_id', 'key'], photo_reactions: ['photo_owner_id', 'emoji'],
+  user_milestones: ['user_id', 'key'], milestones: ['name', 'target'], photo_reactions: ['photo_owner_id', 'emoji'],
   messages: ['user_id', 'channel', 'message'],
 };
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -179,6 +218,7 @@ const TOOLS = [
   ["tool-drop", "📍 Create drop"],
   ["tool-give", "🎁 Give ducks"],
   ["tool-create", "➕ New duck"],
+  ["tool-milestone", "🏆 Milestones"],
 ];
 
 function buildToolMenu() {
@@ -200,6 +240,7 @@ function showTool(id) {
   const found = TOOLS.find(t => t[0] === id);
   document.getElementById('menulabel').textContent = found ? found[1] : 'Tools';
   document.getElementById('toolmenu').style.display = 'none';
+  if (id === 'tool-milestone') loadMilestones();
 }
 
 document.addEventListener('click', () => {
@@ -218,6 +259,7 @@ async function loadTables() {
     showTool('tool-broadcast');
     loadDuckOptions();
     loadDuckSprites();
+    loadMilestones();
     let statsHtml = '';
     try {
       const s = await api('/admin/stats');
@@ -261,6 +303,70 @@ async function loadDuckOptions() {
     const p = document.getElementById('p_duck');
     if (p) p.innerHTML = opts;
   } catch (e) { /* auth handled elsewhere */ }
+}
+
+function toggleMilestoneReward() {
+  const mode = document.getElementById('m_reward_mode').value;
+  document.getElementById('m_duck').style.display = mode === 'duck' ? 'block' : 'none';
+  document.getElementById('m_pool').style.display = mode === 'duck' ? 'none' : 'block';
+}
+
+function milestoneRewardText(m) {
+  if (m.reward_slug) return 'duck: ' + m.reward_slug;
+  return 'random ' + (m.reward_pool || ['common']).join(' / ');
+}
+
+async function loadMilestones() {
+  try {
+    const [data, ducks] = await Promise.all([
+      api('/admin/milestones'),
+      api('/admin/tables/duck_types?limit=200&offset=0'),
+    ]);
+    document.getElementById('m_duck').innerHTML = ducks.rows.map(r =>
+      `<option value="${esc(r.slug)}">${esc(r.emoji || '🦆')} ${esc(r.name)} (${esc(r.rarity)})</option>`).join('');
+    const list = document.getElementById('m_list');
+    if (!data.length) {
+      list.innerHTML = `<div style="color:var(--muted); font-size:12px;">No custom milestones yet. Built-in ones aren't listed here.</div>`;
+      return;
+    }
+    list.innerHTML = data.map(m =>
+      `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-top:1px solid var(--surface); font-size:12px;">
+        <div><b style="color:var(--gold);">${esc(m.name)}</b> <span style="color:var(--muted);">· ${esc(m.track)}</span><br>
+        <span style="color:var(--muted);">${esc(m.counter)} × ${m.target} · ${esc(milestoneRewardText(m))}</span></div>
+        <button class="danger" style="padding:4px 10px; font-size:12px; width:auto; flex-shrink:0;" onclick="deleteMilestone(${m.id})">Delete</button>
+      </div>`).join('');
+  } catch (e) { /* auth handled elsewhere */ }
+}
+
+async function createMilestone() {
+  const pool = [...document.querySelectorAll('.m_rar:checked')].map(c => c.value);
+  const body = {
+    name: document.getElementById('m_name').value.trim(),
+    description: document.getElementById('m_desc').value.trim(),
+    track: document.getElementById('m_track').value,
+    counter: document.getElementById('m_counter').value,
+    target: parseInt(document.getElementById('m_target').value, 10) || 1,
+    reward_mode: document.getElementById('m_reward_mode').value,
+    reward_pool: pool,
+    reward_slug: document.getElementById('m_duck').value,
+    prefer_unowned: document.getElementById('m_prefer').checked,
+  };
+  if (!body.name) { alert('Give the milestone a name.'); return; }
+  try {
+    const m = await api('/admin/milestones', { method: 'POST', body: JSON.stringify(body) });
+    alert(`Milestone "${m.name}" created — rewards at ${m.target}.`);
+    document.getElementById('m_name').value = '';
+    document.getElementById('m_desc').value = '';
+    loadMilestones();
+  } catch (e) { alert('Create failed: ' + e.message); }
+}
+
+async function deleteMilestone(id) {
+  if (!confirm('Delete this milestone? Users who already claimed it keep the reward.')) return;
+  try {
+    await api(`/admin/milestones/${id}`, { method: 'DELETE' });
+    loadMilestones();
+  } catch (e) { alert('Delete failed: ' + e.message); }
 }
 
 async function broadcast() {
