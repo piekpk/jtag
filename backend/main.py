@@ -1344,6 +1344,12 @@ def claim_drop(drop_id: int, payload: DropClaimCreate, db: Session = Depends(get
 MAX_ACTIVE_MEETUPS_PER_USER = 5
 
 
+def _as_naive_utc(dt: datetime) -> datetime:
+    """Clients send ISO strings with a 'Z' suffix (offset-aware); the DB layer
+    uses naive UTC everywhere, so strip tzinfo on the way in."""
+    return dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
+
+
 class MeetupCreate(BaseModel):
     title: str
     description: str = None
@@ -1382,11 +1388,13 @@ def create_meetup(payload: MeetupCreate, db: Session = Depends(get_db),
     if len(title) > 80:
         raise HTTPException(status_code=400, detail="Title is too long (max 80 characters)")
     now = datetime.utcnow()
-    if payload.end_time <= payload.start_time:
+    start_time = _as_naive_utc(payload.start_time)
+    end_time = _as_naive_utc(payload.end_time)
+    if end_time <= start_time:
         raise HTTPException(status_code=400, detail="End time must be after start time")
-    if payload.start_time < now - timedelta(minutes=5):
+    if start_time < now - timedelta(minutes=5):
         raise HTTPException(status_code=400, detail="Start time must be in the future")
-    if payload.end_time - payload.start_time > timedelta(hours=72):
+    if end_time - start_time > timedelta(hours=72):
         raise HTTPException(status_code=400, detail="Meetups can't run longer than 72 hours")
     active = db.query(Meetup).filter(
         Meetup.created_by == current_user.id,
@@ -1397,7 +1405,7 @@ def create_meetup(payload: MeetupCreate, db: Session = Depends(get_db),
         title=title,
         description=(payload.description or "").strip()[:500] or None,
         latitude=payload.latitude, longitude=payload.longitude,
-        start_time=payload.start_time, end_time=payload.end_time,
+        start_time=start_time, end_time=end_time,
         created_by=current_user.id)
     db.add(m)
     db.commit()
