@@ -36,6 +36,7 @@ export default function MarketScreen() {
   const [myUserId, setMyUserId] = useState(null);
   const [selected, setSelected] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [zoomPhoto, setZoomPhoto] = useState(false);
   const [loadError, setLoadError] = useState(null);
 
   // create-form state
@@ -242,7 +243,9 @@ export default function MarketScreen() {
           <View style={styles.detailBox}>
             <ScrollView>
               {selected && photoUrl(selected.photo_url) && (
-                <Image source={{ uri: photoUrl(selected.photo_url) }} style={styles.detailPhoto} resizeMode="cover" />
+                <TouchableOpacity onPress={() => setZoomPhoto(true)} activeOpacity={0.9}>
+                  <Image source={{ uri: photoUrl(selected.photo_url) }} style={styles.detailPhoto} resizeMode="cover" />
+                </TouchableOpacity>
               )}
               {selected && (
                 <View style={styles.detailBody}>
@@ -277,6 +280,19 @@ export default function MarketScreen() {
             </ScrollView>
           </View>
         </View>
+      </Modal>
+
+      {/* Fullscreen photo zoom */}
+      <Modal visible={zoomPhoto && !!selected} transparent animationType="fade"
+        onRequestClose={() => setZoomPhoto(false)}>
+        <TouchableOpacity style={styles.zoomBackdrop} activeOpacity={1} onPress={() => setZoomPhoto(false)}>
+          <TouchableOpacity style={styles.zoomClose} onPress={() => setZoomPhoto(false)}>
+            <Text style={styles.zoomCloseText}>✕</Text>
+          </TouchableOpacity>
+          {selected && photoUrl(selected.photo_url) && (
+            <Image source={{ uri: photoUrl(selected.photo_url) }} style={styles.zoomImage} resizeMode="contain" />
+          )}
+        </TouchableOpacity>
       </Modal>
 
       {/* Create modal */}
@@ -377,6 +393,10 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' },
   detailBox: { backgroundColor: '#1e1e1e', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '92%', paddingTop: 8 },
   detailPhoto: { width: '100%', height: 260, borderTopLeftRadius: 20, borderTopRightRadius: 20, backgroundColor: '#2c2c2e' },
+  zoomBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },
+  zoomImage: { width: '94%', height: '80%' },
+  zoomClose: { position: 'absolute', top: 50, right: 20, zIndex: 2, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(212,175,55,0.9)', justifyContent: 'center', alignItems: 'center' },
+  zoomCloseText: { color: '#121212', fontSize: 18, fontWeight: 'bold' },
   detailBody: { padding: 18, paddingBottom: 34 },
   detailTitle: { fontSize: 19, fontWeight: '800', color: '#fff', flex: 1 },
   detailDesc: { color: '#e0e0e0', fontSize: 14.5, lineHeight: 22, marginTop: 12 },
