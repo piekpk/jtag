@@ -54,6 +54,7 @@ export default function RadarMapScreen() {
   const [meetups, setMeetups] = useState([]);
   const [placePins, setPlacePins] = useState([]);
   const [placeCategory, setPlaceCategory] = useState(null);
+  const [selectedPlace, setSelectedPlace] = useState(null);
   const routeParams = useLocalSearchParams();
   const [selectedMeetup, setSelectedMeetup] = useState(null);
   const mapRef = useRef(null);
@@ -248,6 +249,13 @@ export default function RadarMapScreen() {
     }
   };
 
+  const handleNavigateToPlace = () => {
+    if (!selectedPlace) return;
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${selectedPlace.lat},${selectedPlace.lng}&travelmode=driving`;
+    Linking.openURL(url).catch(() =>
+      showAlert("Couldn't open maps", "No map app available on this device."));
+  };
+
   const handleNavigateToDrop = () => {
     if (!selectedDrop) return;
     const url = `https://www.google.com/maps/dir/?api=1&destination=${selectedDrop.latitude},${selectedDrop.longitude}&travelmode=driving`;
@@ -437,7 +445,7 @@ export default function RadarMapScreen() {
         provider={PROVIDER_GOOGLE}
         initialRegion={location}
         showsUserLocation={true}
-        onPress={() => { setSelectedDrop(null); setSelectedMeetup(null); setConfirmingCancel(false); }}
+        onPress={() => { setSelectedDrop(null); setSelectedMeetup(null); setSelectedPlace(null); setConfirmingCancel(false); }}
         onLongPress={(e) => { setChooserCoord(e.nativeEvent.coordinate); setChooserVisible(true); }}
       >
         {/* Current User Marker */}
@@ -469,7 +477,7 @@ export default function RadarMapScreen() {
           <Marker
             key={`drop-${drop.id}`}
             coordinate={{ latitude: drop.latitude, longitude: drop.longitude }}
-            onPress={(e) => { e.stopPropagation(); setSelectedMeetup(null); setSelectedDrop(drop); }}
+            onPress={(e) => { e.stopPropagation(); setSelectedMeetup(null); setSelectedPlace(null); setSelectedDrop(drop); }}
           >
             <View style={[styles.dropMarker, drop.claimed_by_me && { opacity: 0.4 }]}>
               <DuckIcon duck={drop.duck} size={30} />
@@ -482,6 +490,7 @@ export default function RadarMapScreen() {
           <Marker
             key={`place-${i}`}
             coordinate={{ latitude: r.lat, longitude: r.lng }}
+            onPress={(e) => { e.stopPropagation(); setSelectedDrop(null); setSelectedMeetup(null); setConfirmingCancel(false); setSelectedPlace(r); }}
             title={r.name}
             description={[r.hours, r.phone].filter(Boolean).join(' • ')}
             pinColor="#d4af37"
@@ -493,7 +502,7 @@ export default function RadarMapScreen() {
           <Marker
             key={`meetup-${m.id}`}
             coordinate={{ latitude: m.latitude, longitude: m.longitude }}
-            onPress={(e) => { e.stopPropagation(); setSelectedDrop(null); setConfirmingCancel(false); setSelectedMeetup(m); }}
+            onPress={(e) => { e.stopPropagation(); setSelectedDrop(null); setSelectedPlace(null); setConfirmingCancel(false); setSelectedMeetup(m); }}
           >
             <View style={styles.meetupMarker}>
               <Text style={styles.meetupPin}>📍</Text>
@@ -538,6 +547,30 @@ export default function RadarMapScreen() {
             </View>
           )}
         </TouchableOpacity>
+      )}
+
+      {/* Selected bot-place detail card */}
+      {selectedPlace && (
+        <View style={styles.dropCard}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.dropTitle}>📍 {selectedPlace.name}</Text>
+            <Text style={styles.dropMeta}>
+              {selectedPlace.distance_mi.toFixed(1)} mi away
+              {selectedPlace.is_24_7 ? ' • open 24 hours' : selectedPlace.hours ? ` • ${selectedPlace.hours}` : ''}
+              {selectedPlace.phone ? ` • ${selectedPlace.phone}` : ''}
+            </Text>
+            <TouchableOpacity style={styles.navBtn} onPress={handleNavigateToPlace} activeOpacity={0.8}>
+              <Text style={styles.navBtnText}>🧭 Navigate there</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            style={styles.claimBtn}
+            onPress={() => setSelectedPlace(null)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.claimBtnText}>✕</Text>
+          </TouchableOpacity>
+        </View>
       )}
 
       {/* Selected drop detail card */}
@@ -885,7 +918,7 @@ export default function RadarMapScreen() {
       {placePins.length > 0 && (
         <TouchableOpacity
           style={styles.clearPlacesChip}
-          onPress={() => { setPlacePins([]); setPlaceCategory(null); }}
+          onPress={() => { setPlacePins([]); setPlaceCategory(null); setSelectedPlace(null); }}
           activeOpacity={0.8}
         >
           <Text style={styles.clearPlacesText}>✕ Clear {placeCategory || 'places'}</Text>
