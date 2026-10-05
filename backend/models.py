@@ -15,6 +15,7 @@ class User(Base):
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
     is_admin = Column(Boolean, nullable=False, default=False, server_default="0")
+    is_banned = Column(Boolean, nullable=False, default=False, server_default="0")
 
 
 # --- Duck Game Models ---

@@ -71,6 +71,19 @@ def _ensure_is_admin_column():
         conn.close()
 
 
+def _ensure_is_banned_column():
+    """Lightweight migration: add users.is_banned to DBs created before the column existed."""
+    conn = get_raw_db()
+    try:
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(users)")]
+        if "is_banned" not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN is_banned BOOLEAN DEFAULT 0")
+            conn.commit()
+            print("Migration: added users.is_banned column.")
+    finally:
+        conn.close()
+
+
 def _admin_emails() -> set:
     """Emails granted admin via ADMIN_EMAILS (comma-separated) or the owner default."""
     return {e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "glichxp@gmail.com").split(",") if e.strip()}
@@ -111,6 +124,7 @@ def get_raw_db():
 
 # Run after get_raw_db exists: migrate old DBs, then grant admins.
 _ensure_is_admin_column()
+_ensure_is_banned_column()
 _ensure_duck_ai_columns()
 _bootstrap_admins()
 
@@ -193,6 +207,8 @@ def get_current_user(authorization: str = Header(default=None), db: Session = De
     user = db.query(User).filter(User.id == int(user_id)).first()
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+    if getattr(user, "is_banned", False):
+        raise HTTPException(status_code=403, detail="This account has been banned")
     return user
 
 
@@ -251,6 +267,8 @@ def login(user_credentials: UserCreate, db: Session = Depends(get_db)):
     
     if not user or not pwd_context.verify(user_credentials.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    if getattr(user, "is_banned", False):
+        raise HTTPException(status_code=403, detail="This account has been banned")
         
     return AuthResponse(
         id=user.id,
@@ -1731,3 +1749,30 @@ def admin_user_lookup(email: str, db: Session = Depends(get_db),
         "drops_created": drops,
         "milestones": milestones,
     }
+
+
+def _set_banned(db: Session, admin: User, user_id: int, banned: bool) -> dict:
+    if user_id == admin.id:
+        raise HTTPException(status_code=403, detail="You cannot ban your own account")
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if banned and user.is_admin:
+        raise HTTPException(status_code=403, detail="You cannot ban another admin")
+    user.is_banned = banned
+    db.commit()
+    return {"banned": banned, "user_id": user.id, "email": user.email}
+
+
+@app.post("/admin/users/{user_id}/ban")
+def admin_ban_user(user_id: int, db: Session = Depends(get_db),
+                   admin: User = Depends(require_admin)):
+    """Ban a user. Their token stops working on every protected route."""
+    return _set_banned(db, admin, user_id, True)
+
+
+@app.post("/admin/users/{user_id}/unban")
+def admin_unban_user(user_id: int, db: Session = Depends(get_db),
+                     admin: User = Depends(require_admin)):
+    """Lift a ban."""
+    return _set_banned(db, admin, user_id, False)

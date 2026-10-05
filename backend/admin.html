@@ -186,6 +186,7 @@ async function lookupUser() {
         <div class="kv"><span class="k">email</span><span class="v">${esc(u.email)}</span></div>
         <div class="kv"><span class="k">id</span><span class="v">${u.id}</span></div>
         <div class="kv"><span class="k">admin</span><span class="v">${u.is_admin ? 'yes' : 'no'}</span></div>
+        <div class="kv"><span class="k">banned</span><span class="v">${u.is_banned ? 'YES' : 'no'}</span></div>
         <div class="kv"><span class="k">ducks unlocked</span><span class="v">${data.pond_unlocked}</span></div>
         <div class="kv"><span class="k">drops created</span><span class="v">${data.drops_created}</span></div>
         <div class="kv"><span class="k">milestones</span><span class="v">${data.milestones}</span></div>
@@ -196,7 +197,10 @@ async function lookupUser() {
       <div class="card" style="cursor:default; display:block">${listingRows}</div>
       <div style="color:var(--gold); font-weight:700; font-size:13px; margin:14px 0 6px;">Trades</div>
       <div class="card" style="cursor:default; display:block">${tradeRows}</div>
-      <button class="ghost" onclick="openTable('users')">Back to users table</button>`;
+      <div style="display:flex; gap:10px;">
+        <button class="${u.is_banned ? 'ghost' : 'danger'}" style="flex:1; margin-top:0;" onclick="toggleBan(${u.id}, ${!!u.is_banned}, lookupUser)">${u.is_banned ? 'Unban' : 'Ban'} this user</button>
+        <button class="ghost" style="flex:1;" onclick="openTable('users')">Back to users table</button>
+      </div>`;
   } catch (e) { alert('Lookup failed: ' + e.message); }
 }
 
@@ -285,9 +289,19 @@ async function openDetail(id) {
       `</div>
       <div style="display:flex; gap:10px;">
         ${detailEditable.length ? `<button class="ghost" style="flex:1;" onclick="editRow(${id})">Edit</button>` : ''}
+        ${table === 'users' ? `<button class="${row.is_banned ? 'ghost' : 'danger'}" style="flex:1; margin-top:0;" onclick="toggleBan(${id}, ${!!row.is_banned}, () => openDetail(${id}))">${row.is_banned ? 'Unban' : 'Ban'} user</button>` : ''}
         <button class="danger" style="flex:1; margin-top:0;" onclick="delRow(${id})">Delete this row</button>
       </div>`;
   } catch (e) { alert('Could not load row: ' + e.message); }
+}
+
+async function toggleBan(id, currentlyBanned, refresh) {
+  const action = currentlyBanned ? 'unban' : 'ban';
+  if (!confirm(`${action === 'ban' ? 'Ban' : 'Unban'} user #${id}?${action === 'ban' ? ' They will be locked out immediately.' : ''}`)) return;
+  try {
+    await api(`/admin/users/${id}/${action}`, { method: 'POST' });
+    refresh();
+  } catch (e) { alert('Failed: ' + e.message); }
 }
 
 function editInput(col, value) {
