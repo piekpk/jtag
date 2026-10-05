@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, ActivityIndicator, Switch, Modal, Linking } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { API_URL } from '../config.js'; //file that contains backend URL[cite: 9]
 import { getAuthHeaders } from '../auth.js';
 import { showAlert } from '../themedAlert.js';
 import { SOCIAL_PLATFORMS, platformById, validSocialLinks, normalizeSocialUrl } from '../socialLinks.js';
 import { getDuckCatalog, getInventory, getMyPond } from '../duckApi.js';
+import { listNotifications, markAllNotificationsRead, markNotificationRead } from '../notificationsApi.js';
 import DuckIcon from '../DuckIcon';
 import DuckShowcase from '../DuckShowcase';
 
@@ -36,12 +37,66 @@ export default function MyRigScreen() {
   const [showcaseDucks, setShowcaseDucks] = useState<number[]>([]);
   const [catalog, setCatalog] = useState<any[]>([]);
   const [pondSlots, setPondSlots] = useState<any[]>([]);
+  const [alertsVisible, setAlertsVisible] = useState(false);
+  const [alerts, setAlerts] = useState<any[]>([]);
+  const [unreadAlerts, setUnreadAlerts] = useState(0);
   const [inventory, setInventory] = useState<any[]>([]);
   const [showPicker, setShowPicker] = useState(false);
   const [urlPlatform, setUrlPlatform] = useState<string | null>(null);
   const [urlValue, setUrlValue] = useState('');
 
   // 1. Load the user's profile from the database when the screen opens[cite: 9]
+  const refreshAlerts = useCallback(async () => {
+    try {
+      const data = await listNotifications(50);
+      const items = data.notifications || [];
+      setAlerts(items);
+      setUnreadAlerts(items.filter((n) => !n.is_read).length);
+    } catch (e) {}
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshAlerts();
+    }, [refreshAlerts])
+  );
+
+  const openAlerts = () => {
+    refreshAlerts();
+    setAlertsVisible(true);
+  };
+
+  const closeAlerts = () => setAlertsVisible(false);
+
+  const handleMarkAllRead = async () => {
+    try {
+      await markAllNotificationsRead();
+      refreshAlerts();
+    } catch (e) {}
+  };
+
+  const handleAlertTap = async (n) => {
+    try {
+      if (!n.is_read) {
+        await markNotificationRead(n.id);
+        refreshAlerts();
+      }
+    } catch (e) {}
+    setAlertsVisible(false);
+    if (n.type === 'ducked') router.push('/(tabs)/ducks');
+    else if (n.type === 'meetup') router.push('/(tabs)/map');
+  };
+
+  const alertIcon = (type) => (type === 'ducked' ? '🦆' : type === 'meetup' ? '📍' : '🔔');
+
+  const timeAgo = (ts) => {
+    const s = Math.max(0, (Date.now() - new Date(ts).getTime()) / 1000);
+    if (s < 60) return 'just now';
+    if (s < 3600) return `${Math.floor(s / 60)}m`;
+    if (s < 86400) return `${Math.floor(s / 3600)}h`;
+    return `${Math.floor(s / 86400)}d`;
+  };
+
   useEffect(() => {
     const fetchProfileData = async () => {
       try {
@@ -268,6 +323,14 @@ export default function MyRigScreen() {
             <Text style={styles.title}>{ownerName}'s Rig</Text>
           )}
           
+          <TouchableOpacity onPress={openAlerts} style={styles.bellBtn} activeOpacity={0.8}>
+            <Text style={styles.bellIcon}>🔔</Text>
+            {unreadAlerts > 0 && (
+              <View style={styles.bellBadge}>
+                <Text style={styles.bellBadgeText}>{unreadAlerts > 99 ? '99+' : unreadAlerts}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
           <TouchableOpacity 
             onPress={handleEditToggle} 
             style={[styles.editBtn, isSaving && { opacity: 0.7 }]}
@@ -532,6 +595,49 @@ export default function MyRigScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Alerts history sheet */}
+      <Modal
+        visible={alertsVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={closeAlerts}
+      >
+        <View style={styles.alertsBackdrop}>
+          <TouchableOpacity style={styles.alertsDismiss} activeOpacity={1} onPress={closeAlerts} />
+          <View style={styles.alertsSheet}>
+            <View style={styles.alertsHandle} />
+            <View style={styles.alertsHeader}>
+              <Text style={styles.alertsTitle}>Alerts</Text>
+              <TouchableOpacity onPress={handleMarkAllRead} activeOpacity={0.8}>
+                <Text style={styles.alertsMarkAll}>Mark all read</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.alertsList}>
+              {alerts.length === 0 && (
+                <Text style={styles.alertsEmpty}>No alerts yet.</Text>
+              )}
+              {alerts.map((n) => (
+                <TouchableOpacity
+                  key={n.id}
+                  style={[styles.alertRow, !n.is_read && styles.alertRowUnread]}
+                  onPress={() => handleAlertTap(n)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.alertEmoji}>{alertIcon(n.type)}</Text>
+                  <View style={styles.alertTextWrap}>
+                    <Text style={styles.alertTitle} numberOfLines={1}>{n.title}</Text>
+                    {!!n.body && (
+                      <Text style={styles.alertBody} numberOfLines={2}>{n.body}</Text>
+                    )}
+                  </View>
+                  <Text style={styles.alertTime}>{timeAgo(n.created_at)}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -540,6 +646,33 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#121212' },
   header: { padding: 25, backgroundColor: '#1a1a1a' },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  bellBtn: {
+    width: 40, height: 40, borderRadius: 20, backgroundColor: '#1e1e1e',
+    borderWidth: 1, borderColor: '#d4af37', justifyContent: 'center', alignItems: 'center',
+    marginRight: 8,
+  },
+  bellIcon: { fontSize: 20 },
+  bellBadge: {
+    position: 'absolute', top: -6, right: -6, minWidth: 20, height: 20, borderRadius: 10,
+    backgroundColor: '#ff3b30', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 5,
+  },
+  bellBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  alertsBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  alertsDismiss: { flex: 1 },
+  alertsSheet: { backgroundColor: '#1e1e1e', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '75%', paddingBottom: 24 },
+  alertsHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#2c2c2e', alignSelf: 'center', marginTop: 10 },
+  alertsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8 },
+  alertsTitle: { color: '#d4af37', fontSize: 22, fontWeight: '800' },
+  alertsMarkAll: { color: '#d4af37', fontSize: 14, fontWeight: '600' },
+  alertsList: { paddingHorizontal: 16 },
+  alertsEmpty: { color: '#888', fontSize: 14, fontStyle: 'italic', textAlign: 'center', paddingVertical: 24 },
+  alertRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#262626', borderRadius: 12, padding: 12, marginBottom: 8 },
+  alertRowUnread: { borderLeftWidth: 3, borderLeftColor: '#d4af37' },
+  alertEmoji: { fontSize: 24, marginRight: 12 },
+  alertTextWrap: { flex: 1 },
+  alertTitle: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  alertBody: { color: '#bbb', fontSize: 13, marginTop: 2 },
+  alertTime: { color: '#888', fontSize: 12, marginLeft: 8 },
   title: { fontSize: 28, fontWeight: '900', color: '#ffffff', letterSpacing: 1, flex: 1 },
   editTitleInput: { fontSize: 24, fontWeight: '900', color: '#ffffff', backgroundColor: '#333', padding: 5, borderRadius: 6, flex: 1, marginRight: 10 },
   editBtn: { backgroundColor: '#d4af37', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20 },
