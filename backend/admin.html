@@ -28,6 +28,7 @@
   button.ghost { background: var(--surface); color: #fff; }
   button.danger { background: transparent; border: 1px solid #5a2a2a; color: #ff5a5a; width: 100%; margin-top: 12px; }
   input { width: 100%; background: var(--surface); border: 1px solid #444; color: #fff; border-radius: 10px; padding: 12px; margin-bottom: 10px; font-size: 14px; }
+  select { width: 100%; background: var(--surface); border: 1px solid #444; color: #fff; border-radius: 10px; padding: 12px; margin-bottom: 10px; font-size: 14px; }
   .login { max-width: 380px; margin: 60px auto; background: var(--card); padding: 24px; border-radius: 12px; }
   .login h2 { color: var(--gold); margin-top: 0; }
   .err { color: #ff8a8a; margin-bottom: 10px; font-size: 14px; }
@@ -42,6 +43,15 @@
   <div id="crumb"></div>
   <div id="aitools" style="display:none; margin-top:10px;">
     <button style="padding:8px 16px; font-size:13px;" onclick="backfillLore()">✨ Backfill duck lore</button>
+    <div style="background:var(--card); border-radius:10px; padding:12px; margin-top:10px; max-width:420px;">
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">🎁 Give ducks to a user</div>
+      <input id="g_email" type="email" placeholder="User email" style="margin-bottom:8px;">
+      <div style="display:flex; gap:8px;">
+        <select id="g_duck" style="flex:1;"></select>
+        <input id="g_qty" type="number" value="1" min="1" max="100" style="width:70px; margin-bottom:8px;">
+      </div>
+      <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="grantDuck()">Give ducks</button>
+    </div>
   </div>
 </header>
 <main id="app"></main>
@@ -104,6 +114,7 @@ async function loadTables() {
     sub.textContent = 'Browse every table in the app database';
     crumb.innerHTML = '';
     document.getElementById('aitools').style.display = 'block';
+    loadDuckOptions();
     app.innerHTML = tables.map(t =>
       `<div class="card" onclick="openTable('${t.table}')">
          <span class="name">${esc(t.table)}</span><span class="count">${t.count}</span><span>&#8250;</span>
@@ -117,6 +128,28 @@ async function backfillLore() {
     const data = await api('/admin/duck-types/backfill-lore', { method: 'POST' });
     alert(`Lore generation started for ${data.ducks} duck(s). Check back in a few minutes, then tap a duck in the pond.`);
   } catch (e) { alert('Backfill failed: ' + e.message); }
+}
+
+async function loadDuckOptions() {
+  try {
+    const data = await api('/admin/tables/duck_types?limit=100&offset=0');
+    document.getElementById('g_duck').innerHTML = data.rows.map(r =>
+      `<option value="${r.id}">${esc(r.emoji || '🦆')} ${esc(r.name)} (${esc(r.rarity)})</option>`).join('');
+  } catch (e) { /* auth handled elsewhere */ }
+}
+
+async function grantDuck() {
+  const email = document.getElementById('g_email').value.trim();
+  const duck_type_id = parseInt(document.getElementById('g_duck').value, 10);
+  const qty = parseInt(document.getElementById('g_qty').value, 10) || 1;
+  if (!email) { alert('Enter the user\'s email.'); return; }
+  if (!duck_type_id) { alert('Pick a duck.'); return; }
+  try {
+    const data = await api('/admin/ducks/grant', { method: 'POST',
+      body: JSON.stringify({ email, duck_type_id, qty }) });
+    alert(`Gave ${data.qty}x duck to ${data.email}.`);
+    document.getElementById('g_email').value = '';
+  } catch (e) { alert('Grant failed: ' + e.message); }
 }
 
 async function openTable(name) {

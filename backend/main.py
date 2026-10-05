@@ -1528,3 +1528,24 @@ def admin_generate_clue(drop_id: int, force: bool = False,
         raise HTTPException(status_code=404, detail="Drop not found")
     duck_ai.generate_clue_for_drop(drop_id, force=force)
     return {"started": True}
+
+
+class DuckGrant(BaseModel):
+    email: str
+    duck_type_id: int
+    qty: int = 1
+
+
+@app.post("/admin/ducks/grant")
+def admin_grant_duck(payload: DuckGrant, db: Session = Depends(get_db),
+                     admin: User = Depends(require_admin)):
+    """Give ducks to a user by email. Unlocks the pond entry and adds spendable ducks."""
+    user = db.query(User).filter(User.email == (payload.email or "").strip().lower()).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    _duck_type_or_404(db, payload.duck_type_id)
+    qty = max(1, min(payload.qty or 1, 100))
+    _grant_duck(db, user.id, payload.duck_type_id, qty)
+    db.commit()
+    return {"granted": True, "email": user.email,
+            "duck_type_id": payload.duck_type_id, "qty": qty}
