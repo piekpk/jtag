@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, View, Text, ActivityIndicator, TouchableOpacity, Modal, TextInput, StatusBar, Platform, KeyboardAvoidingView, ScrollView, Linking } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -17,28 +18,18 @@ const DURATION_CHOICES = [
   { label: '6 hrs', hours: 6 },
   { label: '24 hrs', hours: 24 },
 ];
-const MEETUP_START_PRESETS = [
-  { key: '1h', label: 'In 1 hour', get: () => new Date(Date.now() + 3600e3) },
-  { key: '3h', label: 'In 3 hours', get: () => new Date(Date.now() + 3 * 3600e3) },
-  {
-    key: 'tmrw9', label: 'Tomorrow 9 AM',
-    get: () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d; },
-  },
-  {
-    key: 'sat9', label: 'Saturday 9 AM',
-    get: () => {
-      const d = new Date();
-      d.setDate(d.getDate() + (((6 - d.getDay()) + 7) % 7 || 7));
-      d.setHours(9, 0, 0, 0);
-      return d;
-    },
-  },
-];
 const MEETUP_DURATION_CHOICES = [
   { label: '2 hrs', hours: 2 },
   { label: '4 hrs', hours: 4 },
   { label: '8 hrs', hours: 8 },
 ];
+
+// Default meetup start: 3 hours from now, rounded to the hour.
+const defaultMeetupStart = () => {
+  const d = new Date(Date.now() + 3 * 3600e3);
+  d.setMinutes(0, 0, 0);
+  return d;
+};
 
 export default function RadarMapScreen() {
   const router = useRouter();
@@ -68,7 +59,8 @@ export default function RadarMapScreen() {
   const [meetupCoord, setMeetupCoord] = useState(null);
   const [meetupTitle, setMeetupTitle] = useState('');
   const [meetupDesc, setMeetupDesc] = useState('');
-  const [meetupStart, setMeetupStart] = useState('3h');
+  const [meetupStartDate, setMeetupStartDate] = useState(defaultMeetupStart);
+  const [pickerMode, setPickerMode] = useState(null); // 'date' | 'time' | null
   const [meetupDuration, setMeetupDuration] = useState(4);
   const [isCreatingMeetup, setIsCreatingMeetup] = useState(false);
   const [isRsvping, setIsRsvping] = useState(false);
@@ -256,7 +248,7 @@ export default function RadarMapScreen() {
     if (!meetupTitle.trim() || !meetupCoord || isCreatingMeetup) return;
     setIsCreatingMeetup(true);
     try {
-      const start = MEETUP_START_PRESETS.find((p) => p.key === meetupStart).get();
+      const start = meetupStartDate;
       const end = new Date(start.getTime() + meetupDuration * 3600e3);
       const title = meetupTitle.trim();
       await createMeetup({
@@ -277,6 +269,20 @@ export default function RadarMapScreen() {
     } finally {
       setIsCreatingMeetup(false);
     }
+  };
+
+  const onPickerChange = (event, selected) => {
+    setPickerMode(null);
+    if (event?.type === 'dismissed' || !selected) return;
+    setMeetupStartDate((cur) => {
+      const next = new Date(cur);
+      if (pickerMode === 'date') {
+        next.setFullYear(selected.getFullYear(), selected.getMonth(), selected.getDate());
+      } else {
+        next.setHours(selected.getHours(), selected.getMinutes(), 0, 0);
+      }
+      return next;
+    });
   };
 
   const handleRsvpMeetup = async () => {
@@ -584,7 +590,7 @@ export default function RadarMapScreen() {
                 setChooserVisible(false);
                 if (chooserCoord) {
                   setMeetupCoord(chooserCoord);
-                  setMeetupStart('3h');
+                  setMeetupStartDate(defaultMeetupStart());
                   setMeetupDuration(4);
                   setMeetupModalVisible(true);
                 }
@@ -630,17 +636,35 @@ export default function RadarMapScreen() {
               />
 
               <Text style={styles.modalLabel}>Starts</Text>
-              <View style={styles.chipRow}>
-                {MEETUP_START_PRESETS.map((p) => (
-                  <TouchableOpacity
-                    key={p.key}
-                    style={[styles.optChip, meetupStart === p.key && styles.optChipActive]}
-                    onPress={() => setMeetupStart(p.key)}
-                  >
-                    <Text style={[styles.optChipText, meetupStart === p.key && styles.optChipTextActive]}>{p.label}</Text>
-                  </TouchableOpacity>
-                ))}
+              <View style={{ flexDirection: 'row' }}>
+                <TouchableOpacity
+                  style={[styles.dateTimeBtn, { flex: 1, marginRight: 6 }]}
+                  onPress={() => setPickerMode('date')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.dateTimeBtnText}>
+                    📅 {meetupStartDate.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.dateTimeBtn, { flex: 1, marginLeft: 6 }]}
+                  onPress={() => setPickerMode('time')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.dateTimeBtnText}>
+                    🕘 {meetupStartDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                  </Text>
+                </TouchableOpacity>
               </View>
+              {pickerMode && (
+                <DateTimePicker
+                  value={meetupStartDate}
+                  mode={pickerMode}
+                  display="default"
+                  minimumDate={new Date()}
+                  onChange={onPickerChange}
+                />
+              )}
 
               <Text style={styles.modalLabel}>Lasts</Text>
               <View style={styles.chipRow}>
@@ -656,9 +680,9 @@ export default function RadarMapScreen() {
               </View>
 
               <Text style={[styles.dropHint, { marginTop: 10 }]}>
-                {formatMeetupTime(MEETUP_START_PRESETS.find((p) => p.key === meetupStart).get().toISOString())}
+                {formatMeetupTime(meetupStartDate.toISOString())}
                 {'  →  '}
-                {formatMeetupTime(new Date(MEETUP_START_PRESETS.find((p) => p.key === meetupStart).get().getTime() + meetupDuration * 3600e3).toISOString())}
+                {formatMeetupTime(new Date(meetupStartDate.getTime() + meetupDuration * 3600e3).toISOString())}
               </Text>
 
               <TouchableOpacity
@@ -972,4 +996,9 @@ const styles = StyleSheet.create({
   filterChipOff: { borderColor: '#444', opacity: 0.6 },
   filterChipText: { color: '#d4af37', fontSize: 12, fontWeight: '700' },
   filterChipTextOff: { color: '#888' },
+  dateTimeBtn: {
+    backgroundColor: '#2c2c2e', borderRadius: 10, borderWidth: 1, borderColor: '#d4af37',
+    paddingVertical: 12, alignItems: 'center',
+  },
+  dateTimeBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
 });
