@@ -21,6 +21,7 @@ from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim
 from schemas import UserProfileUpdate, UserProfileResponse, UserCreate
 import duck_ai
 import profanity
+import holiday_ducks
 
 # Password hashing setup
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -305,6 +306,7 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
     db.refresh(new_user)
     # Starter ducks for the duck game (pre-existing users get them lazily on first pond/inventory fetch)
     _ensure_starter_ducks(db, new_user.id)
+    _check_holiday_ducks(db, new_user)
     return AuthResponse(
         id=new_user.id,
         email=new_user.email,
@@ -323,7 +325,9 @@ def login(user_credentials: UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if getattr(user, "is_banned", False):
         raise HTTPException(status_code=403, detail="This account has been banned")
-        
+
+    _check_holiday_ducks(db, user)
+
     return AuthResponse(
         id=user.id,
         email=user.email,
@@ -1213,6 +1217,7 @@ def _notification_dict(n: Notification) -> dict:
 def list_notifications(limit: int = 30, offset: int = 0,
                        db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """The current user's notification inbox, newest first."""
+    _check_holiday_ducks(db, current_user)
     base = db.query(Notification).filter(Notification.user_id == current_user.id)
     unread = base.filter(Notification.is_read == False).count()  # noqa: E712
     rows = (base.order_by(Notification.id.desc())
@@ -1482,6 +1487,38 @@ def _require_clean(*texts: str) -> None:
         raise HTTPException(
             status_code=400,
             detail="Please keep postings family-friendly — remove the profanity and try again.")
+
+
+def _check_holiday_ducks(db: Session, user: User) -> list:
+    """Gift holiday ducks when the user is active on the holiday itself.
+
+    Runs on login, signup, and the notification poll (every 30s in the app),
+    so long-lived sessions still get the grant on the day. Each holiday duck
+    is granted at most once per calendar year; repeats just return [].
+    """
+    today = datetime.utcnow().date()
+    settings = dict(user.settings or {})
+    granted = dict(settings.get("holidayGrants") or {})
+    newly = []
+    for slug, holiday_name, duck_name in holiday_ducks.holidays_on(today):
+        if granted.get(slug) == today.year:
+            continue
+        dt = db.query(DuckType).filter(DuckType.slug == slug).first()
+        if not dt:
+            continue
+        _grant_duck(db, user.id, dt.id, 1)
+        granted[slug] = today.year
+        newly.append((holiday_name, duck_name, dt.id))
+    if newly:
+        settings["holidayGrants"] = granted
+        user.settings = settings
+        for holiday_name, duck_name, duck_type_id in newly:
+            _notify_user(db, user.id, "duck",
+                         f"🎁 Happy {holiday_name}!",
+                         f"A wild {duck_name} appeared in your pond!",
+                         {"duck_type_id": duck_type_id})
+        db.commit()
+    return newly
 
 
 @app.post("/meetups")
