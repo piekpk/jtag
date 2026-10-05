@@ -26,9 +26,9 @@
   .rowline .sum { color: #ccc; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   button { background: var(--gold); color: #121212; border: 0; border-radius: 10px; padding: 12px 20px; font-weight: 700; cursor: pointer; font-size: 14px; }
   button.ghost { background: var(--surface); color: #fff; }
-  .tooltab { background: transparent; border: 1px solid #555; color: #ccc; border-radius: 20px;
-    padding: 8px 14px; font-size: 13px; white-space: nowrap; margin-top: 0; width: auto; flex: none; }
-  .tooltab.active { background: var(--gold); border-color: var(--gold); color: #111; font-weight: 700; }
+  .toolmenuitem { display:block; width:100%; background:transparent; border:none; color:#fff;
+    text-align:left; padding:10px 12px; font-size:14px; border-radius:8px; margin-top:0; }
+  .toolmenuitem:hover { background:var(--surface); }
   button.danger { background: transparent; border: 1px solid #5a2a2a; color: #ff5a5a; width: 100%; margin-top: 12px; }
   input { width: 100%; background: var(--surface); border: 1px solid #444; color: #fff; border-radius: 10px; padding: 12px; margin-bottom: 10px; font-size: 14px; }
   textarea { width: 100%; background: var(--surface); border: 1px solid #444; color: #fff; border-radius: 10px; padding: 12px; margin-bottom: 10px; font-size: 14px; font-family: inherit; }
@@ -46,7 +46,10 @@
   <p id="sub">Sign in with an admin account</p>
   <div id="crumb"></div>
   <div id="aitools" style="display:none; margin-top:10px;">
-    <div id="toolmenu" style="display:flex; gap:8px; overflow-x:auto; padding-bottom:4px;"></div>
+    <div style="position:relative; display:inline-block;">
+      <button id="menubtn" style="width:auto; padding:8px 16px; font-size:14px;" onclick="toggleMenu(event)">☰ <span id="menulabel">Tools</span></button>
+      <div id="toolmenu" style="display:none; position:absolute; top:110%; left:0; z-index:50; background:var(--card); border:1px solid #444; border-radius:10px; padding:6px; min-width:220px; box-shadow:0 8px 24px rgba(0,0,0,0.5);"></div>
+    </div>
     <div id="toolpanes" style="margin-top:10px;">
     <div id="tool-broadcast" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:480px; display:none;">
       <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">📢 Broadcast to global chat</div>
@@ -179,17 +182,28 @@ const TOOLS = [
 function buildToolMenu() {
   const menu = document.getElementById('toolmenu');
   menu.innerHTML = TOOLS.map(([id, label]) =>
-    `<button class="tooltab" id="tab-${id}" onclick="showTool('${id}')">${label}</button>`).join('');
+    `<button class="toolmenuitem" onclick="showTool('${id}')">${label}</button>`).join('');
+}
+
+function toggleMenu(e) {
+  e.stopPropagation();
+  const menu = document.getElementById('toolmenu');
+  menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
 }
 
 function showTool(id) {
   document.querySelectorAll('.toolcard').forEach(el => {
     el.style.display = el.id === id ? 'block' : 'none';
   });
-  document.querySelectorAll('.tooltab').forEach(el => {
-    el.classList.toggle('active', el.id === 'tab-' + id);
-  });
+  const found = TOOLS.find(t => t[0] === id);
+  document.getElementById('menulabel').textContent = found ? found[1] : 'Tools';
+  document.getElementById('toolmenu').style.display = 'none';
 }
+
+document.addEventListener('click', () => {
+  const menu = document.getElementById('toolmenu');
+  if (menu && menu.style.display === 'block') menu.style.display = 'none';
+});
 
 async function loadTables() {
   try {
