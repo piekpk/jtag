@@ -18,7 +18,8 @@ from datetime import datetime, timedelta
 
 import llm
 import profanity
-from models import User, DuckType, UserDuck, DuckGive
+import duck_ai
+from models import User, DuckType, UserDuck, DuckGive, DuckDrop
 
 BOT_EMAIL = "jtapbot@jtap.local"
 BOT_NAME = "JtapBot"
@@ -40,6 +41,7 @@ REPLY_COOLDOWN_S = 60
 BOT_USER_ID = None
 _SessionLocal = None
 _last_reply_at = 0.0
+_post_last = 0.0
 _thread_started = False
 
 SYSTEM = (
@@ -144,21 +146,147 @@ def post_scheduled():
 
 
 def _bot_loop():
+    global _post_last
     while True:
-        time.sleep(POST_INTERVAL_HOURS * 3600)
         try:
-            post_scheduled()
+            now = time.time()
+            if now - _post_last >= POST_INTERVAL_HOURS * 3600:
+                post_scheduled()
+                _post_last = now
+            _maybe_bot_drop()
         except Exception as e:
             print(f"JtapBot loop error: {e}")
+        time.sleep(3600)  # wake hourly; posts/drops are rate-limited by timestamps
 
 
 def start():
     """Launch the scheduler thread once. Call once at startup."""
-    global _thread_started
+    global _thread_started, _post_last
     if _thread_started:
         return
     _thread_started = True
+    _post_last = time.time()  # first scheduled post lands after a full interval
     threading.Thread(target=_bot_loop, daemon=True).start()
+
+
+# --- JtapBot duck drops -----------------------------------------------------
+
+DROP_INTERVAL_HOURS = 8
+DROP_CLUSTER_MILES = 10
+DROP_MIN_USERS = 3
+DROP_MAX_CLAIMS = 10
+DROP_DURATION_HOURS = 24
+_M_PER_MILE = 1609.344
+
+
+def _cluster_location(db):
+    """Centroid (+ jitter) of the biggest cluster of >=3 users within 10 miles.
+
+    Returns (lat, lng) or None when no qualifying cluster exists.
+    """
+    import main  # lazy: main imports jtapbot at module level
+
+    users = (
+        db.query(User)
+        .filter(User.latitude.isnot(None), User.longitude.isnot(None))
+        .all()
+    )
+    users = [u for u in users if u.id != BOT_USER_ID]
+    if len(users) < DROP_MIN_USERS:
+        return None
+    best = None
+    for u in users:
+        near = [
+            v
+            for v in users
+            if main.haversine(u.latitude, u.longitude, v.latitude, v.longitude)
+            <= DROP_CLUSTER_MILES * _M_PER_MILE
+        ]
+        if len(near) >= DROP_MIN_USERS and (best is None or len(near) > len(best)):
+            best = near
+    if not best:
+        return None
+    lat = sum(u.latitude for u in best) / len(best)
+    lng = sum(u.longitude for u in best) / len(best)
+    # Small jitter (~0.5 mi) so the pin isn't exactly on someone's house.
+    lat += random.uniform(-0.007, 0.007)
+    lng += random.uniform(-0.007, 0.007)
+    return lat, lng
+
+
+def _maybe_bot_drop():
+    """Create one bot duck drop if 8h passed and a 3+ user cluster exists."""
+    import main  # lazy: main imports jtapbot at module level
+
+    if BOT_USER_ID is None or _SessionLocal is None:
+        return False
+    db = _SessionLocal()
+    try:
+        since = datetime.utcnow() - timedelta(hours=DROP_INTERVAL_HOURS)
+        recent = (
+            db.query(DuckDrop)
+            .filter(
+                DuckDrop.created_by == BOT_USER_ID,
+                DuckDrop.created_at >= since,
+            )
+            .first()
+        )
+        if recent:
+            return False
+        loc = _cluster_location(db)
+        if not loc:
+            return False
+        lat, lng = loc
+        pool = (
+            db.query(DuckType)
+            .filter(DuckType.rarity.in_(("common", "uncommon")))
+            .order_by(DuckType.id)
+            .all()
+        )
+        if not pool:
+            return False
+        commons = [d for d in pool if d.rarity == "common"]
+        dt = random.choice(commons) if commons and random.random() < 0.7 else random.choice(pool)
+        # The bot is a system actor: mint its stock for this drop.
+        # Bounded by the 8h creation limit, so this can't inflate the economy.
+        main._grant_duck(db, BOT_USER_ID, dt.id, DROP_MAX_CLAIMS)
+        now = datetime.utcnow()
+        drop = DuckDrop(
+            duck_type_id=dt.id,
+            latitude=lat,
+            longitude=lng,
+            radius_m=200.0,
+            starts_at=now,
+            expires_at=now + timedelta(hours=DROP_DURATION_HOURS),
+            max_claims=DROP_MAX_CLAIMS,
+            created_by=BOT_USER_ID,
+            label=f"JtapBot drop: {dt.name}",
+        )
+        db.add(drop)
+        db.commit()
+        db.refresh(drop)
+        drop_id = drop.id
+        duck_name, duck_emoji = dt.name, dt.emoji or "🦆"
+        db.close()
+        # AI scavenger-hunt clue fills in shortly (background; drop is live now).
+        try:
+            duck_ai.generate_clue_for_drop(drop_id)
+        except Exception as e:
+            print(f"JtapBot clue generation failed: {e}")
+        _say(
+            f"\U0001F986 JtapBot just hid {DROP_MAX_CLAIMS}x {duck_emoji} {duck_name} "
+            "somewhere nearby! Check the map! \U0001F5FA\uFE0F"
+        )
+        print(f"JtapBot created drop {drop_id} ({duck_name}) at {lat:.4f},{lng:.4f}")
+        return True
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
 
 
 def maybe_reply(user_id, channel, message):
