@@ -298,11 +298,7 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
     # Starter ducks for the duck game (pre-existing users get them lazily on first pond/inventory fetch)
-    classic = db.query(DuckType).filter(DuckType.slug == STARTER_DUCK_SLUG).first()
-    if classic:
-        db.add(UserDuck(user_id=new_user.id, duck_type_id=classic.id,
-                        count=STARTER_DUCK_COUNT, first_received_at=datetime.utcnow()))
-        db.commit()
+    _ensure_starter_ducks(db, new_user.id)
     return AuthResponse(
         id=new_user.id,
         email=new_user.email,
@@ -709,7 +705,7 @@ DUCK_CATALOG = [
 ]
 
 STARTER_DUCK_SLUG = "classic_yellow"
-STARTER_DUCK_COUNT = 3
+STARTER_DUCK_TOTAL = 10
 TRADE_EXPIRY_HOURS = 48
 MAX_ACTIVE_DROPS_PER_USER = 3
 
@@ -952,12 +948,19 @@ def _check_milestones(db: Session, user_id: int) -> list:
 
 
 def _ensure_starter_ducks(db: Session, user_id: int):
-    """Grant starter ducks once: fires only if the user has no user_ducks rows at all."""
+    """Grant STARTER_DUCK_TOTAL common ducks once, spread across common types.
+
+    Fires only if the user has no user_ducks rows at all."""
     if db.query(UserDuck).filter(UserDuck.user_id == user_id).count() == 0:
-        classic = db.query(DuckType).filter(DuckType.slug == STARTER_DUCK_SLUG).first()
-        if classic:
-            db.add(UserDuck(user_id=user_id, duck_type_id=classic.id,
-                            count=STARTER_DUCK_COUNT, first_received_at=datetime.utcnow()))
+        commons = db.query(DuckType).filter(DuckType.rarity == "common").order_by(DuckType.id).all()
+        if commons:
+            now = datetime.utcnow()
+            per, rem = divmod(STARTER_DUCK_TOTAL, len(commons))
+            for i, dt in enumerate(commons):
+                qty = per + (1 if i < rem else 0)
+                if qty:
+                    db.add(UserDuck(user_id=user_id, duck_type_id=dt.id,
+                                    count=qty, first_received_at=now))
             db.commit()
 
 
