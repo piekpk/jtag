@@ -2,7 +2,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect } from 'react';
 import * as Notifications from 'expo-notifications';
-import NotificationBell from '../NotificationBell';
 import { registerPushToken } from '../push';
 
 export default function TabLayout() {
@@ -82,13 +81,6 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="pricetag-outline" size={size} color={color} />
           ),
-        }}
-      />
-      <Tabs.Screen
-        name="notifications"
-        options={{
-          title: 'Alerts',
-          tabBarButton: () => <NotificationBell />,
         }}
       />
     </Tabs>

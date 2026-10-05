@@ -3,11 +3,13 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { setPushToken } from './notificationsApi.js';
 
-// Show the notification as an alert when the app is in the foreground.
+// In-app floating toasts (NotificationToast) are the foreground alert now,
+// so the OS does not banner or chime while the app is open. Background
+// pushes still show the system notification as usual.
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
+    shouldShowAlert: false,
+    shouldPlaySound: false,
     shouldSetBadge: false,
   }),
 });

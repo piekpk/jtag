@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import MilestoneCelebration from './MilestoneCelebration';
 import ThemedAlert from './ThemedAlert';
+import NotificationToast from './NotificationToast';
 
 // Root layout: guarantees a black system status bar with light icons on every
 // screen and every Android device (notches, punch-holes, foldables, edge-to-edge).
@@ -23,6 +24,7 @@ export default function RootLayout() {
         />
         <MilestoneCelebration />
         <ThemedAlert />
+        <NotificationToast />
       </View>
     </SafeAreaProvider>
   );
