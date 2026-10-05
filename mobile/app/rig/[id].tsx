@@ -108,6 +108,11 @@ export default function PublicRigScreen() {
     }
   }, [id]);
 
+  // Featured-duck showcase tap: open this user's full pond.
+  const openTheirPond = () => {
+    router.push({ pathname: '/pond/[userId]', params: { userId: String(rigId), name: ownerName } });
+  };
+
   const openDuckPicker = async () => {
     try {
       const inv = await getInventory();
@@ -271,7 +276,7 @@ export default function PublicRigScreen() {
               </TouchableOpacity>
             </View>
             <View style={styles.coverTitleWrap}>
-              <DuckShowcase ducks={showcaseDucks} />
+              <DuckShowcase ducks={showcaseDucks} onPress={openTheirPond} />
               <Text style={styles.coverTitle}>{ownerName}'s Rig</Text>
               <Text style={styles.coverSubtitle}>{vehicleTitle}</Text>
               {socialLinks.length > 0 && (
@@ -306,7 +311,7 @@ export default function PublicRigScreen() {
         
         <View style={styles.headerRow}>
           <View style={{ flex: 1 }}>
-            <DuckShowcase ducks={showcaseDucks} />
+            <DuckShowcase ducks={showcaseDucks} onPress={openTheirPond} />
             <Text style={styles.title}>{ownerName}'s Rig</Text>
             <Text style={styles.subtitle}>{vehicleTitle}</Text>
             {socialLinks.length > 0 && (
