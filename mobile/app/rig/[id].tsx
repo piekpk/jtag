@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, ActivityIndicator, TouchableOpacity, Modal, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, ActivityIndicator, TouchableOpacity, Modal, FlatList, Linking } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { API_URL } from '../config.js';
 import { getAuthHeaders } from '../auth.js';
 import { getInventory, giveDuck, getUserPond, proposeTrade, rarityColor, celebrateMilestones } from '../duckApi.js';
 import { showAlert } from '../themedAlert.js';
+import { platformById, validSocialLinks, normalizeSocialUrl } from '../socialLinks.js';
 
 // Helper function to safely format image URLs and bypass hardcoded local IPs
 const getImageUrl = (imagePath: string) => {
@@ -192,6 +193,7 @@ export default function PublicRigScreen() {
   const mods = settings.mods || 'No mods listed.';
   const photos = settings.photos || [];
   const coverPhoto = settings.coverPhoto || null;
+  const socialLinks = validSocialLinks(settings.socialLinks);
   const availablePhotos = photos.filter(Boolean); // non-empty slots only, for the lightbox
 
   const openLightbox = (slotIndex) => {
@@ -232,6 +234,19 @@ export default function PublicRigScreen() {
             <View style={styles.coverTitleWrap}>
               <Text style={styles.coverTitle}>{ownerName}'s Rig</Text>
               <Text style={styles.coverSubtitle}>{vehicleTitle}</Text>
+              {socialLinks.length > 0 && (
+                <View style={styles.socialRow}>
+                  {socialLinks.map((l) => (
+                    <TouchableOpacity
+                      key={l.platform}
+                      style={styles.socBtn}
+                      onPress={() => Linking.openURL(normalizeSocialUrl(l.url)).catch(() => {})}
+                    >
+                      <Text style={styles.socIcon}>{platformById(l.platform).icon}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
             </View>
           </View>
           <View style={styles.coverTradeWrap}>
@@ -250,6 +265,19 @@ export default function PublicRigScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.title}>{ownerName}'s Rig</Text>
             <Text style={styles.subtitle}>{vehicleTitle}</Text>
+            {socialLinks.length > 0 && (
+              <View style={styles.socialRow}>
+                {socialLinks.map((l) => (
+                  <TouchableOpacity
+                    key={l.platform}
+                    style={styles.socBtn}
+                    onPress={() => Linking.openURL(normalizeSocialUrl(l.url)).catch(() => {})}
+                  >
+                    <Text style={styles.socIcon}>{platformById(l.platform).icon}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </View>
 
           {/* Duck Button */}
@@ -481,6 +509,9 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontSize: 26, fontWeight: '900', color: '#ffffff', letterSpacing: 1 },
   subtitle: { fontSize: 15, color: '#d4af37', marginTop: 4, fontWeight: '600' },
+  socialRow: { flexDirection: 'row', marginTop: 10 },
+  socBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(30,30,30,0.85)', borderWidth: 1, borderColor: '#2c2c2e', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  socIcon: { fontSize: 19 },
   duckBtn: { 
     flexDirection: 'row', 
     alignItems: 'center', 

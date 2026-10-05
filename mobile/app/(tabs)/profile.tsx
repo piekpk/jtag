@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, ActivityIndicator, Switch } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Image, ActivityIndicator, Switch, Modal, Linking } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { API_URL } from '../config.js'; //file that contains backend URL[cite: 9]
 import { getAuthHeaders } from '../auth.js';
 import { showAlert } from '../themedAlert.js';
+import { SOCIAL_PLATFORMS, platformById, validSocialLinks, normalizeSocialUrl } from '../socialLinks.js';
 
 export default function MyRigScreen() {
   const router = useRouter();
@@ -26,6 +27,10 @@ export default function MyRigScreen() {
   const [mods, setMods] = useState('');
   const [photos, setPhotos] = useState<string[]>(['', '', '', '']);
   const [coverPhoto, setCoverPhoto] = useState('');
+  const [socialLinks, setSocialLinks] = useState<{ platform: string; url: string }[]>([]);
+  const [showPicker, setShowPicker] = useState(false);
+  const [urlPlatform, setUrlPlatform] = useState<string | null>(null);
+  const [urlValue, setUrlValue] = useState('');
 
   // 1. Load the user's profile from the database when the screen opens[cite: 9]
   useEffect(() => {
@@ -53,6 +58,7 @@ export default function MyRigScreen() {
             if (data.settings.mods) setMods(data.settings.mods);
             if (data.settings.photos) setPhotos(data.settings.photos);
             if (data.settings.coverPhoto) setCoverPhoto(data.settings.coverPhoto);
+            if (data.settings.socialLinks) setSocialLinks(validSocialLinks(data.settings.socialLinks));
             if (data.settings.discoverable === false) setDiscoverable(false);
           } else {
             // Default placeholder data for brand new users[cite: 9]
@@ -88,6 +94,7 @@ export default function MyRigScreen() {
               mods,
               photos,
               coverPhoto,
+              socialLinks: validSocialLinks(socialLinks),
               discoverable
             }
           }),
@@ -248,6 +255,22 @@ export default function MyRigScreen() {
         ) : (
           <Text style={styles.subtitle}>{vehicleTitle}</Text>
         )}
+        {validSocialLinks(socialLinks).length > 0 && (
+          <View style={styles.socialRow}>
+            {validSocialLinks(socialLinks).map((l) => {
+              const p = platformById(l.platform);
+              return (
+                <TouchableOpacity
+                  key={l.platform}
+                  style={styles.socBtn}
+                  onPress={() => Linking.openURL(normalizeSocialUrl(l.url)).catch(() => {})}
+                >
+                  <Text style={styles.socIcon}>{p.icon}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
         {isEditing && (
           <View style={styles.discoverRow}>
             <Text style={styles.discoverLabel}>Show me in search results</Text>
@@ -279,6 +302,34 @@ export default function MyRigScreen() {
             ) : (
               <Text style={styles.photoPlaceholder}>+ Add cover photo</Text>
             )}
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {isEditing && (
+        <View style={styles.socialSection}>
+          <Text style={styles.coverLabel}>Social links — shown on your public profile</Text>
+          {socialLinks.map((l) => {
+            const p = platformById(l.platform);
+            if (!p) return null;
+            return (
+              <View key={l.platform} style={styles.socialItem}>
+                <View style={styles.socialItemIcon}><Text style={styles.socIcon}>{p.icon}</Text></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.socialItemName}>{p.name}</Text>
+                  <Text style={styles.socialItemUrl} numberOfLines={1}>{l.url}</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setSocialLinks(socialLinks.filter((x) => x.platform !== l.platform))}
+                  style={styles.socialRemove}
+                >
+                  <Text style={styles.socialRemoveText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          })}
+          <TouchableOpacity style={styles.socialAdd} onPress={() => setShowPicker(true)} activeOpacity={0.8}>
+            <Text style={styles.socialAddText}>＋ Add social link</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -342,6 +393,77 @@ export default function MyRigScreen() {
           <Text style={styles.logoutButtonText}>Log Out</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Platform picker modal */}
+      <Modal visible={showPicker} transparent animationType="slide" onRequestClose={() => setShowPicker(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Add social link</Text>
+            <Text style={styles.modalSubtitle}>CHOOSE PLATFORM</Text>
+            {SOCIAL_PLATFORMS.map((p) => {
+              const added = socialLinks.some((l) => l.platform === p.id);
+              return (
+                <TouchableOpacity
+                  key={p.id}
+                  style={[styles.platformRow, added && { opacity: 0.35 }]}
+                  disabled={added}
+                  onPress={() => { setUrlPlatform(p.id); setUrlValue(''); setShowPicker(false); }}
+                >
+                  <View style={styles.socialItemIcon}><Text style={styles.socIcon}>{p.icon}</Text></View>
+                  <Text style={styles.platformName}>{p.name}</Text>
+                  <Text style={styles.platformGo}>{added ? 'Added ✓' : '›'}</Text>
+                </TouchableOpacity>
+              );
+            })}
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setShowPicker(false)}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* URL entry modal */}
+      <Modal visible={!!urlPlatform} transparent animationType="slide" onRequestClose={() => setUrlPlatform(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            {urlPlatform && (() => {
+              const p = platformById(urlPlatform);
+              return (
+                <>
+                  <View style={styles.urlIconWrap}><Text style={styles.urlIcon}>{p.icon}</Text></View>
+                  <Text style={styles.modalTitle}>{p.name}</Text>
+                  <TextInput
+                    style={styles.urlInput}
+                    value={urlValue}
+                    onChangeText={setUrlValue}
+                    placeholder={p.placeholder}
+                    placeholderTextColor="#666"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="url"
+                  />
+                  <Text style={styles.urlHint}>e.g. {p.placeholder}</Text>
+                  <TouchableOpacity
+                    style={[styles.urlAddBtn, !urlValue.trim() && { opacity: 0.4 }]}
+                    disabled={!urlValue.trim()}
+                    onPress={() => {
+                      const url = normalizeSocialUrl(urlValue);
+                      setSocialLinks([...socialLinks.filter((l) => l.platform !== urlPlatform), { platform: urlPlatform, url }]);
+                      setUrlPlatform(null);
+                      setUrlValue('');
+                    }}
+                  >
+                    <Text style={styles.urlAddText}>Add link</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.modalCancel} onPress={() => setUrlPlatform(null)}>
+                    <Text style={styles.modalCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                </>
+              );
+            })()}
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -364,6 +486,33 @@ const styles = StyleSheet.create({
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', padding: 10, justifyContent: 'space-between' },
   coverWrap: { paddingHorizontal: 10, marginBottom: 4 },
   coverLabel: { color: '#d4af37', fontWeight: '600', fontSize: 13, marginBottom: 8 },
+  socialRow: { flexDirection: 'row', marginTop: 12 },
+  socBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#1e1e1e', borderWidth: 1, borderColor: '#2c2c2e', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  socIcon: { fontSize: 19 },
+  socialSection: { paddingHorizontal: 10, marginBottom: 12 },
+  socialItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1e1e1e', borderRadius: 12, padding: 10, marginBottom: 8 },
+  socialItemIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#2c2c2e', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  socialItemName: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  socialItemUrl: { color: '#888', fontSize: 12, marginTop: 2 },
+  socialRemove: { padding: 8 },
+  socialRemoveText: { color: '#e5484d', fontSize: 16, fontWeight: 'bold' },
+  socialAdd: { borderWidth: 1, borderColor: '#d4af37', borderStyle: 'dashed', borderRadius: 12, padding: 14, alignItems: 'center' },
+  socialAddText: { color: '#d4af37', fontWeight: '700', fontSize: 14 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+  modalBox: { backgroundColor: '#1e1e1e', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '80%' },
+  modalTitle: { color: '#fff', fontSize: 18, fontWeight: '800', marginBottom: 4, textAlign: 'center' },
+  modalSubtitle: { color: '#d4af37', fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: 8 },
+  platformRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#2c2c2e' },
+  platformName: { flex: 1, color: '#fff', fontSize: 15, fontWeight: '600' },
+  platformGo: { color: '#d4af37', fontSize: 18 },
+  modalCancel: { marginTop: 14, padding: 12, alignItems: 'center' },
+  modalCancelText: { color: '#888', fontSize: 15, fontWeight: '600' },
+  urlIconWrap: { width: 64, height: 64, borderRadius: 18, backgroundColor: '#2c2c2e', borderWidth: 1, borderColor: '#d4af37', justifyContent: 'center', alignItems: 'center', alignSelf: 'center', marginBottom: 8 },
+  urlIcon: { fontSize: 30 },
+  urlInput: { backgroundColor: '#2c2c2e', borderRadius: 10, padding: 14, color: '#fff', fontSize: 15, marginTop: 12 },
+  urlHint: { color: '#888', fontSize: 12, marginTop: 6, textAlign: 'center' },
+  urlAddBtn: { backgroundColor: '#d4af37', borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 14 },
+  urlAddText: { color: '#121212', fontWeight: '800', fontSize: 15 },
   coverBox: { width: '100%', height: 170, backgroundColor: '#2c2c2e', borderRadius: 8, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   photoBox: { width: '48%', height: 120, backgroundColor: '#2c2c2e', marginBottom: 10, borderRadius: 8, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   photoPlaceholder: { color: '#757575', fontWeight: '600' },
