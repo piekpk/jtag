@@ -112,9 +112,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.trailgrid.app'
+    namespace 'com.jtap.app'
     defaultConfig {
-        applicationId 'com.trailgrid.app'
+        applicationId 'com.jtap.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

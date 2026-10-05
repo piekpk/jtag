@@ -1,4 +1,4 @@
-package com.trailgrid.app
+package com.jtap.app
 
 import android.os.Build
 import android.os.Bundle
