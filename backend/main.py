@@ -1384,6 +1384,27 @@ def _meetup_dict(db: Session, m: Meetup, lat: float, lng: float, viewer_id: int)
     }
 
 
+def _fan_out_meetup_alerts(db: Session, m: Meetup, title: str, host_name: str):
+    """Notify every user within 25 miles of the meetup (except the host)."""
+    try:
+        alert_radius_m = 25 * 1609.34
+        when = m.start_time.strftime("%a %b %d, %I:%M %p")
+        nearby = db.query(User).filter(
+            User.id != m.created_by,
+            User.latitude.isnot(None),
+            User.longitude.isnot(None)).all()
+        for u in nearby:
+            if haversine(m.latitude, m.longitude, u.latitude, u.longitude) <= alert_radius_m:
+                _notify_user(
+                    db, u.id, "meetup",
+                    "📍 New meetup nearby!",
+                    f"{host_name} planned \"{title}\" — {when}",
+                    {"meetup_id": m.id})
+        db.commit()
+    except Exception as e:
+        print(f"Meetup alert fan-out failed: {e}")
+
+
 @app.post("/meetups")
 def create_meetup(payload: MeetupCreate, db: Session = Depends(get_db),
                   current_user: User = Depends(get_current_user)):
@@ -1418,25 +1439,7 @@ def create_meetup(payload: MeetupCreate, db: Session = Depends(get_db),
     # The host is automatically on the attendee list.
     db.add(MeetupRsvp(meetup_id=m.id, user_id=current_user.id))
     db.commit()
-    # Alert every user within 25 miles of the meetup (except the host).
-    try:
-        alert_radius_m = 25 * 1609.34
-        host = _owner_name(db, current_user.id)
-        when = m.start_time.strftime("%a %b %d, %I:%M %p")
-        nearby = db.query(User).filter(
-            User.id != current_user.id,
-            User.latitude.isnot(None),
-            User.longitude.isnot(None)).all()
-        for u in nearby:
-            if haversine(payload.latitude, payload.longitude, u.latitude, u.longitude) <= alert_radius_m:
-                _notify_user(
-                    db, u.id, "meetup",
-                    "📍 New meetup nearby!",
-                    f"{host} planned \"{title}\" — {when}",
-                    {"meetup_id": m.id})
-        db.commit()
-    except Exception as e:
-        print(f"Meetup alert fan-out failed: {e}")
+    _fan_out_meetup_alerts(db, m, title, _owner_name(db, current_user.id))
     return _meetup_dict(db, m, payload.latitude, payload.longitude, current_user.id)
 
 
@@ -2378,6 +2381,52 @@ def admin_create_drop(payload: AdminDropCreate, background_tasks: BackgroundTask
     db.refresh(drop)
     background_tasks.add_task(duck_ai.generate_clue_for_drop, drop.id)
     return {"id": drop.id, "message": "Drop is live!"}
+
+
+class AdminMeetupCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    latitude: float
+    longitude: float
+    start_time: datetime
+    end_time: datetime
+
+
+@app.post("/admin/meetups")
+def admin_create_meetup(payload: AdminMeetupCreate,
+                        db: Session = Depends(get_db),
+                        admin: User = Depends(require_admin)):
+    """Create a meetup from the admin panel. Hosted by the admin (auto-RSVP'd),
+    fires the 25-mile alerts, and doesn't count against the admin's 5-meetup cap."""
+    title = (payload.title or "").strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Give the meetup a title")
+    if len(title) > 80:
+        raise HTTPException(status_code=400, detail="Title is too long (max 80 characters)")
+    if not (-90 <= payload.latitude <= 90) or not (-180 <= payload.longitude <= 180):
+        raise HTTPException(status_code=400, detail="Invalid coordinates")
+    now = datetime.utcnow()
+    start_time = _as_naive_utc(payload.start_time)
+    end_time = _as_naive_utc(payload.end_time)
+    if end_time <= start_time:
+        raise HTTPException(status_code=400, detail="End time must be after start time")
+    if start_time < now - timedelta(minutes=5):
+        raise HTTPException(status_code=400, detail="Start time must be in the future")
+    if end_time - start_time > timedelta(hours=72):
+        raise HTTPException(status_code=400, detail="Meetups can't run longer than 72 hours")
+    m = Meetup(
+        title=title,
+        description=(payload.description or "").strip()[:500] or None,
+        latitude=payload.latitude, longitude=payload.longitude,
+        start_time=start_time, end_time=end_time,
+        created_by=admin.id)
+    db.add(m)
+    db.commit()
+    db.refresh(m)
+    db.add(MeetupRsvp(meetup_id=m.id, user_id=admin.id))
+    db.commit()
+    _fan_out_meetup_alerts(db, m, title, _owner_name(db, admin.id))
+    return {"id": m.id, "message": "Meetup is live!"}
 
 
 class BroadcastCreate(BaseModel):
