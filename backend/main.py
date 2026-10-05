@@ -1854,3 +1854,37 @@ def admin_unban_user(user_id: int, db: Session = Depends(get_db),
                      admin: User = Depends(require_admin)):
     """Lift a ban."""
     return _set_banned(db, admin, user_id, False)
+
+
+class AdminDropCreate(BaseModel):
+    duck_type_id: int
+    latitude: float
+    longitude: float
+    radius_m: float = 200.0
+    duration_hours: float = 2.0
+    max_claims: int = 5
+    label: Optional[str] = None
+
+
+@app.post("/admin/drops")
+def admin_create_drop(payload: AdminDropCreate, background_tasks: BackgroundTasks,
+                      db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """Create a duck drop from the admin panel. Minted (no inventory spend),
+    not counted against the per-user active-drop cap."""
+    _duck_type_or_404(db, payload.duck_type_id)
+    if not (-90 <= payload.latitude <= 90) or not (-180 <= payload.longitude <= 180):
+        raise HTTPException(status_code=400, detail="Invalid coordinates")
+    now = datetime.utcnow()
+    drop = DuckDrop(
+        duck_type_id=payload.duck_type_id,
+        latitude=payload.latitude, longitude=payload.longitude,
+        radius_m=max(50.0, payload.radius_m),
+        starts_at=now,
+        expires_at=now + timedelta(hours=max(0.25, min(payload.duration_hours, 72))),
+        max_claims=max(1, min(payload.max_claims, 500)),
+        created_by=admin.id, label=(payload.label or "").strip() or None)
+    db.add(drop)
+    db.commit()
+    db.refresh(drop)
+    background_tasks.add_task(duck_ai.generate_clue_for_drop, drop.id)
+    return {"id": drop.id, "message": "Drop is live!"}

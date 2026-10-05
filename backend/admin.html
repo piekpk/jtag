@@ -56,6 +56,21 @@
       <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="reviewListings()">Review newest listings</button>
     </div>
     <div style="background:var(--card); border-radius:10px; padding:12px; flex:1; min-width:280px; max-width:420px;">
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">📍 Create duck drop</div>
+      <select id="p_duck" style="margin-bottom:8px;"></select>
+      <div style="display:flex; gap:8px;">
+        <input id="p_lat" type="number" step="any" placeholder="Latitude" style="margin-bottom:8px;">
+        <input id="p_lng" type="number" step="any" placeholder="Longitude" style="margin-bottom:8px;">
+      </div>
+      <div style="display:flex; gap:8px;">
+        <input id="p_radius" type="number" value="200" min="50" placeholder="Radius (m)" title="Radius in meters" style="margin-bottom:8px;">
+        <input id="p_hours" type="number" value="2" min="0.25" max="72" step="any" placeholder="Hours" title="Duration in hours" style="margin-bottom:8px;">
+        <input id="p_claims" type="number" value="5" min="1" max="500" placeholder="Claims" title="Max claims" style="margin-bottom:8px;">
+      </div>
+      <input id="p_label" placeholder="Label (optional)" style="margin-bottom:8px;">
+      <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="createDrop()">Drop it</button>
+    </div>
+    <div style="background:var(--card); border-radius:10px; padding:12px; flex:1; min-width:280px; max-width:420px;">
       <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">🎁 Give or take ducks</div>
       <input id="g_email" type="email" placeholder="User email" style="margin-bottom:8px;">
       <div style="display:flex; gap:8px;">
@@ -182,8 +197,11 @@ async function backfillLore() {
 async function loadDuckOptions() {
   try {
     const data = await api('/admin/tables/duck_types?limit=100&offset=0');
-    document.getElementById('g_duck').innerHTML = data.rows.map(r =>
+    const opts = data.rows.map(r =>
       `<option value="${r.id}">${esc(r.emoji || '🦆')} ${esc(r.name)} (${esc(r.rarity)})</option>`).join('');
+    document.getElementById('g_duck').innerHTML = opts;
+    const p = document.getElementById('p_duck');
+    if (p) p.innerHTML = opts;
   } catch (e) { /* auth handled elsewhere */ }
 }
 
@@ -254,6 +272,26 @@ async function modDelete(id) {
     await api(`/admin/tables/market_listings/${id}`, { method: 'DELETE' });
     reviewListings();
   } catch (e) { alert('Delete failed: ' + e.message); }
+}
+
+async function createDrop() {
+  const duck_type_id = parseInt(document.getElementById('p_duck').value, 10);
+  const latitude = parseFloat(document.getElementById('p_lat').value);
+  const longitude = parseFloat(document.getElementById('p_lng').value);
+  if (!duck_type_id) { alert('Pick a duck.'); return; }
+  if (!isFinite(latitude) || !isFinite(longitude)) { alert('Enter latitude and longitude.'); return; }
+  const body = {
+    duck_type_id, latitude, longitude,
+    radius_m: parseFloat(document.getElementById('p_radius').value) || 200,
+    duration_hours: parseFloat(document.getElementById('p_hours').value) || 2,
+    max_claims: parseInt(document.getElementById('p_claims').value, 10) || 5,
+    label: document.getElementById('p_label').value.trim() || null,
+  };
+  try {
+    const data = await api('/admin/drops', { method: 'POST', body: JSON.stringify(body) });
+    alert(`Drop #${data.id} is live! Clue is generating in the background.`);
+    document.getElementById('p_label').value = '';
+  } catch (e) { alert('Drop failed: ' + e.message); }
 }
 
 async function grantDuck() {
