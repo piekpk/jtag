@@ -2881,6 +2881,31 @@ def admin_user_lookup(email: str, db: Session = Depends(get_db),
                        "proposer_id": t.proposer_id, "recipient_id": t.recipient_id})
     drops = db.query(DuckDrop).filter(DuckDrop.created_by == user.id).count()
     milestones = db.query(UserMilestone).filter(UserMilestone.user_id == user.id).count()
+    given = db.query(DuckGive).filter(DuckGive.giver_id == user.id).count()
+    received = db.query(DuckGive).filter(DuckGive.recipient_id == user.id).count()
+    claims = db.query(DropClaim).filter(DropClaim.user_id == user.id).count()
+    sos_count = db.query(SosRequest).filter(SosRequest.user_id == user.id).count()
+    now = datetime.utcnow()
+    hosted = []
+    for m in db.query(Meetup).filter(Meetup.created_by == user.id,
+                                     Meetup.end_time > now).order_by(Meetup.start_time.asc()).all():
+        rsvps = db.query(MeetupRsvp).filter(MeetupRsvp.meetup_id == m.id).count()
+        hosted.append({"id": m.id, "title": m.title,
+                       "start": m.start_time.isoformat() if m.start_time else None,
+                       "rsvps": rsvps})
+    attending = []
+    for r in db.query(MeetupRsvp).filter(MeetupRsvp.user_id == user.id).all():
+        m = db.query(Meetup).filter(Meetup.id == r.meetup_id, Meetup.end_time > now).first()
+        if m and m.created_by != user.id:
+            attending.append({"id": m.id, "title": m.title})
+    conn = get_raw_db()
+    try:
+        msg_count = conn.execute(
+            "SELECT COUNT(*) FROM messages WHERE user_id = ?", (user.id,)).fetchone()[0]
+    except sqlite3.OperationalError:
+        msg_count = 0
+    finally:
+        conn.close()
     return {
         "user": _row_to_dict(user, hidden),
         "ducks": ducks,
@@ -2889,6 +2914,13 @@ def admin_user_lookup(email: str, db: Session = Depends(get_db),
         "trades": trades,
         "drops_created": drops,
         "milestones": milestones,
+        "ducks_given": given,
+        "ducks_received": received,
+        "drops_claimed": claims,
+        "sos_requests": sos_count,
+        "chat_messages": msg_count,
+        "meetups_hosted": hosted,
+        "meetups_attending": attending,
     }
 
 
