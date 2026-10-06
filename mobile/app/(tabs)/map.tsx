@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { StyleSheet, View, Text, ActivityIndicator, TouchableOpacity, Modal, TextInput, StatusBar, Platform, KeyboardAvoidingView, ScrollView, Linking } from 'react-native';
+import { StyleSheet, View, Text, ActivityIndicator, TouchableOpacity, Modal, TextInput, StatusBar, Platform, KeyboardAvoidingView, ScrollView, Linking, Animated } from 'react-native';
 import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
@@ -10,6 +10,7 @@ import { getAuthHeaders } from '../auth.js';
 import { showAlert } from '../themedAlert.js';
 import { getActiveDrops, createDrop, claimDrop, getInventory, formatExpiry, rarityColor, celebrateMilestones } from '../duckApi.js';
 import { getActiveMeetups, createMeetup, rsvpMeetup, leaveMeetup, cancelMeetup, formatMeetupTime, formatDistance } from '../meetupApi.js';
+import { getNearbySos, createSos, respondSos, resolveSos, cancelSos, SOS_ISSUES, formatSosAge } from '../sosApi.js';
 import DuckIcon from '../DuckIcon';
 
 const RADIUS_CHOICES = [50, 100, 200, 500];
@@ -84,6 +85,39 @@ export default function RadarMapScreen() {
       }
     }
   }, [routeParams.placePins]);
+
+  // Pulsing ring for SOS pins.
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(pulseAnim, { toValue: 1, duration: 1600, useNativeDriver: true })
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+
+  // Deep-link from an SOS push notification: open the map on that request.
+  useEffect(() => {
+    (async () => {
+      if (routeParams.sosId && location && mapRef.current) {
+        try {
+          const list = await getNearbySos(location.latitude, location.longitude);
+          setSosRequests(list);
+          const match = (list || []).find((s) => String(s.id) === String(routeParams.sosId));
+          if (match) {
+            setSelectedSos(match);
+            mapRef.current.animateToRegion({
+              latitude: match.latitude,
+              longitude: match.longitude,
+              latitudeDelta: 0.05,
+              longitudeDelta: 0.05,
+            }, 800);
+          }
+        } catch (e) {
+          console.error('Failed to load SOS request:', e);
+        }
+      }
+    })();
+  }, [routeParams.sosId]);
   const [chooserVisible, setChooserVisible] = useState(false);
   const [chooserCoord, setChooserCoord] = useState(null);
   const [meetupModalVisible, setMeetupModalVisible] = useState(false);
@@ -96,6 +130,18 @@ export default function RadarMapScreen() {
   const [isCreatingMeetup, setIsCreatingMeetup] = useState(false);
   const [isRsvping, setIsRsvping] = useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
+  // SOS / help requests
+  const [sosRequests, setSosRequests] = useState([]);
+  const [selectedSos, setSelectedSos] = useState(null);
+  const [sosSheetVisible, setSosSheetVisible] = useState(false);
+  const [sosIssue, setSosIssue] = useState('stuck');
+  const [sosDetails, setSosDetails] = useState('');
+  const [sosCoord, setSosCoord] = useState(null);
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
+  const [isResponding, setIsResponding] = useState(false);
+  const [confirmingSosCancel, setConfirmingSosCancel] = useState(false);
+  const [showSos, setShowSos] = useState(true);
+  const pulseAnim = useRef(new Animated.Value(0)).current;
   // Map layer filters
   const [showRigs, setShowRigs] = useState(true);
   const [showDucks, setShowDucks] = useState(true);
@@ -234,6 +280,14 @@ export default function RadarMapScreen() {
         } catch (e) {
           console.error("Failed to fetch meetups:", e);
         }
+
+        // 6. Fetch active SOS requests near this location
+        try {
+          const activeSos = await getNearbySos(currentCoords.latitude, currentCoords.longitude);
+          setSosRequests(activeSos);
+        } catch (e) {
+          console.error("Failed to fetch SOS requests:", e);
+        }
       } catch (error) {
         console.error("Failed to fetch nearby users:", error);
       }
@@ -278,6 +332,18 @@ export default function RadarMapScreen() {
       return fresh;
     } catch (e) {
       console.error("Failed to refresh meetups:", e);
+      return null;
+    }
+  };
+
+  const refreshSos = async () => {
+    if (!location) return null;
+    try {
+      const fresh = await getNearbySos(location.latitude, location.longitude);
+      setSosRequests(fresh);
+      return fresh;
+    } catch (e) {
+      console.error("Failed to refresh SOS requests:", e);
       return null;
     }
   };
@@ -361,6 +427,87 @@ export default function RadarMapScreen() {
   const handleNavigateToMeetup = () => {
     if (!selectedMeetup) return;
     const url = `https://www.google.com/maps/dir/?api=1&destination=${selectedMeetup.latitude},${selectedMeetup.longitude}&travelmode=driving`;
+    Linking.openURL(url).catch(() =>
+      showAlert("Couldn't open maps", "No map app available on this device."));
+  };
+
+  // --- SOS / help requests ---
+  const openSosSheet = (coord) => {
+    setSosCoord(coord);
+    setSosIssue('stuck');
+    setSosDetails('');
+    setSosSheetVisible(true);
+  };
+
+  const handleBroadcastSos = async () => {
+    if (!sosCoord || isBroadcasting) return;
+    setIsBroadcasting(true);
+    try {
+      const created = await createSos({
+        issue_type: sosIssue,
+        details: sosDetails.trim() || null,
+        latitude: sosCoord.latitude,
+        longitude: sosCoord.longitude,
+      });
+      setSosSheetVisible(false);
+      const fresh = await refreshSos();
+      const mine = (fresh || []).find((x) => x.id === created.id) || created;
+      setSelectedSos(mine);
+      showAlert("🆘 SOS broadcast", "Jeepers within 10 miles have been notified.");
+    } catch (e) {
+      showAlert("Couldn't broadcast", e.message || "Try again.");
+    } finally {
+      setIsBroadcasting(false);
+    }
+  };
+
+  const handleRespondSos = async () => {
+    if (!selectedSos || isResponding) return;
+    setIsResponding(true);
+    try {
+      const r = await respondSos(selectedSos.id);
+      const fresh = await refreshSos();
+      setSelectedSos((fresh || []).find((x) => x.id === selectedSos.id) || null);
+      if (r.responding) showAlert("You're on the way", "The requester has been notified.");
+    } catch (e) {
+      showAlert("Couldn't respond", e.message || "Try again.");
+    } finally {
+      setIsResponding(false);
+    }
+  };
+
+  const handleResolveSos = async () => {
+    if (!selectedSos) return;
+    try {
+      await resolveSos(selectedSos.id);
+      setSelectedSos(null);
+      await refreshSos();
+      showAlert("SOS resolved", "Glad you're rolling again.");
+    } catch (e) {
+      showAlert("Couldn't resolve", e.message || "Try again.");
+    }
+  };
+
+  const handleCancelSos = async () => {
+    if (!selectedSos) return;
+    if (!confirmingSosCancel) {
+      setConfirmingSosCancel(true);
+      return;
+    }
+    try {
+      await cancelSos(selectedSos.id);
+      setSelectedSos(null);
+      setConfirmingSosCancel(false);
+      await refreshSos();
+      showAlert("SOS cancelled", "It's off the map.");
+    } catch (e) {
+      showAlert("Couldn't cancel", e.message || "Try again.");
+    }
+  };
+
+  const handleNavigateToSos = () => {
+    if (!selectedSos) return;
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${selectedSos.latitude},${selectedSos.longitude}&travelmode=driving`;
     Linking.openURL(url).catch(() =>
       showAlert("Couldn't open maps", "No map app available on this device."));
   };
@@ -453,7 +600,7 @@ export default function RadarMapScreen() {
         customMapStyle={MAP_STYLE_NO_BUSINESS_POI}
         initialRegion={location}
         showsUserLocation={true}
-        onPress={() => { setSelectedDrop(null); setSelectedMeetup(null); setSelectedPlace(null); setConfirmingCancel(false); }}
+        onPress={() => { setSelectedDrop(null); setSelectedMeetup(null); setSelectedPlace(null); setConfirmingCancel(false); setSelectedSos(null); setConfirmingSosCancel(false); }}
         onLongPress={(e) => { setChooserCoord(e.nativeEvent.coordinate); setChooserVisible(true); }}
       >
         {/* Current User Marker */}
@@ -485,7 +632,7 @@ export default function RadarMapScreen() {
           <Marker
             key={`drop-${drop.id}`}
             coordinate={{ latitude: drop.latitude, longitude: drop.longitude }}
-            onPress={(e) => { e.stopPropagation(); setSelectedMeetup(null); setSelectedPlace(null); setSelectedDrop(drop); }}
+            onPress={(e) => { e.stopPropagation(); setSelectedMeetup(null); setSelectedPlace(null); setSelectedSos(null); setSelectedDrop(drop); }}
           >
             <View style={[styles.dropMarker, drop.claimed_by_me && { opacity: 0.4 }]}>
               <DuckIcon duck={drop.duck} size={30} />
@@ -498,7 +645,7 @@ export default function RadarMapScreen() {
           <Marker
             key={`place-${i}`}
             coordinate={{ latitude: r.lat, longitude: r.lng }}
-            onPress={(e) => { e.stopPropagation(); setSelectedDrop(null); setSelectedMeetup(null); setConfirmingCancel(false); setSelectedPlace(r); }}
+            onPress={(e) => { e.stopPropagation(); setSelectedDrop(null); setSelectedMeetup(null); setConfirmingCancel(false); setSelectedSos(null); setSelectedPlace(r); }}
             title={r.name}
             description={[r.hours, r.phone].filter(Boolean).join(' • ')}
             pinColor="#d4af37"
@@ -510,13 +657,37 @@ export default function RadarMapScreen() {
           <Marker
             key={`meetup-${m.id}`}
             coordinate={{ latitude: m.latitude, longitude: m.longitude }}
-            onPress={(e) => { e.stopPropagation(); setSelectedDrop(null); setSelectedPlace(null); setConfirmingCancel(false); setSelectedMeetup(m); }}
+            onPress={(e) => { e.stopPropagation(); setSelectedDrop(null); setSelectedPlace(null); setConfirmingCancel(false); setSelectedSos(null); setSelectedMeetup(m); }}
           >
             <View style={styles.meetupMarker}>
               <Text style={styles.meetupPin}>📍</Text>
               {m.attendee_count > 0 && (
                 <View style={styles.meetupBadge}>
                   <Text style={styles.meetupBadgeText}>{m.attendee_count > 99 ? '99+' : m.attendee_count}</Text>
+                </View>
+              )}
+            </View>
+          </Marker>
+        ))}
+
+        {/* SOS Markers */}
+        {showSos && sosRequests.map((s) => (
+          <Marker
+            key={`sos-${s.id}`}
+            coordinate={{ latitude: s.latitude, longitude: s.longitude }}
+            onPress={(e) => { e.stopPropagation(); setSelectedDrop(null); setSelectedMeetup(null); setSelectedPlace(null); setConfirmingCancel(false); setConfirmingSosCancel(false); setSelectedSos(s); }}
+          >
+            <View style={styles.sosMarker}>
+              <Animated.View style={[styles.sosRing, {
+                transform: [{ scale: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.5] }) }],
+                opacity: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.8, 0] }),
+              }]} />
+              <View style={styles.sosCore}>
+                <Text style={styles.sosPinText}>!</Text>
+              </View>
+              {s.responder_count > 0 && (
+                <View style={styles.meetupBadge}>
+                  <Text style={styles.meetupBadgeText}>{s.responder_count > 99 ? '99+' : s.responder_count}</Text>
                 </View>
               )}
             </View>
@@ -678,7 +849,67 @@ export default function RadarMapScreen() {
         </View>
       )}
 
-      {/* Long-press chooser: duck drop vs meetup */}
+      {/* SOS detail card */}
+      {selectedSos && (
+        <View style={styles.dropCard}>
+          <View style={{ flex: 1 }}>
+            <View style={styles.sosHeadRow}>
+              <Text style={styles.sosTitle}>🆘 {selectedSos.issue_label}</Text>
+              <Text style={styles.dropMeta}>{formatSosAge(selectedSos.created_at)}</Text>
+            </View>
+            <Text style={styles.dropMeta}>
+              {selectedSos.user_name}{selectedSos.vehicle_title ? ` • ${selectedSos.vehicle_title}` : ''} • {formatDistance(selectedSos.distance_m)}
+            </Text>
+            {!!selectedSos.details && (
+              <Text style={styles.dropClue}>{selectedSos.details}</Text>
+            )}
+            <Text style={styles.dropHint}>
+              {selectedSos.responder_count} responding{selectedSos.responded_by_me ? " • You're on the way ✓" : ''}
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 }}>
+              <TouchableOpacity
+                style={[styles.navBtn, { marginRight: 8, marginBottom: 8 }]}
+                onPress={handleNavigateToSos}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.navBtnText}>🧭 Navigate there</Text>
+              </TouchableOpacity>
+              {selectedSos.is_mine ? (
+                <>
+                  <TouchableOpacity
+                    style={[styles.navBtn, { marginRight: 8, marginBottom: 8, borderColor: '#2e7d32' }]}
+                    onPress={handleResolveSos}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.navBtnText, { color: '#66bb6a' }]}>✓ Resolved</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.navBtn, { marginBottom: 8, borderColor: '#c0392b' }]}
+                    onPress={handleCancelSos}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.navBtnText, { color: '#e74c3c' }]}>
+                      {confirmingSosCancel ? 'Tap to confirm' : 'Cancel SOS'}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.claimBtn, isResponding && { opacity: 0.4 }]}
+                  onPress={handleRespondSos}
+                  disabled={isResponding}
+                >
+                  <Text style={styles.claimBtnText}>
+                    {isResponding ? '...' : selectedSos.responded_by_me ? 'Stand down' : "I'm on my way"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Long-press chooser: duck drop vs meetup vs SOS */}
       <Modal visible={chooserVisible} transparent animationType="fade" onRequestClose={() => setChooserVisible(false)}>
         <TouchableOpacity style={styles.chooserBackdrop} activeOpacity={1} onPress={() => setChooserVisible(false)}>
           <View style={styles.chooserBox}>
@@ -711,6 +942,20 @@ export default function RadarMapScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.chooserLabel}>Plan a meetup</Text>
                 <Text style={styles.chooserDesc}>Rally the crew at this spot</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.chooserBtn}
+              onPress={() => {
+                setChooserVisible(false);
+                if (chooserCoord) openSosSheet(chooserCoord);
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.chooserEmoji}>🆘</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.chooserLabel, { color: '#e53935' }]}>Request help</Text>
+                <Text style={styles.chooserDesc}>Alert Jeepers within 10 miles</Text>
               </View>
             </TouchableOpacity>
             <TouchableOpacity style={styles.modalClose} onPress={() => setChooserVisible(false)}>
@@ -803,6 +1048,57 @@ export default function RadarMapScreen() {
                 <Text style={styles.dropBtnText}>{isCreatingMeetup ? 'Planning...' : 'Create meetup'}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalClose} onPress={() => setMeetupModalVisible(false)}>
+                <Text style={styles.modalCloseText}>Cancel</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* SOS request sheet */}
+      <Modal visible={sosSheetVisible} transparent animationType="slide" onRequestClose={() => setSosSheetVisible(false)}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <View style={styles.modalBox}>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <Text style={styles.modalTitle}>🆘 Request help</Text>
+              <Text style={[styles.modalLabel, { color: '#d4af37' }]}>Broadcast to Jeepers within 10 miles</Text>
+
+              <Text style={styles.modalLabel}>What's wrong?</Text>
+              <View style={styles.chipRow}>
+                {SOS_ISSUES.map((it) => (
+                  <TouchableOpacity
+                    key={it.id}
+                    style={[styles.optChip, sosIssue === it.id && styles.optChipActive, sosIssue === it.id && { borderColor: '#e53935' }]}
+                    onPress={() => setSosIssue(it.id)}
+                  >
+                    <Text style={[styles.optChipText, sosIssue === it.id && styles.optChipTextActive]}>{it.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <TextInput
+                style={[styles.labelInput, { minHeight: 64, textAlignVertical: 'top' }]}
+                placeholder="Details (optional) — e.g. buried to the axles, have straps"
+                placeholderTextColor="#757575"
+                value={sosDetails}
+                onChangeText={setSosDetails}
+                maxLength={500}
+                multiline
+              />
+              <Text style={styles.modalHint}>
+                Your location is shared with responders. Active for 1 hour — cancel anytime.
+              </Text>
+
+              <TouchableOpacity
+                style={[styles.sosBroadcastBtn, isBroadcasting && { opacity: 0.5 }]}
+                onPress={handleBroadcastSos}
+                disabled={isBroadcasting}
+              >
+                <Text style={styles.sosBroadcastText}>
+                  {isBroadcasting ? 'Broadcasting...' : 'BROADCAST SOS'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalClose} onPress={() => setSosSheetVisible(false)}>
                 <Text style={styles.modalCloseText}>Cancel</Text>
               </TouchableOpacity>
             </ScrollView>
@@ -905,12 +1201,22 @@ export default function RadarMapScreen() {
         <Text style={styles.helpBtnText}>?</Text>
       </TouchableOpacity>
 
+      {/* Floating SOS button */}
+      <TouchableOpacity
+        style={styles.sosFab}
+        onPress={() => { if (location) openSosSheet({ latitude: location.latitude, longitude: location.longitude }); }}
+        activeOpacity={0.85}
+      >
+        <Text style={styles.sosFabText}>SOS</Text>
+      </TouchableOpacity>
+
       {/* Map layer filters */}
       <View style={styles.filterRow} pointerEvents="box-none">
         {[
           { label: 'Rigs', on: showRigs, set: setShowRigs },
           { label: 'Ducks', on: showDucks, set: setShowDucks },
           { label: 'Meetups', on: showMeetups, set: setShowMeetups },
+          { label: 'SOS', on: showSos, set: setShowSos },
         ].map((f) => (
           <TouchableOpacity
             key={f.label}
@@ -947,7 +1253,7 @@ export default function RadarMapScreen() {
               Hide ducks and rally the crew — all from the map.
             </Text>
             {[
-              ['📍', 'Long-press anywhere on the map, then choose Drop a duck or Plan a meetup.'],
+              ['📍', 'Long-press anywhere on the map, then choose Drop a duck, Plan a meetup, or Request help.'],
               ['🦆', 'Drops: pick the duck, how many can claim it, the radius, and how long it lasts. Get inside the radius and tap Claim — unclaimed ducks disappear at expiry.'],
               ['📍', 'Meetups: give it a title and a start time. Everyone within 25 miles gets an alert, and the gold pin shows who\'s going. Tap it to Join.'],
               ['🔍', 'Use the Rigs / Ducks / Meetups chips at the top to declutter the map.'],
@@ -1011,6 +1317,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
   },
   helpBtnText: { color: '#d4af37', fontSize: 18, fontWeight: 'bold' },
+  sosFab: {
+    position: 'absolute', right: 14, bottom: 24, zIndex: 3,
+    width: 58, height: 58, borderRadius: 29,
+    backgroundColor: '#e53935', borderWidth: 2, borderColor: '#fff',
+    justifyContent: 'center', alignItems: 'center',
+    elevation: 4, shadowColor: '#e53935', shadowOpacity: 0.5, shadowRadius: 8,
+  },
+  sosFabText: { color: '#fff', fontSize: 14, fontWeight: '900' },
+  sosMarker: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
+  sosRing: {
+    position: 'absolute', width: 44, height: 44, borderRadius: 22,
+    borderWidth: 3, borderColor: '#e53935',
+  },
+  sosCore: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: '#e53935', borderWidth: 2, borderColor: '#fff',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  sosPinText: { color: '#fff', fontSize: 16, fontWeight: '900' },
+  sosHeadRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  sosTitle: { color: '#e53935', fontSize: 16, fontWeight: '800' },
+  sosBroadcastBtn: {
+    backgroundColor: '#e53935', borderRadius: 12,
+    paddingVertical: 14, alignItems: 'center', marginTop: 12,
+  },
+  sosBroadcastText: { color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.5 },
   tutorialBackdrop: {
     flex: 1, backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'center', alignItems: 'center', padding: 24,
@@ -1106,7 +1438,8 @@ const styles = StyleSheet.create({
   meetupBadgeText: { color: '#d4af37', fontSize: 11, fontWeight: 'bold' },
   filterRow: {
     position: 'absolute', top: 64, left: 0, right: 0, zIndex: 2,
-    flexDirection: 'row', justifyContent: 'center',
+    flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap',
+    paddingHorizontal: 8,
   },
   filterChip: {
     backgroundColor: 'rgba(18,18,18,0.88)',

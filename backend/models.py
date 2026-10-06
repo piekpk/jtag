@@ -198,6 +198,31 @@ class MeetupRsvp(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class SosRequest(Base):
+    """A help/SOS broadcast from a stuck or broken-down Jeeper."""
+    __tablename__ = "sos_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True, nullable=False)
+    issue_type = Column(String(20), nullable=False)
+    details = Column(String(500), nullable=True)
+    latitude = Column(Float, nullable=False)
+    longitude = Column(Float, nullable=False)
+    status = Column(String(12), nullable=False, default="active", index=True)  # active/resolved/cancelled/expired
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+
+
+class SosResponse(Base):
+    """One 'I'm on my way' per user per SOS request."""
+    __tablename__ = "sos_responses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    request_id = Column(Integer, index=True, nullable=False)
+    user_id = Column(Integer, index=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class PlaceSearch(Base):
     """A JtapBot nearby-places answer, so chat can deep-link it onto the map."""
     __tablename__ = "place_searches"

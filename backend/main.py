@@ -17,7 +17,7 @@ from sqlalchemy import create_engine, or_, func
 from sqlalchemy.orm import sessionmaker, Session
 from passlib.context import CryptContext
 from pydantic import BaseModel
-from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, Milestone, PhotoReaction, MarketListing, Notification, Meetup, MeetupRsvp, PlaceSearch
+from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, Milestone, PhotoReaction, MarketListing, Notification, Meetup, MeetupRsvp, PlaceSearch, SosRequest, SosResponse
 from schemas import UserProfileUpdate, UserProfileResponse, UserCreate
 import duck_ai
 import profanity
@@ -1690,6 +1690,190 @@ def cancel_meetup(meetup_id: int, db: Session = Depends(get_db),
     return {"message": "Meetup cancelled", "meetup_id": meetup_id}
 
 
+# --- SOS / help requests ---
+class SosCreate(BaseModel):
+    issue_type: str
+    details: Optional[str] = None
+    latitude: float
+    longitude: float
+
+
+SOS_ISSUE_TYPES = {"stuck", "breakdown", "flat_tire", "dead_battery", "out_of_fuel", "other"}
+SOS_ISSUE_LABELS = {
+    "stuck": "Stuck", "breakdown": "Breakdown", "flat_tire": "Flat tire",
+    "dead_battery": "Dead battery", "out_of_fuel": "Out of fuel", "other": "Other",
+}
+SOS_DURATION_HOURS = 1
+SOS_ALERT_RADIUS_M = 10 * 1609.34  # 10 miles
+
+
+def _expire_sos_requests(db: Session) -> None:
+    """Lazily mark past-due SOS requests as expired."""
+    db.query(SosRequest).filter(
+        SosRequest.status == "active",
+        SosRequest.expires_at <= datetime.utcnow()
+    ).update({"status": "expired"}, synchronize_session=False)
+    db.commit()
+
+
+def _sos_dict(db: Session, s: SosRequest, lat: float, lng: float, viewer_id: int) -> dict:
+    requester = db.query(User).filter(User.id == s.user_id).first()
+    vehicle = ""
+    if requester and requester.settings:
+        try:
+            vehicle = (requester.settings or {}).get("vehicleTitle") or ""
+        except Exception:
+            pass
+    return {
+        "id": s.id,
+        "user_id": s.user_id,
+        "user_name": _owner_name(db, s.user_id),
+        "vehicle_title": vehicle,
+        "issue_type": s.issue_type,
+        "issue_label": SOS_ISSUE_LABELS.get(s.issue_type, s.issue_type),
+        "details": s.details,
+        "latitude": s.latitude,
+        "longitude": s.longitude,
+        "status": s.status,
+        "created_at": s.created_at.isoformat() if s.created_at else None,
+        "expires_at": s.expires_at.isoformat() if s.expires_at else None,
+        "distance_m": haversine(lat, lng, s.latitude, s.longitude),
+        "responder_count": db.query(SosResponse).filter(SosResponse.request_id == s.id).count(),
+        "responded_by_me": db.query(SosResponse).filter(
+            SosResponse.request_id == s.id, SosResponse.user_id == viewer_id).first() is not None,
+        "is_mine": s.user_id == viewer_id,
+    }
+
+
+def _fan_out_sos_alerts(db: Session, s: SosRequest, requester_name: str):
+    """Push an SOS alert to every non-banned user within 10 miles (except the requester)."""
+    try:
+        label = SOS_ISSUE_LABELS.get(s.issue_type, s.issue_type)
+        nearby = db.query(User).filter(
+            User.id != s.user_id,
+            User.is_banned == False,  # noqa: E712
+            User.latitude.isnot(None),
+            User.longitude.isnot(None)).all()
+        for u in nearby:
+            dist_m = haversine(s.latitude, s.longitude, u.latitude, u.longitude)
+            if dist_m <= SOS_ALERT_RADIUS_M:
+                mi = dist_m / 1609.34
+                dist_txt = f"{mi:.1f} mi away" if mi < 10 else f"{round(mi)} mi away"
+                _notify_user(
+                    db, u.id, "sos",
+                    "🆘 Jeeper needs help!",
+                    f"{requester_name}: {label} — {dist_txt}",
+                    {"sos_id": s.id})
+        db.commit()
+    except Exception as e:
+        print(f"SOS alert fan-out failed: {e}")
+
+
+@app.post("/sos")
+def create_sos(payload: SosCreate, db: Session = Depends(get_db),
+               current_user: User = Depends(get_current_user)):
+    issue = (payload.issue_type or "").strip().lower()
+    if issue not in SOS_ISSUE_TYPES:
+        raise HTTPException(status_code=400, detail="Unknown issue type")
+    details = (payload.details or "").strip()[:500] or None
+    if details:
+        _require_clean(details)
+    _expire_sos_requests(db)
+    existing = db.query(SosRequest).filter(
+        SosRequest.user_id == current_user.id,
+        SosRequest.status == "active").first()
+    if existing:
+        raise HTTPException(status_code=400, detail="You already have an active SOS request")
+    now = datetime.utcnow()
+    s = SosRequest(
+        user_id=current_user.id,
+        issue_type=issue,
+        details=details,
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+        status="active",
+        created_at=now,
+        expires_at=now + timedelta(hours=SOS_DURATION_HOURS))
+    db.add(s)
+    db.commit()
+    db.refresh(s)
+    _fan_out_sos_alerts(db, s, _owner_name(db, current_user.id))
+    return _sos_dict(db, s, payload.latitude, payload.longitude, current_user.id)
+
+
+@app.get("/sos/nearby")
+def list_nearby_sos(lat: float, lng: float, radius_m: float = SOS_ALERT_RADIUS_M,
+                    db: Session = Depends(get_db),
+                    current_user: User = Depends(get_current_user)):
+    """Active SOS requests near a point (for map pins)."""
+    _expire_sos_requests(db)
+    result = []
+    for s in db.query(SosRequest).filter(SosRequest.status == "active").all():
+        dist = haversine(lat, lng, s.latitude, s.longitude)
+        if dist > radius_m:
+            continue
+        result.append(_sos_dict(db, s, lat, lng, current_user.id))
+    result.sort(key=lambda x: x["created_at"] or "")
+    return result
+
+
+@app.post("/sos/{sos_id}/respond")
+def respond_sos(sos_id: int, db: Session = Depends(get_db),
+                current_user: User = Depends(get_current_user)):
+    """Toggle 'I'm on my way' for an SOS request."""
+    s = db.query(SosRequest).filter(SosRequest.id == sos_id).first()
+    if not s or s.status != "active" or s.expires_at <= datetime.utcnow():
+        raise HTTPException(status_code=404, detail="SOS request not found or expired")
+    existing = db.query(SosResponse).filter(
+        SosResponse.request_id == sos_id, SosResponse.user_id == current_user.id).first()
+    if existing:
+        db.delete(existing)
+        db.commit()
+        responding = False
+    else:
+        db.add(SosResponse(request_id=sos_id, user_id=current_user.id))
+        db.commit()
+        responding = True
+        try:
+            _notify_user(
+                db, s.user_id, "sos",
+                "🛻 Help is on the way!",
+                f"{_owner_name(db, current_user.id)} is heading to your SOS.",
+                {"sos_id": s.id})
+            db.commit()
+        except Exception as e:
+            print(f"SOS responder notify failed: {e}")
+    count = db.query(SosResponse).filter(SosResponse.request_id == sos_id).count()
+    return {"responding": responding, "responder_count": count, "sos_id": sos_id}
+
+
+def _get_own_sos(db: Session, sos_id: int, user_id: int) -> SosRequest:
+    s = db.query(SosRequest).filter(SosRequest.id == sos_id).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="SOS request not found")
+    if s.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Only the requester can do that")
+    return s
+
+
+@app.post("/sos/{sos_id}/resolve")
+def resolve_sos(sos_id: int, db: Session = Depends(get_db),
+                current_user: User = Depends(get_current_user)):
+    s = _get_own_sos(db, sos_id, current_user.id)
+    s.status = "resolved"
+    db.commit()
+    return {"message": "SOS resolved", "sos_id": sos_id}
+
+
+@app.post("/sos/{sos_id}/cancel")
+def cancel_sos(sos_id: int, db: Session = Depends(get_db),
+               current_user: User = Depends(get_current_user)):
+    s = _get_own_sos(db, sos_id, current_user.id)
+    s.status = "cancelled"
+    db.commit()
+    return {"message": "SOS cancelled", "sos_id": sos_id}
+
+
 # --- Trading ---
 class TradeCreate(BaseModel):
     recipient_id: int
@@ -1972,6 +2156,8 @@ ADMIN_TABLES = {
     "market_listings": MarketListing,
     "meetups": Meetup,
     "meetup_rsvps": MeetupRsvp,
+    "sos_requests": SosRequest,
+    "sos_responses": SosResponse,
 }
 
 # Columns never exposed through the admin API.

@@ -85,9 +85,11 @@ export default function MyRigScreen() {
     setAlertsVisible(false);
     if (n.type === 'ducked') router.push('/(tabs)/ducks');
     else if (n.type === 'meetup') router.push('/(tabs)/map');
+    else if (n.type === 'sos' && n.data && n.data.sos_id) router.push({ pathname: '/(tabs)/map', params: { sosId: String(n.data.sos_id) } });
+    else if (n.type === 'sos') router.push('/(tabs)/map');
   };
 
-  const alertIcon = (type) => (type === 'ducked' ? '🦆' : type === 'meetup' ? '📍' : '🔔');
+  const alertIcon = (type) => (type === 'ducked' ? '🦆' : type === 'meetup' ? '📍' : type === 'sos' ? '🆘' : '🔔');
 
   const timeAgo = (ts) => {
     const s = Math.max(0, (Date.now() - new Date(ts).getTime()) / 1000);
