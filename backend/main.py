@@ -389,6 +389,9 @@ def update_profile(user_id: int, profile_data: UserProfileUpdate, db: Session = 
         raise HTTPException(status_code=404, detail="User not found")
     if profile_data.settings is not None:
         _require_clean_profile_settings(profile_data.settings)
+        name = profile_data.settings.get("ownerName") if isinstance(profile_data.settings, dict) else None
+        if isinstance(name, str) and len(name) > 30:
+            raise HTTPException(status_code=400, detail="Name must be 30 characters or fewer.")
         # Merge, don't replace: the app only sends the fields it edits, and
         # server-managed keys (duckCount, ...) must survive a profile save.
         merged = dict(user.settings or {})

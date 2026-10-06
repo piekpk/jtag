@@ -321,6 +321,7 @@ export default function MyRigScreen() {
               onChangeText={setOwnerName}
               placeholder="Your Name"
               placeholderTextColor="#888"
+              maxLength={30}
             />
           ) : (
             <Text style={styles.title}>{ownerName}'s Rig</Text>
