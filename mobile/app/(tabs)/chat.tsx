@@ -519,7 +519,7 @@ const styles = StyleSheet.create({
   distPillText: { color: '#121212', fontSize: 11, fontWeight: 'bold' },
   globalBanner: { backgroundColor: 'rgba(212,175,55,0.10)', borderBottomWidth: 1, borderBottomColor: 'rgba(212,175,55,0.35)', paddingVertical: 8, paddingHorizontal: 20 },
   globalBannerText: { color: '#d4af37', fontSize: 13, fontWeight: '600' },
-  worldWatermark: { position: 'absolute', top: 24, left: 0, right: 0, height: 260, opacity: 0.14 },
+  worldWatermark: { position: 'absolute', top: 24, left: 0, right: 0, height: 260, opacity: 0.3 },
   tabContainer: { flexDirection: 'row', backgroundColor: '#2c2c2e', borderRadius: 8, padding: 4 },
   tabButton: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 6 },
   activeTab: { backgroundColor: '#d4af37' },
