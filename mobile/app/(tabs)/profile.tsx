@@ -355,6 +355,7 @@ export default function MyRigScreen() {
             onChangeText={setVehicleTitle}
             placeholder="Vehicle Year Make & Model"
             placeholderTextColor="#888"
+            maxLength={30}
           />
         ) : (
           <Text style={styles.subtitle}>{vehicleTitle}</Text>
