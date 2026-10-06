@@ -41,6 +41,64 @@ POST_INTERVAL_HOURS = float(os.environ.get("JTBOT_POST_HOURS", "6"))
 REPLY_COOLDOWN_S = 60  # global @-mentions: anti-spam
 DM_REPLY_COOLDOWN_S = 5  # bot DMs: snappy, but absorbs double-sends
 
+# Operator-tunable config, persisted to disk so it survives restarts.
+_CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "jtapbot_config.json")
+_config = {"post_interval_hours": POST_INTERVAL_HOURS, "paused": False}
+
+
+def _load_config():
+    try:
+        with open(_CONFIG_PATH) as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            if "post_interval_hours" in data:
+                _config["post_interval_hours"] = max(0.25, min(168.0, float(data["post_interval_hours"])))
+            _config["paused"] = bool(data.get("paused"))
+    except (OSError, ValueError):
+        pass
+
+
+def _save_config():
+    try:
+        with open(_CONFIG_PATH, "w") as f:
+            json.dump(_config, f)
+    except OSError as e:
+        print(f"JtapBot config save failed: {e}")
+
+
+_load_config()
+
+
+def set_paused(paused: bool):
+    """Pause/resume scheduled posts and drops. @-mentions and DMs still reply."""
+    _config["paused"] = bool(paused)
+    _save_config()
+
+
+def set_post_interval(hours: float):
+    _config["post_interval_hours"] = max(0.25, min(168.0, float(hours)))
+    _save_config()
+
+
+def post_now():
+    """Post one scheduled message immediately; restarts the interval clock."""
+    global _post_last
+    ok = post_scheduled()
+    if ok:
+        _post_last = time.time()
+    return ok
+
+
+def get_status():
+    interval_s = _config["post_interval_hours"] * 3600
+    next_in = None
+    if not _config["paused"]:
+        next_in = max(0.0, interval_s - (time.time() - _post_last))
+    return {"paused": _config["paused"],
+            "post_interval_hours": _config["post_interval_hours"],
+            "next_post_in_s": next_in,
+            "llm_available": llm.is_available()}
+
 BOT_USER_ID = None
 _SessionLocal = None
 _reply_cooldowns = {}  # channel -> last reply timestamp
@@ -181,13 +239,14 @@ def _bot_loop():
     while True:
         try:
             now = time.time()
-            if now - _post_last >= POST_INTERVAL_HOURS * 3600:
-                post_scheduled()
-                _post_last = now
-            _maybe_bot_drop()
+            if not _config["paused"]:
+                if now - _post_last >= _config["post_interval_hours"] * 3600:
+                    post_scheduled()
+                    _post_last = now
+                _maybe_bot_drop()
         except Exception as e:
             print(f"JtapBot loop error: {e}")
-        time.sleep(3600)  # wake hourly; posts/drops are rate-limited by timestamps
+        time.sleep(900)  # wake every 15 min; posts/drops are rate-limited by timestamps
 
 
 def start():

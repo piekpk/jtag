@@ -90,6 +90,20 @@
       <div id="soslist" style="max-height:420px; overflow-y:auto;"></div>
       <button style="padding:8px 16px; font-size:13px; width:100%; margin-top:8px;" onclick="loadSosMonitor()">Refresh now</button>
     </div>
+    <div id="tool-jtapbot" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:480px; display:none;">
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">🤖 JtapBot scheduler</div>
+      <div id="jtb_status" style="font-size:13px; margin-bottom:10px;"></div>
+      <div style="display:flex; gap:8px; margin-bottom:8px;">
+        <input id="jtb_hours" type="number" step="any" min="0.25" max="168" placeholder="Hours between posts" style="flex:1; margin-bottom:0;">
+        <button style="padding:8px 16px; font-size:13px; margin:0;" onclick="jtbSetInterval()">Set</button>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button id="jtb_pausebtn" style="flex:1; padding:8px 16px; font-size:13px; margin:0;" onclick="jtbTogglePause()">Pause</button>
+        <button style="flex:1; padding:8px 16px; font-size:13px; margin:0;" onclick="jtbPostNow()">Post now</button>
+      </div>
+      <div style="color:var(--muted); font-size:12px; margin-top:8px;">Pausing stops scheduled posts &amp; drops. @-mentions and DMs still reply.</div>
+      <button class="ghost" style="padding:8px 16px; font-size:13px; width:100%; margin-top:8px;" onclick="loadJtapBot()">Refresh</button>
+    </div>
     <div id="tool-lookup" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:480px; display:none;">
       <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">🔍 Find a user</div>
       <div style="display:flex; gap:8px;">
@@ -270,6 +284,7 @@ const TOOLS = [
   ["tool-audit", "📋 Audit log"],
   ["tool-cancel", "🚫 Cancel tools"],
   ["tool-sos", "🆘 SOS monitor"],
+  ["tool-jtapbot", "🤖 JtapBot"],
   ["tool-lookup", "🔍 Find user"],
   ["tool-mod", "🛒 Moderation"],
   ["tool-drop", "📍 Create drop"],
@@ -303,6 +318,7 @@ function showTool(id) {
   if (id === 'tool-audit') loadAuditLog();
   if (id === 'tool-cancel') loadCancelTools();
   if (id === 'tool-sos') { loadSosMonitor(); sosTimer = setInterval(loadSosMonitor, 30000); }
+  if (id === 'tool-jtapbot') loadJtapBot();
   if (id === 'tool-meetup' && !document.getElementById('m_start').value) meetupDefaults();
 }
 
@@ -598,6 +614,42 @@ async function sosResolve(id) {
 async function sosCancel(id) {
   if (!confirm('Cancel SOS #' + id + '?')) return;
   try { await api('/admin/sos/' + id + '/cancel', { method: 'POST' }); loadSosMonitor(); }
+  catch (e) { alert('Failed: ' + e.message); }
+}
+
+let jtbPaused = false;
+async function loadJtapBot() {
+  const el = document.getElementById('jtb_status');
+  try {
+    const s = await api('/admin/jtapbot');
+    jtbPaused = !!s.paused;
+    const next = s.next_post_in_s == null ? 'paused' :
+      (s.next_post_in_s < 90 ? `${Math.round(s.next_post_in_s)}s` : `${Math.round(s.next_post_in_s / 60)}m`);
+    el.innerHTML =
+      `<div class="kv"><span class="k">status</span><span class="v">${s.paused ? '⏸ paused' : '▶ running'}</span></div>` +
+      `<div class="kv"><span class="k">post interval</span><span class="v">${s.post_interval_hours}h</span></div>` +
+      `<div class="kv"><span class="k">next post in</span><span class="v">${next}</span></div>` +
+      `<div class="kv"><span class="k">LLM</span><span class="v">${s.llm_available ? 'online' : 'DOWN'}</span></div>`;
+    document.getElementById('jtb_pausebtn').textContent = s.paused ? 'Resume' : 'Pause';
+    document.getElementById('jtb_hours').placeholder = `Hours between posts (now ${s.post_interval_hours})`;
+  } catch (e) { el.innerHTML = '<div style="color:#f66;">Could not load: ' + esc(e.message) + '</div>'; }
+}
+
+async function jtbTogglePause() {
+  try { await api('/admin/jtapbot/pause', { method: 'POST', body: JSON.stringify({ paused: !jtbPaused }) }); loadJtapBot(); }
+  catch (e) { alert('Failed: ' + e.message); }
+}
+
+async function jtbSetInterval() {
+  const hours = parseFloat(document.getElementById('jtb_hours').value);
+  if (!(hours >= 0.25 && hours <= 168)) { alert('Enter 0.25 to 168 hours.'); return; }
+  try { await api('/admin/jtapbot/interval', { method: 'POST', body: JSON.stringify({ hours }) }); loadJtapBot(); }
+  catch (e) { alert('Failed: ' + e.message); }
+}
+
+async function jtbPostNow() {
+  if (!confirm('Post a JtapBot message to global chat now?')) return;
+  try { await api('/admin/jtapbot/post-now', { method: 'POST' }); alert('Posted.'); loadJtapBot(); }
   catch (e) { alert('Failed: ' + e.message); }
 }
 

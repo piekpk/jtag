@@ -3274,3 +3274,44 @@ def admin_resolve_sos(sos_id: int, db: Session = Depends(get_db),
 def admin_cancel_sos(sos_id: int, db: Session = Depends(get_db),
                      admin: User = Depends(require_admin)):
     return _admin_set_sos_status(db, admin, sos_id, "cancelled")
+
+
+@app.get("/admin/jtapbot")
+def admin_jtapbot_status(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """JtapBot scheduler status for the admin panel."""
+    return jtapbot.get_status()
+
+
+class JtapBotPause(BaseModel):
+    paused: bool
+
+
+@app.post("/admin/jtapbot/pause")
+def admin_jtapbot_pause(payload: JtapBotPause, db: Session = Depends(get_db),
+                        admin: User = Depends(require_admin)):
+    """Pause/resume scheduled posts and drops. @-mentions and DMs still reply."""
+    jtapbot.set_paused(payload.paused)
+    _log_admin(db, admin, "jtapbot_pause" if payload.paused else "jtapbot_resume")
+    return jtapbot.get_status()
+
+
+class JtapBotInterval(BaseModel):
+    hours: float
+
+
+@app.post("/admin/jtapbot/interval")
+def admin_jtapbot_interval(payload: JtapBotInterval, db: Session = Depends(get_db),
+                           admin: User = Depends(require_admin)):
+    if not 0.25 <= payload.hours <= 168:
+        raise HTTPException(status_code=400, detail="Interval must be between 0.25 and 168 hours")
+    jtapbot.set_post_interval(payload.hours)
+    _log_admin(db, admin, "jtapbot_interval", detail=f"{payload.hours}h")
+    return jtapbot.get_status()
+
+
+@app.post("/admin/jtapbot/post-now")
+def admin_jtapbot_post_now(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    if not jtapbot.post_now():
+        raise HTTPException(status_code=502, detail="Bot post failed (LLM may be down)")
+    _log_admin(db, admin, "jtapbot_post_now")
+    return {"posted": True}
