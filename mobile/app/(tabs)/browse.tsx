@@ -1,10 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, SafeAreaView, TextInput } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, SafeAreaView, TextInput, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { API_URL } from '../config.js';
 import { getAuthHeaders } from '../auth.js';
+
+// Rotating browse header banners (bundled assets).
+const BROWSE_HEADERS = [
+  require('../assets/browse-headers/browse-convoy.webp'),
+  require('../assets/browse-headers/browse-nightrun.webp'),
+  require('../assets/browse-headers/browse-dunes.webp'),
+  require('../assets/browse-headers/browse-campfire.webp'),
+];
+const BROWSE_HEADER_KEY = 'jtap_browse_header_idx';
 
 // Helper function to safely format image URLs and bypass hardcoded local IPs
 const getImageUrl = (imagePath: string) => {
@@ -26,6 +35,26 @@ export default function BrowseScreen() {
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState(null); // null = not searching
   const [isSearching, setIsSearching] = useState(false);
+  const [headerIdx, setHeaderIdx] = useState(0);
+  const headerFade = useRef(new Animated.Value(1)).current;
+
+  // Load the user's chosen browse header; tapping the header switches it.
+  useEffect(() => {
+    AsyncStorage.getItem(BROWSE_HEADER_KEY).then((v) => {
+      const n = parseInt(v, 10);
+      if (!Number.isNaN(n) && n >= 0 && n < BROWSE_HEADERS.length) setHeaderIdx(n);
+    }).catch(() => {});
+  }, []);
+
+  const chooseHeader = (i) => {
+    const next = ((i % BROWSE_HEADERS.length) + BROWSE_HEADERS.length) % BROWSE_HEADERS.length;
+    if (next === headerIdx) return;
+    Animated.timing(headerFade, { toValue: 0, duration: 250, useNativeDriver: true }).start(() => {
+      setHeaderIdx(next);
+      AsyncStorage.setItem(BROWSE_HEADER_KEY, String(next)).catch(() => {});
+      Animated.timing(headerFade, { toValue: 1, duration: 250, useNativeDriver: true }).start();
+    });
+  };
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -163,8 +192,28 @@ export default function BrowseScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>{searching ? 'Search Results' : 'Nearby Rigs'}</Text>
+      <TouchableOpacity
+        activeOpacity={0.95}
+        onPress={() => chooseHeader(headerIdx + 1)}
+        style={styles.browseHeader}
+      >
+        <Animated.Image
+          source={BROWSE_HEADERS[headerIdx]}
+          style={[styles.browseHeaderImg, { opacity: headerFade }]}
+          resizeMode="cover"
+        />
+        <View style={styles.browseHeaderDim} />
+        <Text style={styles.browseSwitchHint}>tap to switch</Text>
+        <View style={styles.browseHeaderTextWrap}>
+          <Text style={styles.browseHeaderTitle}>{searching ? 'Search Results' : 'Nearby Rigs'}</Text>
+        </View>
+        <View style={styles.browseDots}>
+          {BROWSE_HEADERS.map((_, i) => (
+            <View key={i} style={[styles.browseDot, i === headerIdx && styles.browseDotActive]} />
+          ))}
+        </View>
+      </TouchableOpacity>
+      <View style={styles.searchBar}>
         <TextInput
           style={styles.searchInput}
           value={query}
@@ -194,8 +243,16 @@ export default function BrowseScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#121212' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { padding: 20, backgroundColor: '#1a1a1a' },
-  headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#fff', marginBottom: 12 },
+  browseHeader: { height: 150, overflow: 'hidden', backgroundColor: '#1e1e1e' },
+  browseHeaderImg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' },
+  browseHeaderDim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)' },
+  browseHeaderTextWrap: { position: 'absolute', left: 20, bottom: 14 },
+  browseHeaderTitle: { fontSize: 24, fontWeight: '900', color: '#fff', letterSpacing: 0.5, textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
+  browseSwitchHint: { position: 'absolute', top: 10, right: 12, fontSize: 10, color: 'rgba(255,255,255,0.65)', fontStyle: 'italic' },
+  browseDots: { position: 'absolute', right: 12, bottom: 16, flexDirection: 'row' },
+  browseDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.4)', marginLeft: 5 },
+  browseDotActive: { backgroundColor: '#d4af37' },
+  searchBar: { paddingHorizontal: 20, paddingVertical: 12, backgroundColor: '#1a1a1a' },
   searchInput: {
     backgroundColor: '#2c2c2e', color: '#fff', borderRadius: 10,
     paddingVertical: 10, paddingHorizontal: 14, fontSize: 15,
