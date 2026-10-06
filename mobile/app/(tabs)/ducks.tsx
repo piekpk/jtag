@@ -22,6 +22,31 @@ const POND_HEADERS = [
 ];
 const POND_HEADER_KEY = 'jtap_pond_header_idx';
 
+// Section banners (2 choices each, bundled assets).
+const TRADE_HEADERS = [
+  require('../../assets/duck-sections/trade-swap.webp'),
+  require('../../assets/duck-sections/trade-scale.webp'),
+];
+const RANK_HEADERS = [
+  require('../../assets/duck-sections/ranks-podium.webp'),
+  require('../../assets/duck-sections/ranks-trophy.webp'),
+];
+const FEED_HEADERS = [
+  require('../../assets/duck-sections/feed-stream.webp'),
+  require('../../assets/duck-sections/feed-ripples.webp'),
+];
+const REWARD_HEADERS = [
+  require('../../assets/duck-sections/rewards-chest.webp'),
+  require('../../assets/duck-sections/rewards-gift.webp'),
+];
+const SECTION_BANNERS = {
+  Pond: { images: POND_HEADERS, key: POND_HEADER_KEY, title: 'Duck Pond' },
+  Trades: { images: TRADE_HEADERS, key: 'jtap_trades_header_idx', title: 'Duck Trades' },
+  Ranks: { images: RANK_HEADERS, key: 'jtap_ranks_header_idx', title: 'Ranks' },
+  Feed: { images: FEED_HEADERS, key: 'jtap_feed_header_idx', title: 'Activity Feed' },
+  Rewards: { images: REWARD_HEADERS, key: 'jtap_rewards_header_idx', title: 'Rewards' },
+};
+
 export default function DucksScreen() {
   const [section, setSection] = useState('Pond');
   const [loading, setLoading] = useState(true);
@@ -43,22 +68,41 @@ export default function DucksScreen() {
     AsyncStorage.getItem('userId').then(setMyUserId);
   }, []);
 
-  // Load the user's chosen pond header; tapping the header switches it.
+  // Load the user's chosen banner for the active section; tapping the banner switches it.
   useEffect(() => {
-    AsyncStorage.getItem(POND_HEADER_KEY).then((v) => {
+    const cfg = SECTION_BANNERS[section];
+    AsyncStorage.getItem(cfg.key).then((v) => {
       const n = parseInt(v, 10);
-      if (!Number.isNaN(n) && n >= 0 && n < POND_HEADERS.length) setHeaderIdx(n);
+      if (!Number.isNaN(n) && n >= 0 && n < cfg.images.length) setHeaderIdx(n);
+      else setHeaderIdx(0);
     }).catch(() => {});
-  }, []);
+  }, [section]);
 
   const chooseHeader = (i) => {
-    const next = ((i % POND_HEADERS.length) + POND_HEADERS.length) % POND_HEADERS.length;
+    const cfg = SECTION_BANNERS[section];
+    const next = ((i % cfg.images.length) + cfg.images.length) % cfg.images.length;
     if (next === headerIdx) return;
     Animated.timing(headerFade, { toValue: 0, duration: 250, useNativeDriver: true }).start(() => {
       setHeaderIdx(next);
-      AsyncStorage.setItem(POND_HEADER_KEY, String(next)).catch(() => {});
+      AsyncStorage.setItem(cfg.key, String(next)).catch(() => {});
       Animated.timing(headerFade, { toValue: 1, duration: 250, useNativeDriver: true }).start();
     });
+  };
+
+  const sectionSub = () => {
+    if (section === 'Pond') return pond ? `${pond.unlocked} of ${pond.total} ducks collected` : 'Your duck collection';
+    if (section === 'Trades') {
+      const n = trades.filter((t) => t.status === 'pending').length;
+      return n > 0 ? `${n} pending trade${n === 1 ? '' : 's'}` : 'No pending trades';
+    }
+    if (section === 'Ranks') {
+      const i = board.findIndex((r) => myUserId && r.user_id.toString() === myUserId.toString());
+      if (i >= 0) return `You're ranked #${i + 1}`;
+      return board.length ? `${board.length} collectors ranked` : 'No rankings yet';
+    }
+    if (section === 'Feed') return feed.length ? `${feed.length} recent events` : 'No activity yet';
+    const claimed = milestones.filter((m) => m.claimed).length;
+    return milestones.length ? `${claimed} of ${milestones.length} milestones claimed` : 'Earn ducks by hitting milestones';
   };
 
   const load = useCallback(async () => {
@@ -107,8 +151,9 @@ export default function DucksScreen() {
     }
   };
 
-  const renderPondBanner = () => {
-    if (!pond) return null;
+  const renderSectionBanner = () => {
+    const cfg = SECTION_BANNERS[section];
+    const images = cfg.images;
     return (
       <TouchableOpacity
         activeOpacity={0.95}
@@ -116,21 +161,19 @@ export default function DucksScreen() {
         style={styles.pondHeader}
       >
         <Animated.Image
-          source={POND_HEADERS[headerIdx]}
+          source={images[headerIdx % images.length]}
           style={[styles.pondHeaderImg, { opacity: headerFade }]}
           resizeMode="cover"
         />
         <View style={styles.pondHeaderDim} />
         <Text style={styles.pondSwitchHint}>tap to switch</Text>
         <View style={styles.pondHeaderTextWrap}>
-          <Text style={styles.pondHeaderTitle}>Duck Pond</Text>
-          <Text style={styles.pondHeaderSub}>
-            {pond.unlocked} of {pond.total} ducks collected
-          </Text>
+          <Text style={styles.pondHeaderTitle}>{cfg.title}</Text>
+          <Text style={styles.pondHeaderSub}>{sectionSub()}</Text>
         </View>
         <View style={styles.pondDots}>
-          {POND_HEADERS.map((_, i) => (
-            <View key={i} style={[styles.pondDot, i === headerIdx && styles.pondDotActive]} />
+          {images.map((_, i) => (
+            <View key={i} style={[styles.pondDot, i === headerIdx % images.length && styles.pondDotActive]} />
           ))}
         </View>
       </TouchableOpacity>
@@ -317,11 +360,7 @@ export default function DucksScreen() {
 
   return (
     <View style={styles.container}>
-      {section === 'Pond' && pond ? renderPondBanner() : (
-        <View style={styles.header}>
-          <Text style={styles.title}>🦆 Duck Pond</Text>
-        </View>
-      )}
+      {renderSectionBanner()}
       <View style={styles.segRow}>
         {SECTIONS.map((s) => (
           <TouchableOpacity
