@@ -31,6 +31,13 @@ const defaultMeetupStart = () => {
   return d;
 };
 
+// Hide Google's business POIs (restaurants, shops, etc.) so the map stays
+// focused on the app's own pins. Streets, street names, parks, and water
+// are untouched, and JtapBot place pins still render as app markers.
+const MAP_STYLE_NO_BUSINESS_POI = [
+  { featureType: 'poi.business', stylers: [{ visibility: 'off' }] },
+];
+
 export default function RadarMapScreen() {
   const router = useRouter();
   const [location, setLocation] = useState(null);
@@ -443,6 +450,7 @@ export default function RadarMapScreen() {
         ref={mapRef}
         style={styles.map}
         provider={PROVIDER_GOOGLE}
+        customMapStyle={MAP_STYLE_NO_BUSINESS_POI}
         initialRegion={location}
         showsUserLocation={true}
         onPress={() => { setSelectedDrop(null); setSelectedMeetup(null); setSelectedPlace(null); setConfirmingCancel(false); }}
