@@ -85,6 +85,11 @@
       <div id="cancel_trades" style="max-height:170px; overflow-y:auto; margin-bottom:10px;"></div>
       <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="loadCancelTools()">Refresh</button>
     </div>
+    <div id="tool-sos" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:560px; display:none;">
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">🆘 Active SOS monitor <span style="color:var(--muted); font-weight:400; font-size:12px;">(auto-refreshes every 30s)</span></div>
+      <div id="soslist" style="max-height:420px; overflow-y:auto;"></div>
+      <button style="padding:8px 16px; font-size:13px; width:100%; margin-top:8px;" onclick="loadSosMonitor()">Refresh now</button>
+    </div>
     <div id="tool-lookup" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:480px; display:none;">
       <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">🔍 Find a user</div>
       <div style="display:flex; gap:8px;">
@@ -206,6 +211,7 @@ const app = document.getElementById('app');
 const crumb = document.getElementById('crumb');
 const sub = document.getElementById('sub');
 let tables = [], table = null, rows = [], offset = 0, hasMore = false, detailEditable = [];
+let sosTimer = null;
 const PAGE = 50;
 
 const SUMMARY = {
@@ -262,6 +268,7 @@ const TOOLS = [
   ["tool-broadcast", "📢 Broadcast"],
   ["tool-audit", "📋 Audit log"],
   ["tool-cancel", "🚫 Cancel tools"],
+  ["tool-sos", "🆘 SOS monitor"],
   ["tool-lookup", "🔍 Find user"],
   ["tool-mod", "🛒 Moderation"],
   ["tool-drop", "📍 Create drop"],
@@ -290,9 +297,11 @@ function showTool(id) {
   const found = TOOLS.find(t => t[0] === id);
   document.getElementById('menulabel').textContent = found ? found[1] : 'Tools';
   document.getElementById('toolmenu').style.display = 'none';
+  if (sosTimer) { clearInterval(sosTimer); sosTimer = null; }
   if (id === 'tool-milestone') loadMilestones();
   if (id === 'tool-audit') loadAuditLog();
   if (id === 'tool-cancel') loadCancelTools();
+  if (id === 'tool-sos') { loadSosMonitor(); sosTimer = setInterval(loadSosMonitor, 30000); }
   if (id === 'tool-meetup' && !document.getElementById('m_start').value) meetupDefaults();
 }
 
@@ -556,6 +565,39 @@ async function cancelTrade(id) {
   if (!confirm('Cancel trade #' + id + '? The offered ducks were never moved, so nothing needs refunding.')) return;
   try { await api('/admin/trades/' + id + '/cancel', { method: 'POST' }); loadCancelTools(); }
   catch (e) { alert('Could not cancel: ' + e.message); }
+}
+
+async function loadSosMonitor() {
+  const el = document.getElementById('soslist');
+  try {
+    const data = await api('/admin/sos/active');
+    el.innerHTML = data.length ? data.map(s => `
+      <div style="border:1px solid #a33; border-radius:8px; padding:10px; margin-bottom:8px; font-size:13px; background:#2a1a1a;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+          <span style="color:#ff8080; font-weight:700;">🆘 ${esc(s.issue_type.replace(/_/g, ' '))}</span>
+          <span style="color:var(--muted); font-size:12px; flex-shrink:0;">${s.age_min}m ago · ${s.responders} responder${s.responders === 1 ? '' : 's'}</span>
+        </div>
+        ${s.details ? `<div style="color:#fff; margin:6px 0;">${esc(s.details)}</div>` : ''}
+        <div style="color:var(--muted); font-size:12px;">${esc(s.user_name)} · ${esc(s.user_email)} · ${Number(s.latitude).toFixed(4)}, ${Number(s.longitude).toFixed(4)}</div>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button class="ghost" style="flex:1; padding:6px; font-size:12px; margin:0;" onclick="sosResolve(${s.id})">Resolve</button>
+          <button class="danger" style="flex:1; padding:6px; font-size:12px; margin:0;" onclick="sosCancel(${s.id})">Cancel</button>
+        </div>
+      </div>`).join('')
+      : '<div style="color:var(--muted);">No active SOS requests. 🎉</div>';
+  } catch (e) { el.innerHTML = '<div style="color:#f66;">Could not load: ' + esc(e.message) + '</div>'; }
+}
+
+async function sosResolve(id) {
+  if (!confirm('Mark SOS #' + id + ' as resolved?')) return;
+  try { await api('/admin/sos/' + id + '/resolve', { method: 'POST' }); loadSosMonitor(); }
+  catch (e) { alert('Failed: ' + e.message); }
+}
+
+async function sosCancel(id) {
+  if (!confirm('Cancel SOS #' + id + '?')) return;
+  try { await api('/admin/sos/' + id + '/cancel', { method: 'POST' }); loadSosMonitor(); }
+  catch (e) { alert('Failed: ' + e.message); }
 }
 
 async function reviewListings() {

@@ -3198,3 +3198,50 @@ def admin_cancel_trade(trade_id: int, db: Session = Depends(get_db),
     db.commit()
     _log_admin(db, admin, "cancel_trade", "trade", t.id)
     return {"cancelled": True}
+
+
+@app.get("/admin/sos/active")
+def admin_active_sos(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """Live list of active SOS requests for the admin monitor."""
+    _expire_sos_requests(db)
+    now = datetime.utcnow()
+    rows = (db.query(SosRequest).filter(SosRequest.status == "active")
+            .order_by(SosRequest.created_at.asc()).all())
+    user_ids = {s.user_id for s in rows}
+    users = {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
+    out = []
+    for s in rows:
+        u = users.get(s.user_id)
+        responders = db.query(SosResponse).filter(SosResponse.request_id == s.id).count()
+        age_min = int((now - s.created_at).total_seconds() // 60) if s.created_at else 0
+        out.append({"id": s.id, "issue_type": s.issue_type, "details": s.details,
+                    "user_email": u.email if u else f"id {s.user_id}",
+                    "user_name": _owner_name(db, s.user_id),
+                    "latitude": s.latitude, "longitude": s.longitude,
+                    "age_min": age_min, "responders": responders,
+                    "expires_at": s.expires_at.isoformat() if s.expires_at else None})
+    return out
+
+
+def _admin_set_sos_status(db: Session, admin: User, sos_id: int, status: str) -> dict:
+    s = db.query(SosRequest).filter(SosRequest.id == sos_id).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="SOS request not found")
+    if s.status != "active":
+        raise HTTPException(status_code=400, detail=f"SOS is {s.status}")
+    s.status = status
+    db.commit()
+    _log_admin(db, admin, f"sos_{status}", "sos_request", s.id, s.issue_type)
+    return {"message": f"SOS {status}", "sos_id": sos_id}
+
+
+@app.post("/admin/sos/{sos_id}/resolve")
+def admin_resolve_sos(sos_id: int, db: Session = Depends(get_db),
+                      admin: User = Depends(require_admin)):
+    return _admin_set_sos_status(db, admin, sos_id, "resolved")
+
+
+@app.post("/admin/sos/{sos_id}/cancel")
+def admin_cancel_sos(sos_id: int, db: Session = Depends(get_db),
+                     admin: User = Depends(require_admin)):
+    return _admin_set_sos_status(db, admin, sos_id, "cancelled")
