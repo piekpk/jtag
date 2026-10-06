@@ -10,6 +10,7 @@ import { SOCIAL_PLATFORMS, platformById, validSocialLinks, normalizeSocialUrl } 
 import { getDuckCatalog, getInventory, getMyPond } from '../duckApi.js';
 import { listNotifications, markAllNotificationsRead, markNotificationRead } from '../notificationsApi.js';
 import DuckIcon from '../DuckIcon';
+import { BUILD_NUMBER } from '../buildInfo.js';
 import DuckShowcase from '../DuckShowcase';
 
 const MAX_SHOWCASE = 5;
@@ -640,6 +641,7 @@ export default function MyRigScreen() {
           </View>
         </View>
       </Modal>
+      <Text style={styles.buildNumber}>Build {BUILD_NUMBER}</Text>
     </ScrollView>
   );
 }
@@ -743,5 +745,6 @@ const styles = StyleSheet.create({
   modText: { fontSize: 16, paddingVertical: 6, color: '#ccc', lineHeight: 24 },
   logoutContainer: { marginHorizontal: 15, marginBottom: 30, alignItems: 'center' },
   logoutButton: { backgroundColor: '#d32f2f', width: '100%', padding: 15, borderRadius: 8, alignItems: 'center' },
-  logoutButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' }
+  logoutButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  buildNumber: { color: '#555', fontSize: 12, textAlign: 'center', marginBottom: 30, marginTop: 10 }
 });
