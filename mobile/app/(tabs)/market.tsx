@@ -394,11 +394,11 @@ export default function MarketScreen() {
                 ))}
               </View>
               <Text style={styles.flabel}>Description</Text>
-              <TextInput style={[styles.field, styles.fieldBig]} multiline
+              <TextInput style={[styles.field, styles.fieldBig]} multiline maxLength={1000}
                 placeholder="Condition, fitment, mileage, reason for selling…"
                 placeholderTextColor="#8e8e93" value={cDesc} onChangeText={setCDesc} textAlignVertical="top" />
               <Text style={styles.flabel}>Contact info</Text>
-              <TextInput style={styles.field} placeholder="Phone, Messenger, or however buyers reach you"
+              <TextInput style={styles.field} placeholder="Phone, Messenger, or however buyers reach you" maxLength={120}
                 placeholderTextColor="#8e8e93" value={cContact} onChangeText={setCContact} />
               <TouchableOpacity style={[styles.postBtn, posting && { opacity: 0.6 }]}
                 onPress={handlePost} disabled={posting} activeOpacity={0.85}>

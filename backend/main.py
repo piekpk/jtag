@@ -2151,6 +2151,10 @@ def create_listing(photo: UploadFile = File(...), title: str = Form(...),
         raise HTTPException(status_code=400, detail="Title, description, and contact info are required")
     if len(title) > 120:
         raise HTTPException(status_code=400, detail="Title too long (120 chars max)")
+    if len(description) > 1000:
+        raise HTTPException(status_code=400, detail="Description too long (1000 chars max)")
+    if len(contact_info) > 120:
+        raise HTTPException(status_code=400, detail="Contact info too long (120 chars max)")
     _require_clean(title, description, contact_info)
     if price < 0:
         raise HTTPException(status_code=400, detail="Price cannot be negative")
