@@ -49,6 +49,25 @@ export default function ChatScreen() {
   const [activeMessageId, setActiveMessageId] = useState(null);
   const [headerIdx, setHeaderIdx] = useState(0);
   const headerFade = useRef(new Animated.Value(1)).current;
+  const [memberCount, setMemberCount] = useState(null);
+
+  // Live worldwide member count for the global strip.
+  useEffect(() => {
+    if (channel !== 'global') return;
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/users/count`, { headers: await getAuthHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          setMemberCount(data.count);
+        }
+      } catch (e) {
+        console.error('member count failed:', e);
+      }
+    })();
+  }, [channel]);
+
+  const fmtDist = (mi) => (mi >= 100 ? `${Math.round(mi).toLocaleString()} mi` : `${mi} mi`);
 
   // Load the user's chosen chat header; tapping the header switches it.
   useEffect(() => {
@@ -106,7 +125,7 @@ export default function ChatScreen() {
     }
     try {
       let url = `${API_URL}/chat?channel=${encodeURIComponent(apiChannel)}`;
-      if (apiChannel === 'local') {
+      if (apiChannel === 'local' || apiChannel === 'global') {
         let { status } = await Location.requestForegroundPermissionsAsync();
         if (status === 'granted') {
           let location = await Location.getCurrentPositionAsync({});
@@ -229,9 +248,9 @@ export default function ChatScreen() {
           <TouchableOpacity onPress={() => handleOpenProfilePreview(item.user_id)}>
             <View style={styles.senderRow}>
               <Text style={styles.senderName}>{item.owner_name || 'Fellow Jeeper'} 🔍</Text>
-              {channel === 'local' && item.distance_mi != null && (
+              {(channel === 'local' || channel === 'global') && item.distance_mi != null && (
                 <View style={styles.distPill}>
-                  <Text style={styles.distPillText}>📍 {item.distance_mi} mi</Text>
+                  <Text style={styles.distPillText}>📍 {fmtDist(item.distance_mi)}</Text>
                 </View>
               )}
             </View>
@@ -343,6 +362,13 @@ export default function ChatScreen() {
           </Text>
         </View>
       )}
+      {channel === 'global' && (
+        <View style={styles.globalBanner}>
+          <Text style={styles.globalBannerText}>
+            {`🌍 Global chat${memberCount != null ? ` · ${memberCount.toLocaleString()} ${memberCount === 1 ? 'Jeeper' : 'Jeepers'} worldwide` : ''}`}
+          </Text>
+        </View>
+      )}
 
       {isLoading ? (
         <View style={styles.centered}>
@@ -354,6 +380,14 @@ export default function ChatScreen() {
           style={[styles.keyboardContainer, isBotDm && styles.botBg]}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
         >
+          {channel === 'global' && (
+            <Image
+              source={require('../assets/chat-headers/world-dots.webp')}
+              style={styles.worldWatermark}
+              resizeMode="contain"
+              pointerEvents="none"
+            />
+          )}
           <FlatList
             ref={flatListRef}
             data={messages}
@@ -478,6 +512,9 @@ const styles = StyleSheet.create({
   senderRow: { flexDirection: 'row', alignItems: 'center' },
   distPill: { backgroundColor: '#d4af37', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2, marginLeft: 8, marginBottom: 4 },
   distPillText: { color: '#121212', fontSize: 11, fontWeight: 'bold' },
+  globalBanner: { backgroundColor: 'rgba(212,175,55,0.10)', borderBottomWidth: 1, borderBottomColor: 'rgba(212,175,55,0.35)', paddingVertical: 8, paddingHorizontal: 20 },
+  globalBannerText: { color: '#d4af37', fontSize: 13, fontWeight: '600' },
+  worldWatermark: { position: 'absolute', top: 24, left: 0, right: 0, height: 260, opacity: 0.14 },
   tabContainer: { flexDirection: 'row', backgroundColor: '#2c2c2e', borderRadius: 8, padding: 4 },
   tabButton: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 6 },
   activeTab: { backgroundColor: '#d4af37' },

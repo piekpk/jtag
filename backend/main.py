@@ -506,6 +506,15 @@ def get_all_users(db: Session = Depends(get_db), current_user: User = Depends(ge
     users = db.query(User).all()
     return users
 
+@app.get("/users/count")
+def get_user_count(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Count of real members (excludes banned users and JtapBot)."""
+    count = db.query(User).filter(
+        (User.is_banned == False) | (User.is_banned == None),
+        User.email != jtapbot.BOT_EMAIL,
+    ).count()
+    return {"count": count}
+
 # --- Location & Map Endpoints ---
 @app.put("/users/{user_id}/location")
 def update_location(user_id: int, location: LocationUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -617,13 +626,12 @@ def get_chat_messages(channel: str = "global", lat: float = None, lng: float = N
     messages = []
     for row in rows:
         msg_distance = None
+        if lat is not None and lng is not None and row["latitude"] is not None and row["longitude"] is not None:
+            msg_distance = haversine(lat, lng, row["latitude"], row["longitude"])
         if channel == "local" and lat is not None and lng is not None:
-            if row["latitude"] is not None and row["longitude"] is not None:
-                distance = haversine(lat, lng, row["latitude"], row["longitude"])
-                if distance > 16093.4:
-                    continue
-                msg_distance = distance
-            else:
+            if msg_distance is None:
+                continue
+            if msg_distance > 16093.4:
                 continue
 
         owner_name = "Fellow Jeeper"
