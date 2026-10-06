@@ -149,7 +149,7 @@ export default function RadarMapScreen() {
   // Tutorial popup (duck drops)
   const [showTutorial, setShowTutorial] = useState(false);
   const [dontShowTutorial, setDontShowTutorial] = useState(false);
-  const TUTORIAL_KEY = 'jtap_map_tutorial_dismissed_v2';
+  const TUTORIAL_KEY = 'jtap_map_tutorial_dismissed_v3';
 
   const openTutorial = () => {
     setDontShowTutorial(false);
@@ -1248,15 +1248,16 @@ export default function RadarMapScreen() {
       >
         <View style={styles.tutorialBackdrop}>
           <View style={styles.tutorialCard}>
-            <Text style={styles.tutorialTitle}>🗺️ Drops & Meetups</Text>
+            <Text style={styles.tutorialTitle}>🗺️ Drops, Meetups & SOS</Text>
             <Text style={styles.tutorialSubtitle}>
-              Hide ducks and rally the crew — all from the map.
+              Hide ducks, rally the crew, and call for help — all from the map.
             </Text>
             {[
               ['📍', 'Long-press anywhere on the map, then choose Drop a duck, Plan a meetup, or Request help.'],
               ['🦆', 'Drops: pick the duck, how many can claim it, the radius, and how long it lasts. Get inside the radius and tap Claim — unclaimed ducks disappear at expiry.'],
               ['📍', 'Meetups: give it a title and a start time. Everyone within 25 miles gets an alert, and the gold pin shows who\'s going. Tap it to Join.'],
-              ['🔍', 'Use the Rigs / Ducks / Meetups chips at the top to declutter the map.'],
+              ['🆘', 'SOS: stuck or broken down? Tap the red SOS button to alert Jeepers within 10 miles. It stays live for 1 hour. Tap a pulsing red pin to navigate there or say you\'re on the way.'],
+              ['🔍', 'Use the Rigs / Ducks / Meetups / SOS chips at the top to declutter the map.'],
             ].map(([emoji, text], idx) => (
               <View key={idx} style={styles.tutorialStep}>
                 <Text style={styles.tutorialStepEmoji}>{emoji}</Text>
