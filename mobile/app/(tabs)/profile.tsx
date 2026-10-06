@@ -155,6 +155,10 @@ export default function MyRigScreen() {
   // 2. Save the user's profile to the database when they click "Save"[cite: 9]
   const handleEditToggle = async () => {
     if (isEditing && userId) {
+      if (/(.)\1{5,}/.test(mods)) {
+        showAlert("Save Failed", "Mods can't repeat the same character more than 5 times in a row.");
+        return;
+      }
       setIsSaving(true);
       try {
         const response = await fetch(`${API_URL}/users/${userId}/profile`, {
