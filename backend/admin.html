@@ -70,6 +70,11 @@
       </label>
       <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="broadcast()">Send broadcast</button>
     </div>
+    <div id="tool-audit" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:560px; display:none;">
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">📋 Admin audit log</div>
+      <div id="auditlist" style="max-height:420px; overflow-y:auto;"></div>
+      <button style="padding:8px 16px; font-size:13px; width:100%; margin-top:8px;" onclick="loadAuditLog()">Refresh</button>
+    </div>
     <div id="tool-lookup" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:480px; display:none;">
       <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">🔍 Find a user</div>
       <div style="display:flex; gap:8px;">
@@ -245,6 +250,7 @@ function showLogin(msg) {
 
 const TOOLS = [
   ["tool-broadcast", "📢 Broadcast"],
+  ["tool-audit", "📋 Audit log"],
   ["tool-lookup", "🔍 Find user"],
   ["tool-mod", "🛒 Moderation"],
   ["tool-drop", "📍 Create drop"],
@@ -274,6 +280,7 @@ function showTool(id) {
   document.getElementById('menulabel').textContent = found ? found[1] : 'Tools';
   document.getElementById('toolmenu').style.display = 'none';
   if (id === 'tool-milestone') loadMilestones();
+  if (id === 'tool-audit') loadAuditLog();
   if (id === 'tool-meetup' && !document.getElementById('m_start').value) meetupDefaults();
 }
 
@@ -466,6 +473,20 @@ async function lookupUser() {
         <button class="ghost" style="flex:1;" onclick="openTable('users')">Back to users table</button>
       </div>`;
   } catch (e) { alert('Lookup failed: ' + e.message); }
+}
+
+async function loadAuditLog() {
+  const el = document.getElementById('auditlist');
+  try {
+    const data = await api('/admin/audit-log?limit=100');
+    el.innerHTML = data.length ? data.map(r => `
+      <div style="border-bottom:1px solid #333; padding:8px 2px; font-size:13px;">
+        <div style="color:var(--gold); font-weight:600;">${esc(r.action.replace(/_/g, ' '))}</div>
+        ${r.detail ? `<div style="color:#ccc;">${esc(r.detail)}</div>` : ''}
+        <div style="color:var(--muted); font-size:12px;">${esc(r.admin_email)}${r.target_type ? ` · ${esc(r.target_type)}${r.target_id ? ' #' + esc(r.target_id) : ''}` : ''} · ${esc((r.created_at || '').replace('T', ' ').slice(0, 19))}</div>
+      </div>`).join('')
+      : '<div style="color:var(--muted);">No admin actions logged yet.</div>';
+  } catch (e) { el.innerHTML = '<div style="color:#f66;">Could not load: ' + esc(e.message) + '</div>'; }
 }
 
 async function reviewListings() {

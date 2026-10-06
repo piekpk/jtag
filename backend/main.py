@@ -17,7 +17,7 @@ from sqlalchemy import create_engine, or_, func
 from sqlalchemy.orm import sessionmaker, Session
 from passlib.context import CryptContext
 from pydantic import BaseModel
-from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, Milestone, PhotoReaction, MarketListing, Notification, Meetup, MeetupRsvp, PlaceSearch, SosRequest, SosResponse
+from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, Milestone, PhotoReaction, MarketListing, Notification, Meetup, MeetupRsvp, PlaceSearch, SosRequest, SosResponse, AdminAuditLog
 from schemas import UserProfileUpdate, UserProfileResponse, UserCreate
 import duck_ai
 import profanity
@@ -2296,6 +2296,7 @@ ADMIN_TABLES = {
     "meetup_rsvps": MeetupRsvp,
     "sos_requests": SosRequest,
     "sos_responses": SosResponse,
+    "admin_audit_log": AdminAuditLog,
 }
 
 # Columns never exposed through the admin API.
@@ -2483,6 +2484,7 @@ def admin_update_row(name: str, row_id: int, payload: dict,
             sets = ", ".join(f"{k} = ?" for k in updates)
             conn.execute(f"UPDATE messages SET {sets} WHERE id = ?", (*updates.values(), row_id))
             conn.commit()
+            _log_admin(db, admin, "edit_row", "messages", row_id, f"fields: {', '.join(updates)}")
             return {"row": dict(conn.execute("SELECT * FROM messages WHERE id = ?", (row_id,)).fetchone())}
         finally:
             conn.close()
@@ -2494,6 +2496,7 @@ def admin_update_row(name: str, row_id: int, payload: dict,
         setattr(row, key, value)
     db.commit()
     db.refresh(row)
+    _log_admin(db, admin, "edit_row", name, row_id, f"fields: {', '.join(updates)}")
     hidden = ADMIN_HIDDEN_COLUMNS.get(name, set())
     return {"row": _row_to_dict(row, hidden)}
 
@@ -2552,6 +2555,7 @@ def admin_delete_row(name: str, row_id: int,
             pass
     db.delete(row)
     db.commit()
+    _log_admin(db, admin, "delete_row", name, row_id)
     return {"deleted": True}
 
 
@@ -2562,6 +2566,7 @@ def admin_generate_lore(duck_type_id: int, force: bool = False,
     """(Re)generate AI lore for one duck. Runs in the background; poll the duck to see it."""
     _duck_type_or_404(db, duck_type_id)
     duck_ai.generate_lore_for_duck(duck_type_id, force=force)
+    _log_admin(db, admin, "generate_lore", "duck_type", duck_type_id)
     return {"started": True}
 
 
@@ -2571,6 +2576,7 @@ def admin_backfill_lore(db: Session = Depends(get_db), admin: User = Depends(req
     ids = [r[0] for r in db.query(DuckType.id).filter(DuckType.lore.is_(None)).all()]
     for duck_id in ids:
         duck_ai.generate_lore_for_duck(duck_id)
+    _log_admin(db, admin, "backfill_lore", None, None, f"{len(ids)} ducks")
     return {"started": True, "ducks": len(ids)}
 
 
@@ -2582,6 +2588,7 @@ def admin_generate_clue(drop_id: int, force: bool = False,
     if not drop:
         raise HTTPException(status_code=404, detail="Drop not found")
     duck_ai.generate_clue_for_drop(drop_id, force=force)
+    _log_admin(db, admin, "generate_clue", "duck_drop", drop_id)
     return {"started": True}
 
 
@@ -2658,6 +2665,7 @@ def admin_create_milestone(payload: MilestoneCreate, db: Session = Depends(get_d
     db.refresh(row)
     d = _db_milestone_dict(row)
     d["id"] = row.id
+    _log_admin(db, admin, "create_milestone", "milestone", row.id, row.name)
     return d
 
 
@@ -2670,6 +2678,7 @@ def admin_delete_milestone(milestone_id: int, db: Session = Depends(get_db),
         raise HTTPException(status_code=404, detail="Milestone not found")
     db.delete(row)
     db.commit()
+    _log_admin(db, admin, "delete_milestone", "milestone", milestone_id, row.name)
     return {"deleted": True}
 
 
@@ -2746,6 +2755,7 @@ def admin_create_duck_type(payload: DuckTypeCreate, db: Session = Depends(get_db
     db.add(dt)
     db.commit()
     db.refresh(dt)
+    _log_admin(db, admin, "create_duck_type", "duck_type", dt.id, dt.name)
     duck_ai.generate_lore_for_duck(dt.id)
     return _duck_type_dict(dt)
 
@@ -2773,6 +2783,8 @@ def admin_grant_duck(payload: DuckGrant, db: Session = Depends(get_db),
     else:
         removed = _remove_duck(db, user.id, payload.duck_type_id, -qty)
     db.commit()
+    _log_admin(db, admin, "grant_ducks" if qty > 0 else "remove_ducks",
+               "user", user.id, f"{user.email}: {dt.name} x{qty}")
     return {"granted": True, "email": user.email,
             "duck_type_id": payload.duck_type_id, "qty": qty, "removed": removed}
 
@@ -2876,6 +2888,20 @@ def admin_user_lookup(email: str, db: Session = Depends(get_db),
     }
 
 
+def _log_admin(db: Session, admin: User, action: str, target_type: str = None,
+               target_id=None, detail: str = None) -> None:
+    """Record an admin-panel action. Best-effort: a logging failure never
+    breaks the action itself."""
+    try:
+        db.add(AdminAuditLog(
+            admin_id=admin.id, action=action, target_type=target_type,
+            target_id=str(target_id) if target_id is not None else None,
+            detail=(detail or "")[:500] or None))
+        db.commit()
+    except Exception:
+        db.rollback()
+
+
 def _set_banned(db: Session, admin: User, user_id: int, banned: bool) -> dict:
     if user_id == admin.id:
         raise HTTPException(status_code=403, detail="You cannot ban your own account")
@@ -2886,6 +2912,8 @@ def _set_banned(db: Session, admin: User, user_id: int, banned: bool) -> dict:
         raise HTTPException(status_code=403, detail="You cannot ban another admin")
     user.is_banned = banned
     db.commit()
+    _log_admin(db, admin, "ban_user" if banned else "unban_user",
+               "user", user.id, user.email)
     return {"banned": banned, "user_id": user.id, "email": user.email}
 
 
@@ -2933,6 +2961,8 @@ def admin_create_drop(payload: AdminDropCreate, background_tasks: BackgroundTask
     db.add(drop)
     db.commit()
     db.refresh(drop)
+    _log_admin(db, admin, "create_drop", "duck_drop", drop.id,
+               f"duck_type {payload.duck_type_id}, {drop.max_claims} claims")
     background_tasks.add_task(duck_ai.generate_clue_for_drop, drop.id)
     return {"id": drop.id, "message": "Drop is live!"}
 
@@ -2983,6 +3013,7 @@ def admin_create_meetup(payload: AdminMeetupCreate,
     db.add(MeetupRsvp(meetup_id=m.id, user_id=admin.id))
     db.commit()
     _fan_out_meetup_alerts(db, m, title, _owner_name(db, admin.id))
+    _log_admin(db, admin, "create_meetup", "meetup", m.id, title)
     return {"id": m.id, "message": "Meetup is live!"}
 
 
@@ -3024,4 +3055,23 @@ def admin_broadcast(payload: BroadcastCreate, db: Session = Depends(get_db),
                          text, {"tab": "chat"})
             pushed += 1
         db.commit()
+    _log_admin(db, admin, "broadcast", None, None,
+               f"{text[:200]}{' (push)' if payload.push else ''}")
     return {"id": msg_id, "message": text, "pushed": pushed}
+
+
+@app.get("/admin/audit-log")
+def admin_audit_log(limit: int = 100, offset: int = 0,
+                    db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """Newest-first admin action trail."""
+    limit = max(1, min(limit, 200))
+    rows = (db.query(AdminAuditLog).order_by(AdminAuditLog.id.desc())
+            .limit(limit).offset(max(offset, 0)).all())
+    admin_ids = {r.admin_id for r in rows}
+    emails = {u.id: u.email for u in db.query(User).filter(User.id.in_(admin_ids)).all()} if admin_ids else {}
+    return [{"id": r.id,
+             "admin_email": emails.get(r.admin_id, f"id {r.admin_id}"),
+             "action": r.action, "target_type": r.target_type,
+             "target_id": r.target_id, "detail": r.detail,
+             "created_at": r.created_at.isoformat() if r.created_at else None}
+            for r in rows]

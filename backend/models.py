@@ -232,3 +232,16 @@ class PlaceSearch(Base):
     category = Column(String(20), nullable=False)  # gas | mechanic | tow | food
     results = Column(JSON, nullable=False, default=list)  # [{name,lat,lng,distance_mi,hours,phone}]
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class AdminAuditLog(Base):
+    """Trail of admin-panel actions: which admin did what, to what, and when."""
+    __tablename__ = "admin_audit_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    admin_id = Column(Integer, index=True, nullable=False)
+    action = Column(String(60), nullable=False)  # ban_user, grant_ducks, ...
+    target_type = Column(String(60), nullable=True)  # user, duck_type, ...
+    target_id = Column(String(60), nullable=True)
+    detail = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
