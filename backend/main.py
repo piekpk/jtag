@@ -1813,9 +1813,13 @@ def cancel_meetup(meetup_id: int, db: Session = Depends(get_db),
         raise HTTPException(status_code=404, detail="Meetup not found")
     if m.created_by != current_user.id and not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Only the host can cancel this meetup")
+    title = m.title
+    cancelled_by_admin = m.created_by != current_user.id
     db.query(MeetupRsvp).filter(MeetupRsvp.meetup_id == meetup_id).delete()
     db.delete(m)
     db.commit()
+    if cancelled_by_admin:
+        _log_admin(db, current_user, "cancel_meetup", "meetup", meetup_id, title)
     return {"message": "Meetup cancelled", "meetup_id": meetup_id}
 
 
@@ -3075,3 +3079,90 @@ def admin_audit_log(limit: int = 100, offset: int = 0,
              "target_id": r.target_id, "detail": r.detail,
              "created_at": r.created_at.isoformat() if r.created_at else None}
             for r in rows]
+
+
+@app.get("/admin/drops/active")
+def admin_active_drops(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    now = datetime.utcnow()
+    drops = (db.query(DuckDrop).filter(DuckDrop.expires_at > now,
+                                       DuckDrop.claims_count < DuckDrop.max_claims)
+             .order_by(DuckDrop.expires_at.asc()).all())
+    creator_ids = {d.created_by for d in drops if d.created_by}
+    emails = {u.id: u.email for u in db.query(User).filter(User.id.in_(creator_ids)).all()} if creator_ids else {}
+    duck_ids = {d.duck_type_id for d in drops}
+    names = {d.id: d.name for d in db.query(DuckType).filter(DuckType.id.in_(duck_ids)).all()} if duck_ids else {}
+    return [{"id": d.id, "label": d.label, "duck": names.get(d.duck_type_id, f"#{d.duck_type_id}"),
+             "claims": f"{d.claims_count}/{d.max_claims}",
+             "expires_at": d.expires_at.isoformat() if d.expires_at else None,
+             "creator": emails.get(d.created_by, f"id {d.created_by}")} for d in drops]
+
+
+@app.post("/admin/duck-drops/{drop_id}/cancel")
+def admin_cancel_drop(drop_id: int, db: Session = Depends(get_db),
+                      admin: User = Depends(require_admin)):
+    """Expire a drop now and refund unclaimed ducks to the creator."""
+    d = db.query(DuckDrop).filter(DuckDrop.id == drop_id).first()
+    if not d:
+        raise HTTPException(status_code=404, detail="Drop not found")
+    now = datetime.utcnow()
+    if d.expires_at <= now or d.claims_count >= d.max_claims:
+        raise HTTPException(status_code=400, detail="Drop is already over")
+    unclaimed = d.max_claims - d.claims_count
+    if d.created_by and unclaimed > 0:
+        _grant_duck(db, d.created_by, d.duck_type_id, unclaimed)
+    d.expires_at = now
+    db.commit()
+    _log_admin(db, admin, "cancel_drop", "duck_drop", d.id,
+               f"refunded {unclaimed} unclaimed" if d.created_by else "no creator")
+    return {"cancelled": True, "refunded": unclaimed if d.created_by else 0}
+
+
+@app.get("/admin/meetups/upcoming")
+def admin_upcoming_meetups(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    now = datetime.utcnow()
+    rows = (db.query(Meetup).filter(Meetup.end_time > now)
+            .order_by(Meetup.start_time.asc()).all())
+    host_ids = {m.created_by for m in rows if m.created_by}
+    emails = {u.id: u.email for u in db.query(User).filter(User.id.in_(host_ids)).all()} if host_ids else {}
+    out = []
+    for m in rows:
+        rsvps = db.query(MeetupRsvp).filter(MeetupRsvp.meetup_id == m.id).count()
+        out.append({"id": m.id, "title": m.title,
+                    "start": m.start_time.isoformat() if m.start_time else None,
+                    "rsvps": rsvps,
+                    "host": emails.get(m.created_by, f"id {m.created_by}")})
+    return out
+
+
+@app.get("/admin/trades/pending")
+def admin_pending_trades(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    rows = (db.query(Trade).filter(Trade.status == "pending")
+            .order_by(Trade.created_at.desc()).all())
+    if not rows:
+        return []
+    user_ids = {t.proposer_id for t in rows} | {t.recipient_id for t in rows}
+    emails = {u.id: u.email for u in db.query(User).filter(User.id.in_(user_ids)).all()}
+    duck_ids = {t.offered_duck_type_id for t in rows} | {t.requested_duck_type_id for t in rows}
+    names = {d.id: d.name for d in db.query(DuckType).filter(DuckType.id.in_(duck_ids)).all()}
+    return [{"id": t.id,
+             "proposer": emails.get(t.proposer_id, f"id {t.proposer_id}"),
+             "recipient": emails.get(t.recipient_id, f"id {t.recipient_id}"),
+             "offer": f"{names.get(t.offered_duck_type_id, '?')} x{t.offered_qty}",
+             "request": f"{names.get(t.requested_duck_type_id, '?')} x{t.requested_qty}",
+             "created_at": t.created_at.isoformat() if t.created_at else None}
+            for t in rows]
+
+
+@app.post("/admin/trades/{trade_id}/cancel")
+def admin_cancel_trade(trade_id: int, db: Session = Depends(get_db),
+                       admin: User = Depends(require_admin)):
+    t = db.query(Trade).filter(Trade.id == trade_id).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Trade not found")
+    if t.status != "pending":
+        raise HTTPException(status_code=400, detail=f"Trade is {t.status}")
+    t.status = "cancelled"
+    t.decided_at = datetime.utcnow()
+    db.commit()
+    _log_admin(db, admin, "cancel_trade", "trade", t.id)
+    return {"cancelled": True}

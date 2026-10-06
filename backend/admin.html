@@ -75,6 +75,16 @@
       <div id="auditlist" style="max-height:420px; overflow-y:auto;"></div>
       <button style="padding:8px 16px; font-size:13px; width:100%; margin-top:8px;" onclick="loadAuditLog()">Refresh</button>
     </div>
+    <div id="tool-cancel" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:560px; display:none;">
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">🚫 Cancel tools</div>
+      <div style="color:var(--gold); font-size:12px; font-weight:600; margin:6px 0;">Active drops <span style="color:var(--muted); font-weight:400;">(unclaimed ducks refunded)</span></div>
+      <div id="cancel_drops" style="max-height:170px; overflow-y:auto; margin-bottom:10px;"></div>
+      <div style="color:var(--gold); font-size:12px; font-weight:600; margin:6px 0;">Upcoming meetups</div>
+      <div id="cancel_meetups" style="max-height:170px; overflow-y:auto; margin-bottom:10px;"></div>
+      <div style="color:var(--gold); font-size:12px; font-weight:600; margin:6px 0;">Pending trades</div>
+      <div id="cancel_trades" style="max-height:170px; overflow-y:auto; margin-bottom:10px;"></div>
+      <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="loadCancelTools()">Refresh</button>
+    </div>
     <div id="tool-lookup" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:480px; display:none;">
       <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">🔍 Find a user</div>
       <div style="display:flex; gap:8px;">
@@ -251,6 +261,7 @@ function showLogin(msg) {
 const TOOLS = [
   ["tool-broadcast", "📢 Broadcast"],
   ["tool-audit", "📋 Audit log"],
+  ["tool-cancel", "🚫 Cancel tools"],
   ["tool-lookup", "🔍 Find user"],
   ["tool-mod", "🛒 Moderation"],
   ["tool-drop", "📍 Create drop"],
@@ -281,6 +292,7 @@ function showTool(id) {
   document.getElementById('toolmenu').style.display = 'none';
   if (id === 'tool-milestone') loadMilestones();
   if (id === 'tool-audit') loadAuditLog();
+  if (id === 'tool-cancel') loadCancelTools();
   if (id === 'tool-meetup' && !document.getElementById('m_start').value) meetupDefaults();
 }
 
@@ -487,6 +499,44 @@ async function loadAuditLog() {
       </div>`).join('')
       : '<div style="color:var(--muted);">No admin actions logged yet.</div>';
   } catch (e) { el.innerHTML = '<div style="color:#f66;">Could not load: ' + esc(e.message) + '</div>'; }
+}
+
+async function loadCancelTools() {
+  try {
+    const [drops, meetups, trades] = await Promise.all([
+      api('/admin/drops/active'), api('/admin/meetups/upcoming'), api('/admin/trades/pending')]);
+    const row = (label, sub, btn) => `
+      <div style="border-bottom:1px solid #333; padding:6px 2px; font-size:13px; display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <div><span style="color:#fff;">${label}</span> <span style="color:var(--muted); font-size:12px;">${sub}</span></div>${btn}</div>`;
+    const cancelBtn = (fn, id) => `<button class="danger" style="padding:4px 10px; font-size:12px; margin:0; flex-shrink:0;" onclick="${fn}(${id})">Cancel</button>`;
+    document.getElementById('cancel_drops').innerHTML = drops.length ? drops.map(d =>
+      row(esc(d.label || d.duck), `· ${esc(d.claims)} claimed · by ${esc(d.creator)}`, cancelBtn('cancelDrop', d.id))).join('')
+      : '<div style="color:var(--muted); font-size:13px;">None.</div>';
+    document.getElementById('cancel_meetups').innerHTML = meetups.length ? meetups.map(m =>
+      row(esc(m.title), `· ${m.rsvps} RSVPs · host ${esc(m.host)} · ${esc((m.start || '').replace('T', ' ').slice(0, 16))}`, cancelBtn('cancelMeetup', m.id))).join('')
+      : '<div style="color:var(--muted); font-size:13px;">None.</div>';
+    document.getElementById('cancel_trades').innerHTML = trades.length ? trades.map(t =>
+      row(`#${t.id}`, `· ${esc(t.proposer)} → ${esc(t.recipient)} · gives ${esc(t.offer)} · wants ${esc(t.request)}`, cancelBtn('cancelTrade', t.id))).join('')
+      : '<div style="color:var(--muted); font-size:13px;">None.</div>';
+  } catch (e) { alert('Could not load cancel tools: ' + e.message); }
+}
+
+async function cancelDrop(id) {
+  if (!confirm('Cancel drop #' + id + '? Unclaimed ducks go back to the creator.')) return;
+  try { const r = await api('/admin/duck-drops/' + id + '/cancel', { method: 'POST' }); loadCancelTools(); }
+  catch (e) { alert('Could not cancel: ' + e.message); }
+}
+
+async function cancelMeetup(id) {
+  if (!confirm('Cancel meetup #' + id + '? This deletes it for everyone.')) return;
+  try { await api('/meetups/' + id, { method: 'DELETE' }); loadCancelTools(); }
+  catch (e) { alert('Could not cancel: ' + e.message); }
+}
+
+async function cancelTrade(id) {
+  if (!confirm('Cancel trade #' + id + '? The offered ducks were never moved, so nothing needs refunding.')) return;
+  try { await api('/admin/trades/' + id + '/cancel', { method: 'POST' }); loadCancelTools(); }
+  catch (e) { alert('Could not cancel: ' + e.message); }
 }
 
 async function reviewListings() {
