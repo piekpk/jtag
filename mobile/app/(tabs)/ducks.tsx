@@ -17,7 +17,7 @@ const POND_HEADERS = [
   require('../assets/pond-headers/pond-mud.webp'),
   require('../assets/pond-headers/pond-gold-ripple.webp'),
 ];
-const POND_HEADER_CYCLE_MS = 7000;
+const POND_HEADER_KEY = 'jtap_pond_header_idx';
 
 export default function DucksScreen() {
   const [section, setSection] = useState('Pond');
@@ -40,17 +40,23 @@ export default function DucksScreen() {
     AsyncStorage.getItem('userId').then(setMyUserId);
   }, []);
 
-  // Cycle the pond header banner while the Pond section is visible.
+  // Load the user's chosen pond header; tapping the header switches it.
   useEffect(() => {
-    if (section !== 'Pond') return;
-    const timer = setInterval(() => {
-      Animated.timing(headerFade, { toValue: 0, duration: 500, useNativeDriver: true }).start(() => {
-        setHeaderIdx((i) => (i + 1) % POND_HEADERS.length);
-        Animated.timing(headerFade, { toValue: 1, duration: 500, useNativeDriver: true }).start();
-      });
-    }, POND_HEADER_CYCLE_MS);
-    return () => clearInterval(timer);
-  }, [section]);
+    AsyncStorage.getItem(POND_HEADER_KEY).then((v) => {
+      const n = parseInt(v, 10);
+      if (!Number.isNaN(n) && n >= 0 && n < POND_HEADERS.length) setHeaderIdx(n);
+    }).catch(() => {});
+  }, []);
+
+  const chooseHeader = (i) => {
+    const next = ((i % POND_HEADERS.length) + POND_HEADERS.length) % POND_HEADERS.length;
+    if (next === headerIdx) return;
+    Animated.timing(headerFade, { toValue: 0, duration: 250, useNativeDriver: true }).start(() => {
+      setHeaderIdx(next);
+      AsyncStorage.setItem(POND_HEADER_KEY, String(next)).catch(() => {});
+      Animated.timing(headerFade, { toValue: 1, duration: 250, useNativeDriver: true }).start();
+    });
+  };
 
   const load = useCallback(async () => {
     setLoadError(null);
@@ -102,13 +108,18 @@ export default function DucksScreen() {
     if (!pond) return null;
     return (
       <View>
-        <View style={styles.pondHeader}>
+        <TouchableOpacity
+          activeOpacity={0.95}
+          onPress={() => chooseHeader(headerIdx + 1)}
+          style={styles.pondHeader}
+        >
           <Animated.Image
             source={POND_HEADERS[headerIdx]}
             style={[styles.pondHeaderImg, { opacity: headerFade }]}
             resizeMode="cover"
           />
           <View style={styles.pondHeaderDim} />
+          <Text style={styles.pondSwitchHint}>tap to switch</Text>
           <View style={styles.pondHeaderTextWrap}>
             <Text style={styles.pondHeaderTitle}>Duck Pond</Text>
             <Text style={styles.pondHeaderSub}>
@@ -120,7 +131,7 @@ export default function DucksScreen() {
               <View key={i} style={[styles.pondDot, i === headerIdx && styles.pondDotActive]} />
             ))}
           </View>
-        </View>
+        </TouchableOpacity>
         <View style={styles.grid}>
           {pond.slots.map((slot) => {
             const d = slot.duck;
@@ -400,6 +411,7 @@ const styles = StyleSheet.create({
   pondDots: { position: 'absolute', right: 12, bottom: 14, flexDirection: 'row' },
   pondDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.4)', marginLeft: 5 },
   pondDotActive: { backgroundColor: '#d4af37' },
+  pondSwitchHint: { position: 'absolute', top: 10, right: 12, fontSize: 10, color: 'rgba(255,255,255,0.65)', fontStyle: 'italic' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   duckCell: {
     width: '31%', aspectRatio: 0.85, backgroundColor: '#1e1e1e', borderRadius: 12,
