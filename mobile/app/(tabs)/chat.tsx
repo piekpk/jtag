@@ -12,12 +12,21 @@ import {
   ActivityIndicator,
   Modal,
   Image,
+  Animated,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { API_URL } from '../config.js';
 import { getAuthHeaders } from '../auth.js';
+
+// Rotating chat header banners (bundled assets).
+const CHAT_HEADERS = [
+  require('../assets/chat-headers/chat-signal.webp'),
+  require('../assets/chat-headers/chat-overlook.webp'),
+  require('../assets/chat-headers/chat-windshield.webp'),
+];
+const CHAT_HEADER_KEY = 'jtap_chat_header_idx';
 
 // Helper function to safely format image URLs
 const getImageUrl = (imagePath: string) => {
@@ -38,6 +47,26 @@ export default function ChatScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [activeMessageId, setActiveMessageId] = useState(null);
+  const [headerIdx, setHeaderIdx] = useState(0);
+  const headerFade = useRef(new Animated.Value(1)).current;
+
+  // Load the user's chosen chat header; tapping the header switches it.
+  useEffect(() => {
+    AsyncStorage.getItem(CHAT_HEADER_KEY).then((v) => {
+      const n = parseInt(v, 10);
+      if (!Number.isNaN(n) && n >= 0 && n < CHAT_HEADERS.length) setHeaderIdx(n);
+    }).catch(() => {});
+  }, []);
+
+  const chooseHeader = (i) => {
+    const next = ((i % CHAT_HEADERS.length) + CHAT_HEADERS.length) % CHAT_HEADERS.length;
+    if (next === headerIdx) return;
+    Animated.timing(headerFade, { toValue: 0, duration: 250, useNativeDriver: true }).start(() => {
+      setHeaderIdx(next);
+      AsyncStorage.setItem(CHAT_HEADER_KEY, String(next)).catch(() => {});
+      Animated.timing(headerFade, { toValue: 1, duration: 250, useNativeDriver: true }).start();
+    });
+  };
 
   // 'global' | 'local' | 'bot'. The bot DM's real channel is `bot:<userId>`.
   const apiChannel = channel === 'bot' ? (userId ? `bot:${userId}` : null) : channel;
@@ -247,9 +276,28 @@ export default function ChatScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Trail Chat</Text>
-        
+      <TouchableOpacity
+        activeOpacity={0.95}
+        onPress={() => chooseHeader(headerIdx + 1)}
+        style={styles.chatHeader}
+      >
+        <Animated.Image
+          source={CHAT_HEADERS[headerIdx]}
+          style={[styles.chatHeaderImg, { opacity: headerFade }]}
+          resizeMode="cover"
+        />
+        <View style={styles.chatHeaderDim} />
+        <Text style={styles.chatSwitchHint}>tap to switch</Text>
+        <View style={styles.chatHeaderTextWrap}>
+          <Text style={styles.chatHeaderTitle}>Trail Chat</Text>
+        </View>
+        <View style={styles.chatDots}>
+          {CHAT_HEADERS.map((_, i) => (
+            <View key={i} style={[styles.chatDot, i === headerIdx && styles.chatDotActive]} />
+          ))}
+        </View>
+      </TouchableOpacity>
+      <View style={styles.tabBar}>
         <View style={styles.tabContainer}>
           <TouchableOpacity 
             style={[styles.tabButton, channel === 'global' && styles.activeTab]}
@@ -388,8 +436,16 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#121212' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#121212' },
-  header: { padding: 20, backgroundColor: '#1a1a1a', borderBottomWidth: 1, borderBottomColor: '#2c2c2e' },
-  headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#fff', marginBottom: 12 },
+  chatHeader: { height: 150, overflow: 'hidden', backgroundColor: '#1e1e1e' },
+  chatHeaderImg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' },
+  chatHeaderDim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)' },
+  chatHeaderTextWrap: { position: 'absolute', left: 20, bottom: 14 },
+  chatHeaderTitle: { fontSize: 22, fontWeight: '900', color: '#fff', letterSpacing: 0.5, textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
+  chatSwitchHint: { position: 'absolute', top: 10, right: 12, fontSize: 10, color: 'rgba(255,255,255,0.65)', fontStyle: 'italic' },
+  chatDots: { position: 'absolute', right: 12, bottom: 16, flexDirection: 'row' },
+  chatDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.4)', marginLeft: 5 },
+  chatDotActive: { backgroundColor: '#d4af37' },
+  tabBar: { paddingHorizontal: 20, paddingVertical: 12, backgroundColor: '#1a1a1a', borderBottomWidth: 1, borderBottomColor: '#2c2c2e' },
   tabContainer: { flexDirection: 'row', backgroundColor: '#2c2c2e', borderRadius: 8, padding: 4 },
   tabButton: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 6 },
   activeTab: { backgroundColor: '#d4af37' },
