@@ -319,6 +319,11 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
       </View>
+      {isBotDm && (
+        <View style={styles.botBanner}>
+          <Text style={styles.botBannerText}>🤖 You're chatting with JtapBot, your AI helper</Text>
+        </View>
+      )}
 
       {isLoading ? (
         <View style={styles.centered}>
@@ -327,7 +332,7 @@ export default function ChatScreen() {
       ) : (
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.keyboardContainer}
+          style={[styles.keyboardContainer, isBotDm && styles.botBg]}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
         >
           <FlatList
@@ -446,6 +451,9 @@ const styles = StyleSheet.create({
   chatDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.4)', marginLeft: 5 },
   chatDotActive: { backgroundColor: '#d4af37' },
   tabBar: { paddingHorizontal: 20, paddingVertical: 12, backgroundColor: '#1a1a1a', borderBottomWidth: 1, borderBottomColor: '#2c2c2e' },
+  botBanner: { backgroundColor: 'rgba(212,175,55,0.10)', borderBottomWidth: 1, borderBottomColor: 'rgba(212,175,55,0.35)', paddingVertical: 8, paddingHorizontal: 20 },
+  botBannerText: { color: '#d4af37', fontSize: 13, fontWeight: '600' },
+  botBg: { backgroundColor: '#161207' },
   tabContainer: { flexDirection: 'row', backgroundColor: '#2c2c2e', borderRadius: 8, padding: 4 },
   tabButton: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 6 },
   activeTab: { backgroundColor: '#d4af37' },
