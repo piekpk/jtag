@@ -2793,6 +2793,35 @@ def admin_grant_duck(payload: DuckGrant, db: Session = Depends(get_db),
             "duck_type_id": payload.duck_type_id, "qty": qty, "removed": removed}
 
 
+class BulkGrantCreate(BaseModel):
+    duck_type_id: int
+    qty: int = 1
+
+
+@app.post("/admin/ducks/grant-all")
+def admin_grant_all(payload: BulkGrantCreate, db: Session = Depends(get_db),
+                    admin: User = Depends(require_admin)):
+    """Grant a duck to every non-banned, non-bot user. For events and apologies."""
+    dt = _duck_type_or_404(db, payload.duck_type_id)
+    qty = payload.qty or 0
+    if qty < 1 or qty > 100:
+        raise HTTPException(status_code=400, detail="Qty must be between 1 and 100")
+    users = db.query(User).filter(User.is_banned.is_(False),
+                                  User.email != jtapbot.BOT_EMAIL).all()
+    n = 0
+    for u in users:
+        _grant_duck(db, u.id, dt.id, qty)
+        _notify_user(db, u.id, "ducked",
+                     "🦆 You've been ducked!",
+                     f"An admin gifted you {dt.emoji or '🦆'} {dt.name}" + (f" ×{qty}" if qty > 1 else ""),
+                     {"giver_id": admin.id, "duck_type_id": dt.id})
+        n += 1
+    db.commit()
+    _log_admin(db, admin, "grant_all_ducks", "duck_type", dt.id,
+               f"{dt.name} x{qty} to {n} users")
+    return {"granted": True, "users": n, "duck_type_id": dt.id, "qty": qty}
+
+
 @app.get("/admin/duck-types/options")
 def admin_duck_type_options(db: Session = Depends(get_db),
                             admin: User = Depends(require_admin)):

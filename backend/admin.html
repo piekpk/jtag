@@ -139,6 +139,7 @@
         <input id="g_qty" type="number" value="1" min="-100" max="100" style="width:70px; min-width:0; margin-bottom:8px;" title="Negative removes ducks">
       </div>
       <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="grantDuck()">Give / take ducks</button>
+      <button style="padding:8px 16px; font-size:13px; width:100%; margin-top:8px;" onclick="grantAllDucks()">🎁 Grant to ALL users</button>
       <button style="padding:8px 16px; font-size:13px; width:100%; margin-top:8px;" onclick="backfillLore()">✨ Backfill duck lore</button>
     </div>
     <div id="tool-create" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:480px; display:none;">
@@ -699,6 +700,20 @@ async function grantDuck() {
     alert(qty < 0 ? `Removed ${data.removed}x duck from ${data.email}.` : `Gave ${data.qty}x duck to ${data.email}.`);
     document.getElementById('g_email').value = '';
   } catch (e) { alert('Grant failed: ' + e.message); }
+}
+
+async function grantAllDucks() {
+  const duckSel = document.getElementById('g_duck');
+  const duck_type_id = parseInt(duckSel.value, 10);
+  const duckName = duckSel.options[duckSel.selectedIndex] ? duckSel.options[duckSel.selectedIndex].text : ('#' + duckSel.value);
+  const qty = Math.max(1, Math.min(100, parseInt(document.getElementById('g_qty').value, 10) || 1));
+  if (!duck_type_id) { alert('Pick a duck.'); return; }
+  if (!confirm(`Grant ${duckName} ×${qty} to EVERY user (banned and JtapBot excluded)? Each user gets a duck notification.`)) return;
+  try {
+    const data = await api('/admin/ducks/grant-all', { method: 'POST',
+      body: JSON.stringify({ duck_type_id, qty }) });
+    alert(`Granted to ${data.users} users.`);
+  } catch (e) { alert('Bulk grant failed: ' + e.message); }
 }
 
 let spriteThemes = {};
