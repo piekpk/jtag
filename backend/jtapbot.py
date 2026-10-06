@@ -38,7 +38,8 @@ BOT_PROFILE = {
     "coverPhoto": BOT_COVER_URL,
 }
 POST_INTERVAL_HOURS = float(os.environ.get("JTBOT_POST_HOURS", "6"))
-REPLY_COOLDOWN_S = 60
+REPLY_COOLDOWN_S = 60  # global @-mentions: anti-spam
+DM_REPLY_COOLDOWN_S = 5  # bot DMs: snappy, but absorbs double-sends
 
 BOT_USER_ID = None
 _SessionLocal = None
@@ -334,7 +335,8 @@ def maybe_reply(user_id, channel, message):
     if channel == "global" and "@jtapbot" not in (message or "").lower():
         return
     now = time.time()
-    if now - _reply_cooldowns.get(channel, 0) < REPLY_COOLDOWN_S:
+    cooldown = DM_REPLY_COOLDOWN_S if in_dm else REPLY_COOLDOWN_S
+    if now - _reply_cooldowns.get(channel, 0) < cooldown:
         return
     _reply_cooldowns[channel] = now
     if in_dm and _dm_message_count(channel) <= 1:
