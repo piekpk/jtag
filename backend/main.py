@@ -1714,6 +1714,8 @@ def create_meetup(payload: MeetupCreate, db: Session = Depends(get_db),
         raise HTTPException(status_code=400, detail="Give your meetup a title")
     if len(title) > 80:
         raise HTTPException(status_code=400, detail="Title is too long (max 80 characters)")
+    if payload.description and len(payload.description) > 500:
+        raise HTTPException(status_code=400, detail="Description is too long (max 500 characters)")
     _require_clean(title, payload.description)
     now = datetime.utcnow()
     start_time = _as_naive_utc(payload.start_time)
@@ -2939,6 +2941,8 @@ def admin_create_meetup(payload: AdminMeetupCreate,
         raise HTTPException(status_code=400, detail="Give the meetup a title")
     if len(title) > 80:
         raise HTTPException(status_code=400, detail="Title is too long (max 80 characters)")
+    if payload.description and len(payload.description) > 500:
+        raise HTTPException(status_code=400, detail="Description is too long (max 500 characters)")
     _require_clean(title, payload.description)
     if not (-90 <= payload.latitude <= 90) or not (-180 <= payload.longitude <= 180):
         raise HTTPException(status_code=400, detail="Invalid coordinates")
