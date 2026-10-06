@@ -1082,7 +1082,7 @@ export default function RadarMapScreen() {
                 placeholderTextColor="#757575"
                 value={sosDetails}
                 onChangeText={setSosDetails}
-                maxLength={500}
+                maxLength={254}
                 multiline
               />
               <Text style={styles.modalHint}>

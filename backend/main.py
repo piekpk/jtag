@@ -1818,7 +1818,9 @@ def create_sos(payload: SosCreate, db: Session = Depends(get_db),
     issue = (payload.issue_type or "").strip().lower()
     if issue not in SOS_ISSUE_TYPES:
         raise HTTPException(status_code=400, detail="Unknown issue type")
-    details = (payload.details or "").strip()[:500] or None
+    details = (payload.details or "").strip() or None
+    if details and len(details) > 254:
+        raise HTTPException(status_code=400, detail="SOS details must be 254 characters or fewer.")
     if details:
         _require_clean(details)
     _expire_sos_requests(db)
