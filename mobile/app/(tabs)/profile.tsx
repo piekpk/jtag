@@ -6,7 +6,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { API_URL } from '../config.js'; //file that contains backend URL[cite: 9]
 import { getAuthHeaders } from '../auth.js';
 import { showAlert } from '../themedAlert.js';
-import { SOCIAL_PLATFORMS, platformById, validSocialLinks, normalizeSocialUrl } from '../socialLinks.js';
+import { SOCIAL_PLATFORMS, platformById, validSocialLinks, normalizeSocialUrl, validateSocialUrl } from '../socialLinks.js';
 import { getDuckCatalog, getInventory, getMyPond } from '../duckApi.js';
 import { listNotifications, markAllNotificationsRead, markNotificationRead } from '../notificationsApi.js';
 import DuckIcon from '../DuckIcon';
@@ -570,6 +570,7 @@ export default function MyRigScreen() {
           <View style={styles.modalBox}>
             {urlPlatform && (() => {
               const p = platformById(urlPlatform);
+              const urlError = validateSocialUrl(urlPlatform, urlValue);
               return (
                 <>
                   <View style={styles.urlIconWrap}><Image source={p.icon} style={styles.urlImg} /></View>
@@ -584,10 +585,13 @@ export default function MyRigScreen() {
                     autoCorrect={false}
                     keyboardType="url"
                   />
-                  <Text style={styles.urlHint}>e.g. {p.placeholder}</Text>
+                  {!!urlValue.trim() && !!urlError && (
+                    <Text style={styles.urlError}>{urlError}</Text>
+                  )}
+                  {!urlError && <Text style={styles.urlHint}>e.g. {p.placeholder}</Text>}
                   <TouchableOpacity
-                    style={[styles.urlAddBtn, !urlValue.trim() && { opacity: 0.4 }]}
-                    disabled={!urlValue.trim()}
+                    style={[styles.urlAddBtn, (!!urlError || !urlValue.trim()) && { opacity: 0.4 }]}
+                    disabled={!!urlError || !urlValue.trim()}
                     onPress={() => {
                       const url = normalizeSocialUrl(urlValue);
                       setSocialLinks([...socialLinks.filter((l) => l.platform !== urlPlatform), { platform: urlPlatform, url }]);
@@ -737,6 +741,7 @@ const styles = StyleSheet.create({
   urlImg: { width: 34, height: 34, resizeMode: 'contain' },
   urlInput: { backgroundColor: '#2c2c2e', borderRadius: 10, padding: 14, color: '#fff', fontSize: 15, marginTop: 12 },
   urlHint: { color: '#888', fontSize: 12, marginTop: 6, textAlign: 'center' },
+  urlError: { color: '#ff6b6b', fontSize: 12, marginTop: 6, textAlign: 'center' },
   urlAddBtn: { backgroundColor: '#d4af37', borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 14 },
   urlAddText: { color: '#121212', fontWeight: '800', fontSize: 15 },
   coverBox: { width: '100%', height: 170, backgroundColor: '#2c2c2e', borderRadius: 8, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },

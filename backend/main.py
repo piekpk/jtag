@@ -381,6 +381,38 @@ def _require_clean_profile_settings(settings: dict) -> None:
     _require_clean(*texts)
 
 
+_SOCIAL_DOMAINS = {
+    "instagram": ("instagram.com",),
+    "facebook": ("facebook.com", "fb.com"),
+    "tiktok": ("tiktok.com",),
+    "youtube": ("youtube.com", "youtu.be"),
+    "x": ("x.com", "twitter.com"),
+    "reddit": ("reddit.com",),
+    "threads": ("threads.com", "threads.net"),
+    "website": None,  # any domain
+}
+
+
+def _valid_social_url(platform: str, url: str) -> bool:
+    """The URL must be well-formed and, except for Website, on the platform's domain."""
+    from urllib.parse import urlparse
+    u = (url or "").strip()
+    if not u or " " in u:
+        return False
+    if not u.lower().startswith(("http://", "https://")):
+        u = "https://" + u
+    try:
+        host = (urlparse(u).hostname or "").lower()
+    except Exception:
+        return False
+    if "." not in host:
+        return False
+    domains = _SOCIAL_DOMAINS.get(platform)
+    if domains is None:
+        return True
+    return any(host == d or host.endswith("." + d) for d in domains)
+
+
 @app.patch("/users/{user_id}/profile", response_model=UserProfileResponse)
 def update_profile(user_id: int, profile_data: UserProfileUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     require_self(user_id, current_user)
@@ -389,6 +421,11 @@ def update_profile(user_id: int, profile_data: UserProfileUpdate, db: Session = 
         raise HTTPException(status_code=404, detail="User not found")
     if profile_data.settings is not None:
         _require_clean_profile_settings(profile_data.settings)
+        links = profile_data.settings.get("socialLinks") if isinstance(profile_data.settings, dict) else None
+        if isinstance(links, list):
+            for l in links:
+                if isinstance(l, dict) and not _valid_social_url(l.get("platform"), l.get("url")):
+                    raise HTTPException(status_code=400, detail="One of your social links isn't a valid URL for its platform.")
         name = profile_data.settings.get("ownerName") if isinstance(profile_data.settings, dict) else None
         if isinstance(name, str) and len(name) > 30:
             raise HTTPException(status_code=400, detail="Name must be 30 characters or fewer.")

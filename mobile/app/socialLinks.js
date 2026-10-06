@@ -29,10 +29,10 @@ export function platformById(id) {
   return SOCIAL_PLATFORMS.find((p) => p.id === id) || null;
 }
 
-// Keep only links for known platforms with a non-empty URL.
+// Keep only links for known platforms with a valid, platform-appropriate URL.
 export function validSocialLinks(links) {
   if (!Array.isArray(links)) return [];
-  return links.filter((l) => l && platformById(l.platform) && (l.url || '').trim());
+  return links.filter((l) => l && platformById(l.platform) && !validateSocialUrl(l.platform, l.url));
 }
 
 // Ensure the URL opens correctly (adds https:// when the scheme is missing).
@@ -41,4 +41,36 @@ export function normalizeSocialUrl(url) {
   if (!u) return '';
   if (/^https?:\/\//i.test(u)) return u;
   return 'https://' + u;
+}
+
+// Expected domains per platform (Website accepts any domain).
+const PLATFORM_DOMAINS = {
+  instagram: ['instagram.com'],
+  facebook: ['facebook.com', 'fb.com'],
+  tiktok: ['tiktok.com'],
+  youtube: ['youtube.com', 'youtu.be'],
+  x: ['x.com', 'twitter.com'],
+  reddit: ['reddit.com'],
+  threads: ['threads.com', 'threads.net'],
+  website: null,
+};
+
+// Returns an error message when the URL isn't appropriate, or null when valid.
+export function validateSocialUrl(platformId, rawUrl) {
+  const u = (rawUrl || '').trim();
+  if (!u) return 'Enter a link.';
+  if (/\s/.test(u)) return "Links can't contain spaces.";
+  let host;
+  try {
+    host = new URL(normalizeSocialUrl(u)).hostname.toLowerCase();
+  } catch (_) {
+    return "That doesn't look like a valid link.";
+  }
+  if (!host.includes('.')) return "That doesn't look like a valid link.";
+  const domains = PLATFORM_DOMAINS[platformId];
+  if (domains && !domains.some((d) => host === d || host.endsWith('.' + d))) {
+    const p = platformById(platformId);
+    return `That doesn't look like a ${p ? p.name : 'valid'} link — use a ${domains[0]} URL.`;
+  }
+  return null;
 }
