@@ -114,7 +114,7 @@
       <input id="g_filter" placeholder="Filter ducks (e.g. camo)" style="margin-bottom:8px;" oninput="filterDuckOptions()">
       <div style="display:flex; gap:8px;">
         <select id="g_duck" style="flex:1;"></select>
-        <input id="g_qty" type="number" value="1" min="-100" max="100" style="width:70px; margin-bottom:8px;" title="Negative removes ducks">
+        <input id="g_qty" type="number" value="1" min="-100" max="100" style="width:70px; min-width:0; margin-bottom:8px;" title="Negative removes ducks">
       </div>
       <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="grantDuck()">Give / take ducks</button>
       <button style="padding:8px 16px; font-size:13px; width:100%; margin-top:8px;" onclick="backfillLore()">✨ Backfill duck lore</button>
@@ -129,7 +129,7 @@
           <option value="epic">epic</option>
           <option value="legendary">legendary</option>
         </select>
-        <input id="d_emoji" placeholder="🐤" style="width:70px; margin-bottom:8px;">
+        <input id="d_emoji" placeholder="🐤" style="width:70px; min-width:0; margin-bottom:8px;">
       </div>
       <input id="d_desc" placeholder="Short description (optional)" style="margin-bottom:8px;">
       <input id="d_seasonal" placeholder="Seasonal tag, e.g. halloween (optional)" style="margin-bottom:8px;">
@@ -159,7 +159,7 @@
           <option value="pond_unlocked">Pond ducks unlocked</option>
           <option value="photo_reactions">Photo reactions</option>
         </select>
-        <input id="m_target" type="number" value="5" min="1" style="width:70px; margin-bottom:8px;" title="Target count">
+        <input id="m_target" type="number" value="5" min="1" style="width:70px; min-width:0; margin-bottom:8px;" title="Target count">
       </div>
       <div style="display:flex; gap:8px; margin-bottom:8px;">
         <select id="m_reward_mode" style="flex:1;" onchange="toggleMilestoneReward()">
