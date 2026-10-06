@@ -985,7 +985,7 @@ const styles = StyleSheet.create({
   },
   dropEmoji: { fontSize: 24 },
   weatherBox: {
-    position: 'absolute', top: 12, left: 12, zIndex: 2,
+    position: 'absolute', top: 48, left: 12, zIndex: 2,
     backgroundColor: 'rgba(18,18,18,0.88)', borderRadius: 12, padding: 10,
     borderWidth: 1, borderColor: '#d4af37', minWidth: 108,
   },
@@ -996,7 +996,7 @@ const styles = StyleSheet.create({
   },
   weatherDetail: { color: '#ccc', fontSize: 11, marginTop: 2 },
   helpBtn: {
-    position: 'absolute', top: 12, right: 12, zIndex: 2,
+    position: 'absolute', top: 48, right: 12, zIndex: 2,
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: 'rgba(18,18,18,0.88)',
     borderWidth: 1, borderColor: '#d4af37',
