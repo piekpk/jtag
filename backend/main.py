@@ -1310,11 +1310,16 @@ def give_duck(payload: DuckGiveCreate, db: Session = Depends(get_db), current_us
         raise HTTPException(status_code=404, detail="Recipient not found")
     dt = _duck_type_or_404(db, payload.duck_type_id)
     _ensure_starter_ducks(db, current_user.id)
+    note = (payload.note or "").strip() or None
+    if note and len(note) > 140:
+        raise HTTPException(status_code=400, detail="Note too long (140 chars max)")
+    if note:
+        _require_clean(note)
 
     _spend_duck(db, current_user.id, payload.duck_type_id, 1)
     _grant_duck(db, recipient.id, payload.duck_type_id, 1)
     db.add(DuckGive(giver_id=current_user.id, recipient_id=recipient.id,
-                    duck_type_id=payload.duck_type_id, note=payload.note))
+                    duck_type_id=payload.duck_type_id, note=note))
     _bump_legacy_duck_count(db, recipient)
     _notify_user(db, recipient.id, "ducked",
                  "🦆 You've been ducked!",
