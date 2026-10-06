@@ -71,6 +71,9 @@ export default function ChatScreen() {
   // 'global' | 'local' | 'bot'. The bot DM's real channel is `bot:<userId>`.
   const apiChannel = channel === 'bot' ? (userId ? `bot:${userId}` : null) : channel;
   const isBotDm = channel === 'bot';
+  const localChatters = channel === 'local'
+    ? new Set(messages.filter(m => m.user_id?.toString() !== userId?.toString()).map(m => m.user_id)).size
+    : 0;
   
   // Modal state for previewing profiles
   const [selectedProfile, setSelectedProfile] = useState(null);
@@ -224,7 +227,14 @@ export default function ChatScreen() {
       <View style={[styles.messageBubble, isMe ? styles.myMessage : styles.theirMessage]}>
         {!isMe && (
           <TouchableOpacity onPress={() => handleOpenProfilePreview(item.user_id)}>
-            <Text style={styles.senderName}>{item.owner_name || 'Fellow Jeeper'} 🔍</Text>
+            <View style={styles.senderRow}>
+              <Text style={styles.senderName}>{item.owner_name || 'Fellow Jeeper'} 🔍</Text>
+              {channel === 'local' && item.distance_mi != null && (
+                <View style={styles.distPill}>
+                  <Text style={styles.distPillText}>📍 {item.distance_mi} mi</Text>
+                </View>
+              )}
+            </View>
           </TouchableOpacity>
         )}
         <Text style={[styles.messageText, isMe ? styles.myMessageText : styles.theirMessageText]}>
@@ -322,6 +332,15 @@ export default function ChatScreen() {
       {isBotDm && (
         <View style={styles.botBanner}>
           <Text style={styles.botBannerText}>🤖 You're chatting with JtapBot, your AI helper</Text>
+        </View>
+      )}
+      {channel === 'local' && (
+        <View style={styles.localBanner}>
+          <Text style={styles.localBannerText}>
+            {localChatters > 0
+              ? `📍 ${localChatters} ${localChatters === 1 ? 'Jeeper' : 'Jeepers'} chatting nearby`
+              : '📍 Local chat — Jeepers within 10 miles of you'}
+          </Text>
         </View>
       )}
 
@@ -454,6 +473,11 @@ const styles = StyleSheet.create({
   botBanner: { backgroundColor: 'rgba(212,175,55,0.10)', borderBottomWidth: 1, borderBottomColor: 'rgba(212,175,55,0.35)', paddingVertical: 8, paddingHorizontal: 20 },
   botBannerText: { color: '#d4af37', fontSize: 13, fontWeight: '600' },
   botBg: { backgroundColor: '#161207' },
+  localBanner: { backgroundColor: 'rgba(212,175,55,0.10)', borderBottomWidth: 1, borderBottomColor: 'rgba(212,175,55,0.35)', paddingVertical: 8, paddingHorizontal: 20 },
+  localBannerText: { color: '#d4af37', fontSize: 13, fontWeight: '600' },
+  senderRow: { flexDirection: 'row', alignItems: 'center' },
+  distPill: { backgroundColor: '#d4af37', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2, marginLeft: 8, marginBottom: 4 },
+  distPillText: { color: '#121212', fontSize: 11, fontWeight: 'bold' },
   tabContainer: { flexDirection: 'row', backgroundColor: '#2c2c2e', borderRadius: 8, padding: 4 },
   tabButton: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 6 },
   activeTab: { backgroundColor: '#d4af37' },

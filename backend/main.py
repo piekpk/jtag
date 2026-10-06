@@ -616,11 +616,13 @@ def get_chat_messages(channel: str = "global", lat: float = None, lng: float = N
     
     messages = []
     for row in rows:
+        msg_distance = None
         if channel == "local" and lat is not None and lng is not None:
             if row["latitude"] is not None and row["longitude"] is not None:
                 distance = haversine(lat, lng, row["latitude"], row["longitude"])
                 if distance > 16093.4:
                     continue
+                msg_distance = distance
             else:
                 continue
 
@@ -644,7 +646,8 @@ def get_chat_messages(channel: str = "global", lat: float = None, lng: float = N
             "message": row["message"],
             "timestamp": row["timestamp"],
             "reactions": reactions_dict,
-            "channel": row["channel"]
+            "channel": row["channel"],
+            **({"distance_mi": round(msg_distance / 1609.34, 1)} if msg_distance is not None else {}),
         })
         
     return messages
