@@ -427,6 +427,7 @@ export default function ChatScreen() {
               placeholderTextColor="#888"
               value={inputText}
               onChangeText={setInputText}
+              maxLength={254}
             />
             <TouchableOpacity
               style={[styles.sendButton, (!inputText.trim() || isSending) && styles.sendButtonDisabled]}
