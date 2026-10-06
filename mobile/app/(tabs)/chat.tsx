@@ -393,6 +393,14 @@ export default function ChatScreen() {
               pointerEvents="none"
             />
           )}
+          {channel === 'local' && (
+            <Image
+              source={require('../../assets/chat-headers/local-radar.webp')}
+              style={styles.worldWatermark}
+              resizeMode="contain"
+              pointerEvents="none"
+            />
+          )}
           <FlatList
             ref={flatListRef}
             data={messages}
