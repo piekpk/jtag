@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Modal } from 'react-native';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, Modal, Animated } from 'react-native';
 import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { showAlert } from '../themedAlert.js';
@@ -10,6 +10,14 @@ import {
 import DuckIcon from '../DuckIcon';
 
 const SECTIONS = ['Pond', 'Trades', 'Ranks', 'Feed', 'Rewards'];
+
+// Rotating pond header banners (bundled assets).
+const POND_HEADERS = [
+  require('../assets/pond-headers/pond-dusk.webp'),
+  require('../assets/pond-headers/pond-mud.webp'),
+  require('../assets/pond-headers/pond-gold-ripple.webp'),
+];
+const POND_HEADER_CYCLE_MS = 7000;
 
 export default function DucksScreen() {
   const [section, setSection] = useState('Pond');
@@ -25,10 +33,24 @@ export default function DucksScreen() {
   const [milestones, setMilestones] = useState([]);
   const [loadError, setLoadError] = useState(null);
   const [selectedDuck, setSelectedDuck] = useState(null);
+  const [headerIdx, setHeaderIdx] = useState(0);
+  const headerFade = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     AsyncStorage.getItem('userId').then(setMyUserId);
   }, []);
+
+  // Cycle the pond header banner while the Pond section is visible.
+  useEffect(() => {
+    if (section !== 'Pond') return;
+    const timer = setInterval(() => {
+      Animated.timing(headerFade, { toValue: 0, duration: 500, useNativeDriver: true }).start(() => {
+        setHeaderIdx((i) => (i + 1) % POND_HEADERS.length);
+        Animated.timing(headerFade, { toValue: 1, duration: 500, useNativeDriver: true }).start();
+      });
+    }, POND_HEADER_CYCLE_MS);
+    return () => clearInterval(timer);
+  }, [section]);
 
   const load = useCallback(async () => {
     setLoadError(null);
@@ -80,9 +102,25 @@ export default function DucksScreen() {
     if (!pond) return null;
     return (
       <View>
-        <Text style={styles.sectionHead}>
-          {pond.unlocked} of {pond.total} ducks collected
-        </Text>
+        <View style={styles.pondHeader}>
+          <Animated.Image
+            source={POND_HEADERS[headerIdx]}
+            style={[styles.pondHeaderImg, { opacity: headerFade }]}
+            resizeMode="cover"
+          />
+          <View style={styles.pondHeaderDim} />
+          <View style={styles.pondHeaderTextWrap}>
+            <Text style={styles.pondHeaderTitle}>Duck Pond</Text>
+            <Text style={styles.pondHeaderSub}>
+              {pond.unlocked} of {pond.total} ducks collected
+            </Text>
+          </View>
+          <View style={styles.pondDots}>
+            {POND_HEADERS.map((_, i) => (
+              <View key={i} style={[styles.pondDot, i === headerIdx && styles.pondDotActive]} />
+            ))}
+          </View>
+        </View>
         <View style={styles.grid}>
           {pond.slots.map((slot) => {
             const d = slot.duck;
@@ -353,6 +391,15 @@ const styles = StyleSheet.create({
   segTextActive: { color: '#121212' },
   body: { flex: 1, padding: 15 },
   sectionHead: { color: '#d4af37', fontSize: 16, fontWeight: 'bold', marginBottom: 12 },
+  pondHeader: { height: 170, borderRadius: 14, overflow: 'hidden', marginBottom: 12, backgroundColor: '#1e1e1e' },
+  pondHeaderImg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' },
+  pondHeaderDim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)' },
+  pondHeaderTextWrap: { position: 'absolute', left: 14, bottom: 12 },
+  pondHeaderTitle: { color: '#fff', fontSize: 20, fontWeight: '900', letterSpacing: 0.5, textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
+  pondHeaderSub: { color: '#d4af37', fontSize: 13, fontWeight: '700', marginTop: 2, textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
+  pondDots: { position: 'absolute', right: 12, bottom: 14, flexDirection: 'row' },
+  pondDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.4)', marginLeft: 5 },
+  pondDotActive: { backgroundColor: '#d4af37' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   duckCell: {
     width: '31%', aspectRatio: 0.85, backgroundColor: '#1e1e1e', borderRadius: 12,
