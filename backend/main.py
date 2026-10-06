@@ -1442,8 +1442,12 @@ def duck_leaderboard(metric: str = "given", days: int = 0, lat: float = None, ln
     gives = query.all()
 
     counts = {}
+    bot_user = db.query(User).filter(User.email == jtapbot.BOT_EMAIL).first()
+    bot_id = bot_user.id if bot_user else None
     for g in gives:
         uid = g.giver_id if metric == "given" else g.recipient_id
+        if bot_id is not None and uid == bot_id:
+            continue
         counts[uid] = counts.get(uid, 0) + 1
 
     board = []
