@@ -420,6 +420,8 @@ def update_profile(user_id: int, profile_data: UserProfileUpdate, db: Session = 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if profile_data.settings is not None:
+        if len(json.dumps(profile_data.settings)) > 100 * 1024:
+            raise HTTPException(status_code=400, detail="Profile data is too large.")
         _require_clean_profile_settings(profile_data.settings)
         links = profile_data.settings.get("socialLinks") if isinstance(profile_data.settings, dict) else None
         if isinstance(links, list):
