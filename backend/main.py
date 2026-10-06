@@ -1530,6 +1530,11 @@ def create_drop(payload: DropCreate, background_tasks: BackgroundTasks,
     if active >= MAX_ACTIVE_DROPS_PER_USER:
         raise HTTPException(status_code=400, detail="You already have 3 active drops")
     claims = max(1, min(payload.max_claims, 500))
+    label = (payload.label or "").strip() or None
+    if label and len(label) > 80:
+        raise HTTPException(status_code=400, detail="Drop label too long (max 80 characters)")
+    if label:
+        _require_clean(label)
     # Drops are stocked from the creator's inventory: 1 duck per claim.
     # No minting — a legendary drop costs legendary ducks.
     _ensure_starter_ducks(db, current_user.id)
@@ -1541,7 +1546,7 @@ def create_drop(payload: DropCreate, background_tasks: BackgroundTasks,
         starts_at=now,
         expires_at=now + timedelta(hours=max(0.25, min(payload.duration_hours, 72))),
         max_claims=claims,
-        created_by=current_user.id, label=payload.label)
+        created_by=current_user.id, label=label)
     db.add(drop)
     db.commit()
     db.refresh(drop)
