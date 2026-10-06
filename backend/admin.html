@@ -57,7 +57,7 @@
       <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">📢 Broadcast to global chat</div>
       <input id="b_msg" placeholder="Announcement message…" maxlength="500" style="margin-bottom:8px;">
       <label style="display:flex; align-items:center; gap:8px; font-size:13px; margin-bottom:8px; cursor:pointer;">
-        <input type="checkbox" id="b_push" style="width:auto;"> Also push to all devices
+        <input type="checkbox" id="b_push" style="width:auto; min-width:0; margin:0;"> Also push to all devices
       </label>
       <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="broadcast()">Send broadcast</button>
     </div>
@@ -163,10 +163,10 @@
       </div>
       <div id="m_pool" style="margin-bottom:8px; color:var(--muted); font-size:12px;">
         Reward rarities:
-        <label><input type="checkbox" class="m_rar" value="common" checked style="width:auto;"> common</label>
-        <label><input type="checkbox" class="m_rar" value="rare" style="width:auto;"> rare</label>
-        <label><input type="checkbox" class="m_rar" value="epic" style="width:auto;"> epic</label>
-        <label><input type="checkbox" class="m_rar" value="legendary" style="width:auto;"> legendary</label>
+        <label><input type="checkbox" class="m_rar" style="width:auto; min-width:0; margin:0;" value="common" checked> common</label>
+        <label><input type="checkbox" class="m_rar" style="width:auto; min-width:0; margin:0;" value="rare"> rare</label>
+        <label><input type="checkbox" class="m_rar" style="width:auto; min-width:0; margin:0;" value="epic"> epic</label>
+        <label><input type="checkbox" class="m_rar" style="width:auto; min-width:0; margin:0;" value="legendary"> legendary</label>
       </div>
       <label style="color:var(--muted); font-size:12px; display:block; margin-bottom:8px;">
         <input type="checkbox" id="m_prefer" style="width:auto;"> Prefer ducks the user doesn't own yet
