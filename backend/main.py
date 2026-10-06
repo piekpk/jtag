@@ -695,7 +695,23 @@ def post_chat_message(chat: ChatMessageCreate, db: Session = Depends(get_db), cu
     user = db.query(User).filter(User.id == chat.user_id).first()
     sender_lat = user.latitude if user else None
     sender_lng = user.longitude if user else None
-    
+
+    # Global chat anti-spam: a user may send at most 3 messages in a row. Only a
+    # real human message resets the streak — JtapBot posts don't count.
+    if channel == "global":
+        bot_user = db.query(User).filter(User.email == jtapbot.BOT_EMAIL).first()
+        bot_id = bot_user.id if bot_user else -1
+        cursor.execute(
+            "SELECT user_id FROM messages WHERE channel = 'global' ORDER BY id DESC LIMIT 10"
+        )
+        recent_human = [r[0] for r in cursor.fetchall() if r[0] != bot_id][:3]
+        if len(recent_human) == 3 and all(uid == current_user.id for uid in recent_human):
+            conn.close()
+            raise HTTPException(
+                status_code=429,
+                detail="You've sent 3 messages in a row — let someone else jump in before you send again."
+            )
+
     cursor.execute(
         "INSERT INTO messages (user_id, message, timestamp, reactions, channel, latitude, longitude) VALUES (?, ?, ?, ?, ?, ?, ?)",
         (chat.user_id, chat.message, datetime.utcnow(), "{}", channel, sender_lat, sender_lng)

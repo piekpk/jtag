@@ -13,6 +13,7 @@ import {
   Modal,
   Image,
   Animated,
+  Alert,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
@@ -177,6 +178,10 @@ export default function ChatScreen() {
 
       if (response.ok) {
         fetchMessages(false);
+      } else {
+        const err = await response.json().catch(() => null);
+        setInputText(messageContent);
+        if (err && err.detail) Alert.alert('Slow down', err.detail);
       }
     } catch (error) {
       console.error('Error sending message:', error);
