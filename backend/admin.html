@@ -238,7 +238,7 @@ const SUMMARY = {
   user_milestones: ['user_id', 'key'], milestones: ['name', 'target'], notifications: ['title', 'type'], photo_reactions: ['photo_owner_id', 'emoji'],
   messages: ['user_id', 'channel', 'message'],
 };
-const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 async function api(path, opts = {}) {
   const token = sessionStorage.getItem('jtap_admin_token');

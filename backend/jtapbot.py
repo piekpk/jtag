@@ -81,11 +81,16 @@ def set_post_interval(hours: float):
 
 
 def post_now():
-    """Post one scheduled message immediately; restarts the interval clock."""
-    global _post_last
+    """Post one scheduled message immediately; restarts the interval clock.
+    Rate-limited to one manual post per 60s."""
+    global _post_last, _manual_post_last
+    now = time.time()
+    if now - _manual_post_last < 60:
+        return None  # cooling down
+    _manual_post_last = now
     ok = post_scheduled()
     if ok:
-        _post_last = time.time()
+        _post_last = now
     return ok
 
 
@@ -106,6 +111,9 @@ _post_last = 0.0
 _thread_started = False
 
 BOT_DM_PREFIX = "bot:"
+
+
+_manual_post_last = 0.0
 
 
 def bot_dm_channel(user_id):

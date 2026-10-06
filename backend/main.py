@@ -3311,7 +3311,10 @@ def admin_jtapbot_interval(payload: JtapBotInterval, db: Session = Depends(get_d
 
 @app.post("/admin/jtapbot/post-now")
 def admin_jtapbot_post_now(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
-    if not jtapbot.post_now():
+    result = jtapbot.post_now()
+    if result is None:
+        raise HTTPException(status_code=429, detail="Wait a minute between manual posts")
+    if not result:
         raise HTTPException(status_code=502, detail="Bot post failed (LLM may be down)")
     _log_admin(db, admin, "jtapbot_post_now")
     return {"posted": True}
