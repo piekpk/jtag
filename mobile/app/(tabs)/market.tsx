@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
-  RefreshControl, Modal, TextInput, Image,
+  RefreshControl, Modal, TextInput, Image, Animated,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -11,6 +11,14 @@ import {
   listMarketplace, createListing, deleteListing, markListingSold, getListing,
   photoUrl, MARKET_CATEGORIES,
 } from '../marketApi.js';
+
+// Rotating marketplace header banners (bundled assets).
+const MARKET_HEADERS = [
+  require('../assets/market-headers/market-parts.webp'),
+  require('../assets/market-headers/market-garage.webp'),
+  require('../assets/market-headers/market-tailgate.webp'),
+];
+const MARKET_HEADER_KEY = 'jtap_market_header_idx';
 
 function timeAgo(iso) {
   if (!iso) return '';
@@ -41,6 +49,26 @@ export default function MarketScreen() {
   const [showCreate, setShowCreate] = useState(false);
   const [zoomPhoto, setZoomPhoto] = useState(false);
   const [loadError, setLoadError] = useState(null);
+  const [headerIdx, setHeaderIdx] = useState(0);
+  const headerFade = useRef(new Animated.Value(1)).current;
+
+  // Load the user's chosen marketplace header; tapping the header switches it.
+  useEffect(() => {
+    AsyncStorage.getItem(MARKET_HEADER_KEY).then((v) => {
+      const n = parseInt(v, 10);
+      if (!Number.isNaN(n) && n >= 0 && n < MARKET_HEADERS.length) setHeaderIdx(n);
+    }).catch(() => {});
+  }, []);
+
+  const chooseHeader = (i) => {
+    const next = ((i % MARKET_HEADERS.length) + MARKET_HEADERS.length) % MARKET_HEADERS.length;
+    if (next === headerIdx) return;
+    Animated.timing(headerFade, { toValue: 0, duration: 250, useNativeDriver: true }).start(() => {
+      setHeaderIdx(next);
+      AsyncStorage.setItem(MARKET_HEADER_KEY, String(next)).catch(() => {});
+      Animated.timing(headerFade, { toValue: 1, duration: 250, useNativeDriver: true }).start();
+    });
+  };
 
   // create-form state
   const [cPhoto, setCPhoto] = useState(null);
@@ -204,9 +232,27 @@ export default function MarketScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Marketplace</Text>
-      </View>
+      <TouchableOpacity
+        activeOpacity={0.95}
+        onPress={() => chooseHeader(headerIdx + 1)}
+        style={styles.marketHeader}
+      >
+        <Animated.Image
+          source={MARKET_HEADERS[headerIdx]}
+          style={[styles.marketHeaderImg, { opacity: headerFade }]}
+          resizeMode="cover"
+        />
+        <View style={styles.marketHeaderDim} />
+        <Text style={styles.marketSwitchHint}>tap to switch</Text>
+        <View style={styles.marketHeaderTextWrap}>
+          <Text style={styles.marketHeaderTitle}>Marketplace</Text>
+        </View>
+        <View style={styles.marketDots}>
+          {MARKET_HEADERS.map((_, i) => (
+            <View key={i} style={[styles.marketDot, i === headerIdx && styles.marketDotActive]} />
+          ))}
+        </View>
+      </TouchableOpacity>
       <View style={styles.searchWrap}>
         <TextInput
           style={styles.search}
@@ -371,8 +417,15 @@ export default function MarketScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#121212' },
-  header: { padding: 25, paddingTop: 50, backgroundColor: '#1a1a1a' },
-  headerTitle: { fontSize: 26, fontWeight: '800', color: '#d4af37', letterSpacing: 0.5 },
+  marketHeader: { height: 150, overflow: 'hidden', backgroundColor: '#1e1e1e' },
+  marketHeaderImg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' },
+  marketHeaderDim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)' },
+  marketHeaderTextWrap: { position: 'absolute', left: 25, bottom: 14 },
+  marketHeaderTitle: { fontSize: 26, fontWeight: '900', color: '#fff', letterSpacing: 0.5, textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
+  marketSwitchHint: { position: 'absolute', top: 10, right: 12, fontSize: 10, color: 'rgba(255,255,255,0.65)', fontStyle: 'italic' },
+  marketDots: { position: 'absolute', right: 12, bottom: 16, flexDirection: 'row' },
+  marketDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.4)', marginLeft: 5 },
+  marketDotActive: { backgroundColor: '#d4af37' },
   searchWrap: { paddingHorizontal: 18, paddingTop: 12, backgroundColor: '#1a1a1a', paddingBottom: 4 },
   search: { backgroundColor: '#2c2c2e', borderRadius: 12, padding: 12, paddingLeft: 16, color: '#fff', fontSize: 15 },
   chipScroll: { backgroundColor: '#1a1a1a', maxHeight: 52 },
