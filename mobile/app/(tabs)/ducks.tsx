@@ -107,34 +107,40 @@ export default function DucksScreen() {
     }
   };
 
+  const renderPondBanner = () => {
+    if (!pond) return null;
+    return (
+      <TouchableOpacity
+        activeOpacity={0.95}
+        onPress={() => chooseHeader(headerIdx + 1)}
+        style={styles.pondHeader}
+      >
+        <Animated.Image
+          source={POND_HEADERS[headerIdx]}
+          style={[styles.pondHeaderImg, { opacity: headerFade }]}
+          resizeMode="cover"
+        />
+        <View style={styles.pondHeaderDim} />
+        <Text style={styles.pondSwitchHint}>tap to switch</Text>
+        <View style={styles.pondHeaderTextWrap}>
+          <Text style={styles.pondHeaderTitle}>Duck Pond</Text>
+          <Text style={styles.pondHeaderSub}>
+            {pond.unlocked} of {pond.total} ducks collected
+          </Text>
+        </View>
+        <View style={styles.pondDots}>
+          {POND_HEADERS.map((_, i) => (
+            <View key={i} style={[styles.pondDot, i === headerIdx && styles.pondDotActive]} />
+          ))}
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
   const renderPond = () => {
     if (!pond) return null;
     return (
       <View>
-        <TouchableOpacity
-          activeOpacity={0.95}
-          onPress={() => chooseHeader(headerIdx + 1)}
-          style={styles.pondHeader}
-        >
-          <Animated.Image
-            source={POND_HEADERS[headerIdx]}
-            style={[styles.pondHeaderImg, { opacity: headerFade }]}
-            resizeMode="cover"
-          />
-          <View style={styles.pondHeaderDim} />
-          <Text style={styles.pondSwitchHint}>tap to switch</Text>
-          <View style={styles.pondHeaderTextWrap}>
-            <Text style={styles.pondHeaderTitle}>Duck Pond</Text>
-            <Text style={styles.pondHeaderSub}>
-              {pond.unlocked} of {pond.total} ducks collected
-            </Text>
-          </View>
-          <View style={styles.pondDots}>
-            {POND_HEADERS.map((_, i) => (
-              <View key={i} style={[styles.pondDot, i === headerIdx && styles.pondDotActive]} />
-            ))}
-          </View>
-        </TouchableOpacity>
         <View style={styles.grid}>
           {pond.slots.map((slot) => {
             const d = slot.duck;
@@ -311,9 +317,11 @@ export default function DucksScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>🦆 Duck Pond</Text>
-      </View>
+      {section === 'Pond' && pond ? renderPondBanner() : (
+        <View style={styles.header}>
+          <Text style={styles.title}>🦆 Duck Pond</Text>
+        </View>
+      )}
       <View style={styles.segRow}>
         {SECTIONS.map((s) => (
           <TouchableOpacity
@@ -405,7 +413,7 @@ const styles = StyleSheet.create({
   segTextActive: { color: '#121212' },
   body: { flex: 1, padding: 15 },
   sectionHead: { color: '#d4af37', fontSize: 16, fontWeight: 'bold', marginBottom: 12 },
-  pondHeader: { height: 170, borderRadius: 14, overflow: 'hidden', marginBottom: 12, backgroundColor: '#1e1e1e' },
+  pondHeader: { height: 170, overflow: 'hidden', backgroundColor: '#1e1e1e' },
   pondHeaderImg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' },
   pondHeaderDim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)' },
   pondHeaderTextWrap: { position: 'absolute', left: 14, bottom: 12 },
