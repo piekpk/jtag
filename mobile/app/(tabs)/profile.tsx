@@ -6,7 +6,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { API_URL } from '../config.js'; //file that contains backend URL[cite: 9]
 import { getAuthHeaders } from '../auth.js';
 import { showAlert } from '../themedAlert.js';
-import { SOCIAL_PLATFORMS, platformById, validSocialLinks, normalizeSocialUrl, validateSocialUrl } from '../socialLinks.js';
+import { SOCIAL_PLATFORMS, platformById, validSocialLinks, normalizeSocialUrl, validateSocialUrl, confirmOpenLink } from '../socialLinks.js';
 import { getDuckCatalog, getInventory, getMyPond } from '../duckApi.js';
 import { listNotifications, markAllNotificationsRead, markNotificationRead } from '../notificationsApi.js';
 import DuckIcon from '../DuckIcon';
@@ -372,7 +372,7 @@ export default function MyRigScreen() {
                 <TouchableOpacity
                   key={l.platform}
                   style={styles.socBtn}
-                  onPress={() => Linking.openURL(normalizeSocialUrl(l.url)).catch(() => {})}
+                  onPress={() => confirmOpenLink(l.url, p.name)}
                 >
                   <Image source={p.icon} style={styles.socImg} />
                 </TouchableOpacity>

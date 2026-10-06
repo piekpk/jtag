@@ -1,5 +1,6 @@
 // Shared social-link platform config for profile edit + public profile views.
 // Stored on the user as settings.socialLinks: [{ platform: 'instagram', url: 'https://...' }]
+import { Alert, Linking } from 'react-native';
 
 // Brand icons bundled in mobile/assets/social/ (Simple Icons, brand colors;
 // X / TikTok / Threads in white since their brand color is black-on-dark).
@@ -33,6 +34,19 @@ export function platformById(id) {
 export function validSocialLinks(links) {
   if (!Array.isArray(links)) return [];
   return links.filter((l) => l && platformById(l.platform) && !validateSocialUrl(l.platform, l.url));
+}
+
+// Show the URL in a confirmation dialog before opening an external link.
+export function confirmOpenLink(url, platformName) {
+  const full = normalizeSocialUrl(url);
+  Alert.alert(
+    'Open this link?',
+    `${platformName ? platformName + ':\n' : ''}${full}\n\nIt opens in your browser, outside Jtap.`,
+    [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Open', onPress: () => Linking.openURL(full).catch(() => {}) },
+    ],
+  );
 }
 
 // Ensure the URL opens correctly (adds https:// when the scheme is missing).

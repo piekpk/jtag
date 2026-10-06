@@ -8,7 +8,7 @@ import { listMarketplace, photoUrl } from '../marketApi.js';
 import { showAlert } from '../themedAlert.js';
 import DuckShowcase from '../DuckShowcase';
 import DuckIcon from '../DuckIcon';
-import { platformById, validSocialLinks, normalizeSocialUrl } from '../socialLinks.js';
+import { platformById, validSocialLinks, normalizeSocialUrl, confirmOpenLink } from '../socialLinks.js';
 
 // Helper function to safely format image URLs and bypass hardcoded local IPs
 const getImageUrl = (imagePath: string) => {
@@ -286,7 +286,7 @@ export default function PublicRigScreen() {
                     <TouchableOpacity
                       key={l.platform}
                       style={styles.socBtn}
-                      onPress={() => Linking.openURL(normalizeSocialUrl(l.url)).catch(() => {})}
+                      onPress={() => confirmOpenLink(l.url, platformById(l.platform).name)}
                     >
                       <Image source={platformById(l.platform).icon} style={styles.socImg} />
                     </TouchableOpacity>
@@ -321,7 +321,7 @@ export default function PublicRigScreen() {
                   <TouchableOpacity
                     key={l.platform}
                     style={styles.socBtn}
-                    onPress={() => Linking.openURL(normalizeSocialUrl(l.url)).catch(() => {})}
+                    onPress={() => confirmOpenLink(l.url, platformById(l.platform).name)}
                   >
                     <Image source={platformById(l.platform).icon} style={styles.socImg} />
                   </TouchableOpacity>
