@@ -14,9 +14,9 @@ import {
 
 // Rotating marketplace header banners (bundled assets).
 const MARKET_HEADERS = [
-  require('../assets/market-headers/market-parts.webp'),
-  require('../assets/market-headers/market-garage.webp'),
-  require('../assets/market-headers/market-tailgate.webp'),
+  require('../../assets/market-headers/market-parts.webp'),
+  require('../../assets/market-headers/market-garage.webp'),
+  require('../../assets/market-headers/market-tailgate.webp'),
 ];
 const MARKET_HEADER_KEY = 'jtap_market_header_idx';
 

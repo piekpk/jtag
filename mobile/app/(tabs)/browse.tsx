@@ -8,10 +8,10 @@ import { getAuthHeaders } from '../auth.js';
 
 // Rotating browse header banners (bundled assets).
 const BROWSE_HEADERS = [
-  require('../assets/browse-headers/browse-convoy.webp'),
-  require('../assets/browse-headers/browse-nightrun.webp'),
-  require('../assets/browse-headers/browse-dunes.webp'),
-  require('../assets/browse-headers/browse-campfire.webp'),
+  require('../../assets/browse-headers/browse-convoy.webp'),
+  require('../../assets/browse-headers/browse-nightrun.webp'),
+  require('../../assets/browse-headers/browse-dunes.webp'),
+  require('../../assets/browse-headers/browse-campfire.webp'),
 ];
 const BROWSE_HEADER_KEY = 'jtap_browse_header_idx';
 

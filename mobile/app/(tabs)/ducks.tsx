@@ -13,12 +13,12 @@ const SECTIONS = ['Pond', 'Trades', 'Ranks', 'Feed', 'Rewards'];
 
 // Rotating pond header banners (bundled assets).
 const POND_HEADERS = [
-  require('../assets/pond-headers/pond-dusk.webp'),
-  require('../assets/pond-headers/pond-mud.webp'),
-  require('../assets/pond-headers/pond-gold-ripple.webp'),
-  require('../assets/pond-headers/pond-blossom.webp'),
-  require('../assets/pond-headers/pond-duck-twilight.webp'),
-  require('../assets/pond-headers/pond-fireflies.webp'),
+  require('../../assets/pond-headers/pond-dusk.webp'),
+  require('../../assets/pond-headers/pond-mud.webp'),
+  require('../../assets/pond-headers/pond-gold-ripple.webp'),
+  require('../../assets/pond-headers/pond-blossom.webp'),
+  require('../../assets/pond-headers/pond-duck-twilight.webp'),
+  require('../../assets/pond-headers/pond-fireflies.webp'),
 ];
 const POND_HEADER_KEY = 'jtap_pond_header_idx';
 

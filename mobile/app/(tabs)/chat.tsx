@@ -22,9 +22,9 @@ import { getAuthHeaders } from '../auth.js';
 
 // Rotating chat header banners (bundled assets).
 const CHAT_HEADERS = [
-  require('../assets/chat-headers/chat-signal.webp'),
-  require('../assets/chat-headers/chat-overlook.webp'),
-  require('../assets/chat-headers/chat-windshield.webp'),
+  require('../../assets/chat-headers/chat-signal.webp'),
+  require('../../assets/chat-headers/chat-overlook.webp'),
+  require('../../assets/chat-headers/chat-windshield.webp'),
 ];
 const CHAT_HEADER_KEY = 'jtap_chat_header_idx';
 
@@ -382,7 +382,7 @@ export default function ChatScreen() {
         >
           {channel === 'global' && (
             <Image
-              source={require('../assets/chat-headers/world-dots.webp')}
+              source={require('../../assets/chat-headers/world-dots.webp')}
               style={styles.worldWatermark}
               resizeMode="contain"
               pointerEvents="none"
