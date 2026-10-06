@@ -38,6 +38,10 @@ export default function ChatScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [activeMessageId, setActiveMessageId] = useState(null);
+
+  // 'global' | 'local' | 'bot'. The bot DM's real channel is `bot:<userId>`.
+  const apiChannel = channel === 'bot' ? (userId ? `bot:${userId}` : null) : channel;
+  const isBotDm = channel === 'bot';
   
   // Modal state for previewing profiles
   const [selectedProfile, setSelectedProfile] = useState(null);
@@ -64,9 +68,13 @@ export default function ChatScreen() {
   }, []);
 
   const fetchMessages = async (isInitial = false) => {
+    if (!apiChannel) {
+      if (isInitial) setIsLoading(false);
+      return;
+    }
     try {
-      let url = `${API_URL}/chat?channel=${channel}`;
-      if (channel === 'local') {
+      let url = `${API_URL}/chat?channel=${encodeURIComponent(apiChannel)}`;
+      if (apiChannel === 'local') {
         let { status } = await Location.requestForegroundPermissionsAsync();
         if (status === 'granted') {
           let location = await Location.getCurrentPositionAsync({});
@@ -97,10 +105,10 @@ export default function ChatScreen() {
       fetchMessages(false);
     }, 3000);
     return () => clearInterval(intervalId);
-  }, [channel]);
+  }, [apiChannel]);
 
   const handleSendMessage = async () => {
-    if (!inputText.trim() || !userId) return;
+    if (!inputText.trim() || !userId || !apiChannel) return;
     const messageContent = inputText.trim();
     setInputText('');
     setIsSending(true);
@@ -112,7 +120,7 @@ export default function ChatScreen() {
         body: JSON.stringify({
           user_id: parseInt(userId),
           message: messageContent,
-          channel: channel,
+          channel: apiChannel,
         }),
       });
 
@@ -255,6 +263,12 @@ export default function ChatScreen() {
           >
             <Text style={[styles.tabText, channel === 'local' && styles.activeTabText]}>Local (10 mi)</Text>
           </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.tabButton, channel === 'bot' && styles.activeTab]}
+            onPress={() => setChannel('bot')}
+          >
+            <Text style={[styles.tabText, channel === 'bot' && styles.activeTabText]}>🤖 JtapBot</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -274,15 +288,12 @@ export default function ChatScreen() {
             keyExtractor={(item, index) => item.id?.toString() || index.toString()}
             renderItem={renderMessageItem}
             contentContainerStyle={styles.messageList}
-            // Only auto-scroll when NEW messages arrive. Reacting to a message
-            // re-renders the list (badge row changes) without adding messages,
-            // and must not move the user's scroll position.
-            // Local channel always follows new messages; global only follows
-            // when the user is already near the bottom.
+            // Local channel and bot DM always follow new messages; global only
+            // follows when the user is already near the bottom.
             onContentSizeChange={() => {
               const grew = messages.length > messageCountRef.current;
               messageCountRef.current = messages.length;
-              if (grew && (channel === 'local' || isNearBottomRef.current)) {
+              if (grew && (channel !== 'global' || isNearBottomRef.current)) {
                 flatListRef.current?.scrollToEnd({ animated: true });
               }
             }}
@@ -293,7 +304,7 @@ export default function ChatScreen() {
           <View style={styles.inputContainer}>
             <TextInput
               style={styles.input}
-              placeholder={channel === 'local' ? "Broadcast to local trail (10mi)..." : "Broadcast globally..."}
+              placeholder={isBotDm ? "Ask JtapBot anything..." : channel === 'local' ? "Broadcast to local trail (10mi)..." : "Broadcast globally..."}
               placeholderTextColor="#888"
               value={inputText}
               onChangeText={setInputText}

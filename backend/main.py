@@ -572,6 +572,9 @@ def search_users(q: str, db: Session = Depends(get_db), current_user: User = Dep
 # --- Chat & Reaction Endpoints ---
 @app.get("/chat")
 def get_chat_messages(channel: str = "global", lat: float = None, lng: float = None, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    channel = (channel or "global").strip() or "global"
+    if channel.startswith(jtapbot.BOT_DM_PREFIX) and not jtapbot.is_bot_dm(channel, current_user.id):
+        raise HTTPException(status_code=403, detail="Not your bot chat")
     conn = get_raw_db()
     cursor = conn.cursor()
     
@@ -650,6 +653,9 @@ def get_chat_messages(channel: str = "global", lat: float = None, lng: float = N
 def post_chat_message(chat: ChatMessageCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if chat.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Cannot post as another user")
+    channel = (chat.channel or "global").strip() or "global"
+    if channel.startswith(jtapbot.BOT_DM_PREFIX) and not jtapbot.is_bot_dm(channel, current_user.id):
+        raise HTTPException(status_code=403, detail="Not your bot chat")
     conn = get_raw_db()
     cursor = conn.cursor()
     
@@ -681,15 +687,15 @@ def post_chat_message(chat: ChatMessageCreate, db: Session = Depends(get_db), cu
     
     cursor.execute(
         "INSERT INTO messages (user_id, message, timestamp, reactions, channel, latitude, longitude) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (chat.user_id, chat.message, datetime.utcnow(), "{}", chat.channel, sender_lat, sender_lng)
+        (chat.user_id, chat.message, datetime.utcnow(), "{}", channel, sender_lat, sender_lng)
     )
     conn.commit()
     msg_id = cursor.lastrowid
     conn.close()
 
-    # JtapBot replies when @-mentioned in global chat (fire-and-forget).
+    # JtapBot replies when @-mentioned in global chat, or to anything in a bot DM (fire-and-forget).
     try:
-        jtapbot.maybe_reply(chat.user_id, chat.channel, chat.message)
+        jtapbot.maybe_reply(chat.user_id, channel, chat.message)
     except Exception as e:
         print(f"JtapBot mention hook failed: {e}")
 

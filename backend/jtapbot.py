@@ -42,9 +42,23 @@ REPLY_COOLDOWN_S = 60
 
 BOT_USER_ID = None
 _SessionLocal = None
-_last_reply_at = 0.0
+_reply_cooldowns = {}  # channel -> last reply timestamp
 _post_last = 0.0
 _thread_started = False
+
+BOT_DM_PREFIX = "bot:"
+
+
+def bot_dm_channel(user_id):
+    """Channel name for a user's private chat with JtapBot."""
+    return f"{BOT_DM_PREFIX}{user_id}"
+
+
+def is_bot_dm(channel, user_id=None):
+    """True if `channel` is a JtapBot DM (optionally, this user's)."""
+    if not channel or not channel.startswith(BOT_DM_PREFIX):
+        return False
+    return user_id is None or channel == bot_dm_channel(user_id)
 
 SYSTEM = (
     "You are JtapBot, a friendly and funny bot in the global chat of a Jeep 4x4 "
@@ -106,8 +120,8 @@ def init_bot(SessionLocal):
         db.close()
 
 
-def _say(text):
-    """Post a bot message to global chat. Returns True if posted."""
+def _say(text, channel="global"):
+    """Post a bot message to a chat channel. Returns True if posted."""
     text = (text or "").strip()
     if not text or profanity.find_profanity(text):
         return False
@@ -126,11 +140,25 @@ def _say(text):
         )
         conn.execute(
             "INSERT INTO messages (user_id, message, timestamp, reactions, channel) "
-            "VALUES (?, ?, ?, '{}', 'global')",
-            (BOT_USER_ID, text, datetime.utcnow()),
+            "VALUES (?, ?, ?, '{}', ?)",
+            (BOT_USER_ID, text, datetime.utcnow(), channel),
         )
         conn.commit()
         return True
+    finally:
+        conn.close()
+
+
+def _dm_message_count(channel):
+    """How many messages exist in a bot DM channel (for the first-run greeting)."""
+    conn = sqlite3.connect(_db_path())
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM messages WHERE channel = ?", (channel,)
+        ).fetchone()
+        return row[0] if row else 0
+    except sqlite3.OperationalError:
+        return 0
     finally:
         conn.close()
 
@@ -292,19 +320,30 @@ def _maybe_bot_drop():
 
 
 def maybe_reply(user_id, channel, message):
-    """Fire-and-forget @JtapBot reply for global chat messages."""
-    global _last_reply_at
+    """Fire-and-forget JtapBot reply.
+
+    Global chat: replies when @-mentioned. In a user's bot DM every message
+    is addressed to the bot, so it always replies (per-channel cooldown).
+    """
     if BOT_USER_ID is None or user_id == BOT_USER_ID:
         return
-    if (channel or "global") != "global":
+    channel = (channel or "global").strip() or "global"
+    in_dm = is_bot_dm(channel, user_id)
+    if channel != "global" and not in_dm:
         return
-    if "@jtapbot" not in (message or "").lower():
+    if channel == "global" and "@jtapbot" not in (message or "").lower():
         return
     now = time.time()
-    if now - _last_reply_at < REPLY_COOLDOWN_S:
+    if now - _reply_cooldowns.get(channel, 0) < REPLY_COOLDOWN_S:
         return
-    _last_reply_at = now
-    threading.Thread(target=_reply_worker, args=(user_id, message), daemon=True).start()
+    _reply_cooldowns[channel] = now
+    if in_dm and _dm_message_count(channel) <= 1:
+        _say(
+            "🦆 Hey! I'm JtapBot. I can grant you a daily duck, find nearby "
+            "⛽ gas / 🍔 food / 🔧 mechanics, or just chat. What's up?",
+            channel,
+        )
+    threading.Thread(target=_reply_worker, args=(user_id, message, channel), daemon=True).start()
 
 
 _DUCK_ASK_WORDS = {"give", "want", "please", "gift", "me", "quack", "need", "send", "drop", "got"}
@@ -385,7 +424,7 @@ def _grant_bot_duck(user_id):
         db.close()
 
 
-def _reply_worker(user_id, message):
+def _reply_worker(user_id, message, channel="global"):
     try:
         # Duck dispensing works even when the LLM is down.
         if _wants_duck(message):
@@ -398,27 +437,35 @@ def _reply_worker(user_id, message):
                 db.close()
             dt, status = _grant_bot_duck(user_id)
             if status == "granted":
-                _say(f"\U0001F986 {name} — a wild {dt['emoji']} {dt['name']} waddled into your pond! Quack!")
+                _say(f"\U0001F986 {name} — a wild {dt['emoji']} {dt['name']} waddled into your pond! Quack!", channel)
             elif status == "cooldown":
                 _say(
                     f"Easy there, {name}! My duck bag refills every 24 hours. "
-                    "Come back tomorrow! \U0001F986"
+                    "Come back tomorrow! \U0001F986",
+                    channel,
                 )
             return
         # Real place data — never let the LLM guess at gas stations or shops.
         category = _wants_places(message)
         if category:
-            _say(_places_reply(user_id, category))
+            _say(_places_reply(user_id, category), channel)
             return
         if not llm.is_available():
+            if channel != "global":
+                _say(
+                    "🦆 Quack — my brain's offline right now, but I can still help: "
+                    "ask me for a duck, or nearby ⛽ gas / 🍔 food / 🔧 mechanics!",
+                    channel,
+                )
             return
+        where = "direct chat" if channel != "global" else "global chat"
         text = llm.generate(
-            f'A user in the Jeep 4x4 app global chat said: "{message}". '
+            f'A user in the Jeep 4x4 app {where} said: "{message}". '
             "Reply to them directly as JtapBot.",
             system=SYSTEM,
             max_tokens=120,
         )
-        _say(text)
+        _say(text, channel)
     except Exception as e:
         print(f"JtapBot reply failed: {e}")
 
