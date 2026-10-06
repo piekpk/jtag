@@ -95,6 +95,7 @@ export default function NotificationToast() {
     if (!n) return;
     if (n.type === 'ducked') router.push('/(tabs)/ducks');
     else if (n.type === 'meetup') router.push('/(tabs)/map');
+    else if (n.type === 'announcement') router.push('/(tabs)/chat');
   };
 
   if (!current) return null;

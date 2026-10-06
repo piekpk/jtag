@@ -2656,12 +2656,17 @@ def admin_create_meetup(payload: AdminMeetupCreate,
 
 class BroadcastCreate(BaseModel):
     message: str
+    push: bool = False
 
 
 @app.post("/admin/broadcast")
 def admin_broadcast(payload: BroadcastCreate, db: Session = Depends(get_db),
                     admin: User = Depends(require_admin)):
-    """Post a message to global chat as the admin."""
+    """Post a message to global chat as the admin.
+
+    When push=True, every non-banned user also gets an announcement
+    notification (in-app + push), e.g. for server maintenance notices.
+    """
     text = (payload.message or "").strip()
     if not text:
         raise HTTPException(status_code=400, detail="Message is required")
@@ -2675,6 +2680,16 @@ def admin_broadcast(payload: BroadcastCreate, db: Session = Depends(get_db),
             "VALUES (?, ?, ?, ?, ?)",
             (admin.id, text, datetime.utcnow(), "{}", "global"))
         conn.commit()
-        return {"id": cur.lastrowid, "message": text}
+        msg_id = cur.lastrowid
     finally:
         conn.close()
+    pushed = 0
+    if payload.push:
+        for u in db.query(User).filter(
+                User.is_banned.is_(False),
+                User.email != jtapbot.BOT_EMAIL).all():
+            _notify_user(db, u.id, "announcement", "\U0001f4e2 Jtap announcement",
+                         text, {"tab": "chat"})
+            pushed += 1
+        db.commit()
+    return {"id": msg_id, "message": text, "pushed": pushed}

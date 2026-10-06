@@ -56,6 +56,9 @@
     <div id="tool-broadcast" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:480px; display:none;">
       <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">📢 Broadcast to global chat</div>
       <input id="b_msg" placeholder="Announcement message…" maxlength="500" style="margin-bottom:8px;">
+      <label style="display:flex; align-items:center; gap:8px; font-size:13px; margin-bottom:8px; cursor:pointer;">
+        <input type="checkbox" id="b_push" style="width:auto;"> Also push to all devices
+      </label>
       <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="broadcast()">Send broadcast</button>
     </div>
     <div id="tool-lookup" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:480px; display:none;">
@@ -406,11 +409,13 @@ async function deleteMilestone(id) {
 async function broadcast() {
   const message = document.getElementById('b_msg').value.trim();
   if (!message) { alert('Type the announcement first.'); return; }
-  if (!confirm(`Post this to global chat?\n\n"${message}"`)) return;
+  const push = document.getElementById('b_push').checked;
+  if (!confirm(`Post this to global chat${push ? ' AND push it to all devices' : ''}?\n\n"${message}"`)) return;
   try {
-    await api('/admin/broadcast', { method: 'POST', body: JSON.stringify({ message }) });
-    alert('Broadcast sent to global chat.');
+    const res = await api('/admin/broadcast', { method: 'POST', body: JSON.stringify({ message, push }) });
+    alert(push ? `Broadcast sent to global chat + pushed to ${res.pushed} user(s).` : 'Broadcast sent to global chat.');
     document.getElementById('b_msg').value = '';
+    document.getElementById('b_push').checked = false;
   } catch (e) { alert('Broadcast failed: ' + e.message); }
 }
 
