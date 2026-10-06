@@ -126,7 +126,7 @@ export default function DucksScreen() {
               {isIncoming ? `${t.proposer_name} offers you` : `You offered ${t.recipient_name}`}
             </Text>
             <Text style={styles.tradeDetail}>
-              {t.offered.qty}× {t.offered.duck.emoji} {t.offered.duck.name} ⇄ {t.requested.qty}× {t.requested.duck.emoji} {t.requested.duck.name}
+              {t.offered.qty}× <DuckIcon duck={t.offered.duck} size={16} /> {t.offered.duck.name} ⇄ {t.requested.qty}× <DuckIcon duck={t.requested.duck} size={16} /> {t.requested.duck.name}
             </Text>
             <View style={styles.tradeBtns}>
               {isIncoming ? (
@@ -163,7 +163,7 @@ export default function DucksScreen() {
             {history.slice(0, 20).map((t) => (
               <View key={t.id} style={[styles.card, { opacity: 0.7 }]}>
                 <Text style={styles.tradeDetail}>
-                  {t.offered.qty}× {t.offered.duck.emoji} ⇄ {t.requested.qty}× {t.requested.duck.emoji} — {t.status}
+                  {t.offered.qty}× <DuckIcon duck={t.offered.duck} size={14} /> ⇄ {t.requested.qty}× <DuckIcon duck={t.requested.duck} size={14} /> — {t.status}
                 </Text>
               </View>
             ))}

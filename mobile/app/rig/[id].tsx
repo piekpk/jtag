@@ -7,6 +7,7 @@ import { getInventory, giveDuck, getUserPond, proposeTrade, rarityColor, celebra
 import { listMarketplace, photoUrl } from '../marketApi.js';
 import { showAlert } from '../themedAlert.js';
 import DuckShowcase from '../DuckShowcase';
+import DuckIcon from '../DuckIcon';
 import { platformById, validSocialLinks, normalizeSocialUrl } from '../socialLinks.js';
 
 // Helper function to safely format image URLs and bypass hardcoded local IPs
@@ -546,7 +547,7 @@ export default function PublicRigScreen() {
                 style={[styles.pickChip, tradeOffer?.duck.id === item.duck.id && styles.pickChipActive]}
                 onPress={() => setTradeOffer(item)}
               >
-                <Text style={styles.pickEmoji}>{item.duck.emoji}</Text>
+                <DuckIcon duck={item.duck} size={40} />
                 <Text style={styles.pickCount}>×{item.count}</Text>
               </TouchableOpacity>
             ))}
@@ -559,7 +560,7 @@ export default function PublicRigScreen() {
                 style={[styles.pickChip, tradeRequest?.duck.id === slot.duck.id && styles.pickChipActive]}
                 onPress={() => setTradeRequest(slot)}
               >
-                <Text style={styles.pickEmoji}>{slot.duck.emoji}</Text>
+                <DuckIcon duck={slot.duck} size={40} />
                 <Text style={styles.pickCount}>×{slot.count}</Text>
               </TouchableOpacity>
             ))}
@@ -574,7 +575,7 @@ export default function PublicRigScreen() {
           >
             <Text style={styles.proposeBtnText}>
               {tradeOffer && tradeRequest
-                ? `Offer ${tradeOffer.duck.emoji} for ${tradeRequest.duck.emoji}`
+                ? `Offer ${tradeOffer.duck.name} for ${tradeRequest.duck.name}`
                 : 'Select both ducks'}
             </Text>
           </TouchableOpacity>
