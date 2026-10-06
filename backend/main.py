@@ -683,6 +683,13 @@ def post_chat_message(chat: ChatMessageCreate, db: Session = Depends(get_db), cu
     channel = (chat.channel or "global").strip() or "global"
     if len(chat.message) > 254:
         raise HTTPException(status_code=400, detail="Messages must be 254 characters or fewer.")
+    if channel == "global":
+        # Content checks (no DB needed).
+        if re.search(r"https?://|www\.", chat.message, re.IGNORECASE):
+            raise HTTPException(status_code=400, detail="Links aren't allowed in global chat.")
+        if re.search(r"(.)\1{5,}", chat.message):
+            raise HTTPException(status_code=400, detail="Messages can't repeat the same character more than 5 times in a row.")
+        _require_clean(chat.message)
     if channel.startswith(jtapbot.BOT_DM_PREFIX) and not jtapbot.is_bot_dm(channel, current_user.id):
         raise HTTPException(status_code=403, detail="Not your bot chat")
     conn = get_raw_db()
@@ -717,6 +724,24 @@ def post_chat_message(chat: ChatMessageCreate, db: Session = Depends(get_db), cu
     # Global chat anti-spam: a user may send at most 3 messages in a row. Only a
     # real human message resets the streak — JtapBot posts don't count.
     if channel == "global":
+        # Slow mode: 30 seconds between messages.
+        cursor.execute(
+            "SELECT COUNT(*) FROM messages WHERE channel = 'global' AND user_id = ? "
+            "AND timestamp > datetime('now', '-30 seconds')",
+            (current_user.id,),
+        )
+        if cursor.fetchone()[0]:
+            conn.close()
+            raise HTTPException(status_code=429, detail="Slow down — wait 30 seconds between messages in global chat.")
+        # No duplicate messages within 5 minutes.
+        cursor.execute(
+            "SELECT COUNT(*) FROM messages WHERE channel = 'global' AND user_id = ? "
+            "AND message = ? AND timestamp > datetime('now', '-5 minutes')",
+            (current_user.id, chat.message),
+        )
+        if cursor.fetchone()[0]:
+            conn.close()
+            raise HTTPException(status_code=400, detail="You already sent that message — say something new.")
         bot_user = db.query(User).filter(User.email == jtapbot.BOT_EMAIL).first()
         bot_id = bot_user.id if bot_user else -1
         cursor.execute(
