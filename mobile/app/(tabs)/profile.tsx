@@ -522,6 +522,7 @@ export default function MyRigScreen() {
             value={mods}
             onChangeText={setMods}
             multiline
+            maxLength={500}
           />
         ) : (
           <Text style={styles.modText}>{mods}</Text>

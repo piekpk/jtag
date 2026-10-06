@@ -403,6 +403,8 @@ def update_profile(user_id: int, profile_data: UserProfileUpdate, db: Session = 
         mods = profile_data.settings.get("mods") if isinstance(profile_data.settings, dict) else None
         if isinstance(mods, str) and re.search(r"(.)\1{5,}", mods):
             raise HTTPException(status_code=400, detail="Mods can't repeat the same character more than 5 times in a row.")
+        if isinstance(mods, str) and len(mods) > 500:
+            raise HTTPException(status_code=400, detail="Mods must be 500 characters or fewer.")
         # Merge, don't replace: the app only sends the fields it edits, and
         # server-managed keys (duckCount, ...) must survive a profile save.
         merged = dict(user.settings or {})
