@@ -2180,7 +2180,7 @@ def create_listing(photo: UploadFile = File(...), title: str = Form(...),
     db.commit()
     db.refresh(listing)
     os.makedirs(os.path.join(UPLOAD_DIR, "marketplace"), exist_ok=True)
-    ext = ((photo.filename or "jpg").split(".")[-1].lower()[:5] or "jpg")
+    ext = re.sub(r"[^a-z0-9]", "", ((photo.filename or "jpg").split(".")[-1].lower()[:5])) or "jpg"
     filename = f"listing_{listing.id}_{uuid4().hex}.{ext}"
     with open(os.path.join(UPLOAD_DIR, "marketplace", filename), "wb+") as f:
         f.write(photo_data)
