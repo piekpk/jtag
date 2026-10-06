@@ -2156,6 +2156,9 @@ def create_listing(photo: UploadFile = File(...), title: str = Form(...),
         raise HTTPException(status_code=400, detail="Price cannot be negative")
     if not photo.content_type or not photo.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Photo must be an image")
+    photo_data = photo.file.read(10 * 1024 * 1024 + 1)
+    if len(photo_data) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Photo must be 10MB or less")
     listing = MarketListing(
         user_id=current_user.id, photo_url="", title=title, price=price,
         description=description, contact_info=contact_info,
@@ -2167,7 +2170,7 @@ def create_listing(photo: UploadFile = File(...), title: str = Form(...),
     ext = ((photo.filename or "jpg").split(".")[-1].lower()[:5] or "jpg")
     filename = f"listing_{listing.id}_{uuid4().hex}.{ext}"
     with open(os.path.join(UPLOAD_DIR, "marketplace", filename), "wb+") as f:
-        shutil.copyfileobj(photo.file, f)
+        f.write(photo_data)
     listing.photo_url = f"/uploads/marketplace/{filename}"
     db.commit()
     db.refresh(listing)
