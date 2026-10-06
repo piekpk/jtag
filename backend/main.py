@@ -637,6 +637,8 @@ def search_users(q: str, db: Session = Depends(get_db), current_user: User = Dep
 @app.get("/chat")
 def get_chat_messages(channel: str = "global", lat: float = None, lng: float = None, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     channel = (channel or "global").strip() or "global"
+    if channel not in ("global", "local") and not channel.startswith(jtapbot.BOT_DM_PREFIX):
+        raise HTTPException(status_code=400, detail="Unknown chat channel")
     if channel.startswith(jtapbot.BOT_DM_PREFIX) and not jtapbot.is_bot_dm(channel, current_user.id):
         raise HTTPException(status_code=403, detail="Not your bot chat")
     conn = get_raw_db()
@@ -720,6 +722,8 @@ def post_chat_message(chat: ChatMessageCreate, db: Session = Depends(get_db), cu
     if chat.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Cannot post as another user")
     channel = (chat.channel or "global").strip() or "global"
+    if channel not in ("global", "local") and not channel.startswith(jtapbot.BOT_DM_PREFIX):
+        raise HTTPException(status_code=400, detail="Unknown chat channel")
     if len(chat.message) > 254:
         raise HTTPException(status_code=400, detail="Messages must be 254 characters or fewer.")
     if channel == "global":
