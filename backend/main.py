@@ -1542,7 +1542,7 @@ def create_drop(payload: DropCreate, background_tasks: BackgroundTasks,
     drop = DuckDrop(
         duck_type_id=payload.duck_type_id,
         latitude=payload.latitude, longitude=payload.longitude,
-        radius_m=max(50.0, payload.radius_m),
+        radius_m=min(5000.0, max(50.0, payload.radius_m)),
         starts_at=now,
         expires_at=now + timedelta(hours=max(0.25, min(payload.duration_hours, 72))),
         max_claims=claims,
@@ -2916,7 +2916,7 @@ def admin_create_drop(payload: AdminDropCreate, background_tasks: BackgroundTask
     drop = DuckDrop(
         duck_type_id=payload.duck_type_id,
         latitude=payload.latitude, longitude=payload.longitude,
-        radius_m=max(50.0, payload.radius_m),
+        radius_m=min(5000.0, max(50.0, payload.radius_m)),
         starts_at=now,
         expires_at=now + timedelta(hours=max(0.25, min(payload.duration_hours, 72))),
         max_claims=max(1, min(payload.max_claims, 500)),
