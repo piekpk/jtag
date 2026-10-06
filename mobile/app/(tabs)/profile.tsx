@@ -501,6 +501,7 @@ export default function MyRigScreen() {
                 style={styles.input}
                 value={specs[key as keyof typeof specs]}
                 onChangeText={(val) => setSpecs({ ...specs, [key]: val })}
+                maxLength={30}
               />
             ) : (
               <Text style={styles.specValue}>{specs[key as keyof typeof specs]}</Text>

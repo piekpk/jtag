@@ -395,6 +395,11 @@ def update_profile(user_id: int, profile_data: UserProfileUpdate, db: Session = 
         title = profile_data.settings.get("vehicleTitle") if isinstance(profile_data.settings, dict) else None
         if isinstance(title, str) and len(title) > 30:
             raise HTTPException(status_code=400, detail="Vehicle title must be 30 characters or fewer.")
+        specs = profile_data.settings.get("specs") if isinstance(profile_data.settings, dict) else None
+        if isinstance(specs, dict):
+            for v in specs.values():
+                if isinstance(v, str) and len(v) > 30:
+                    raise HTTPException(status_code=400, detail="Spec values must be 30 characters or fewer.")
         # Merge, don't replace: the app only sends the fields it edits, and
         # server-managed keys (duckCount, ...) must survive a profile save.
         merged = dict(user.settings or {})
