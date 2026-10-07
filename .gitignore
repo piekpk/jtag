@@ -1,0 +1,30 @@
+# Python & Backend
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+*.db
+*.sqlite3
+uploads/
+
+# Node, React Native, & Expo
+node_modules/
+.expo/
+npm-debug.*
+yarn-error.*
+
+# Android Builds
+mobile/android/build/
+mobile/android/app/build/
+mobile/android/.gradle/
+
+# OS Files
+.DS_Store
+Thumbs.db
+# Firebase (contains API keys - add locally, do not commit)
+mobile/android/app/google-services.json
+# Firebase service-account private keys - NEVER commit
+backend/fcm-service-account.json
+fcm-service-account*.json
+*-firebase-adminsdk-*.json

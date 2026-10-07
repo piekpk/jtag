@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jtap Database Admin</title>
+<style>
+  :root { --gold: #d4af37; --bg: #121212; --card: #1e1e1e; --surface: #2c2c2e; --muted: #8e8e93; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: #fff; font-family: -apple-system, Segoe UI, Roboto, sans-serif; }
+  header { background: #1a1a1a; padding: 20px; border-bottom: 1px solid var(--surface); position: sticky; top: 0; }
+  header h1 { margin: 0; color: var(--gold); font-size: 20px; }
+  header p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+  #crumb { color: var(--gold); font-size: 13px; margin-top: 8px; }
+  #crumb a { color: var(--gold); cursor: pointer; text-decoration: none; margin-right: 6px; }
+  main { max-width: 900px; margin: 0 auto; padding: 16px; }
+  .card { background: var(--card); border-radius: 12px; padding: 16px; margin-bottom: 10px; cursor: pointer; display: flex; align-items: center; gap: 12px; }
+  .card:hover { background: var(--surface); }
+  .card .name { flex: 1; font-weight: 700; }
+  .card .count { color: var(--gold); font-weight: 700; }
+  .kv { display: flex; padding: 8px 0; border-bottom: 1px solid var(--surface); font-size: 14px; }
+  .kv .k { color: var(--gold); width: 160px; flex-shrink: 0; font-weight: 600; }
+  .kv .v { word-break: break-word; }
+  .rowline { display: flex; gap: 10px; align-items: center; }
+  .rowline .id { color: var(--gold); font-weight: 700; min-width: 52px; }
+  .rowline .sum { color: #ccc; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  button { background: var(--gold); color: #121212; border: 0; border-radius: 10px; padding: 12px 20px; font-weight: 700; cursor: pointer; font-size: 14px; }
+  button.ghost { background: var(--surface); color: #fff; }
+  .toolmenuitem { display:block; width:100%; background:transparent; border:none; color:#fff;
+    text-align:left; padding:10px 12px; font-size:14px; border-radius:8px; margin-top:0; }
+  .toolmenuitem:hover { background:var(--surface); }
+  .toolcard { width: fit-content; max-width: 480px; }
+  .toolcard input, .toolcard select, .toolcard textarea { min-width: min(300px, calc(100vw - 90px)); }
+  .toolcard div[style*="display:flex"] > select,
+  .toolcard div[style*="display:flex"] > input { min-width: 0; }
+  button.danger { background: transparent; border: 1px solid #5a2a2a; color: #ff5a5a; width: 100%; margin-top: 12px; }
+  input { width: 100%; background: var(--surface); border: 1px solid #444; color: #fff; border-radius: 10px; padding: 12px; margin-bottom: 10px; font-size: 14px; }
+  textarea { width: 100%; background: var(--surface); border: 1px solid #444; color: #fff; border-radius: 10px; padding: 12px; margin-bottom: 10px; font-size: 14px; font-family: inherit; }
+  select { width: 100%; background: var(--surface); border: 1px solid #444; color: #fff; border-radius: 10px; padding: 12px; margin-bottom: 10px; font-size: 14px; }
+  .login { max-width: 380px; margin: 60px auto; background: var(--card); padding: 24px; border-radius: 12px; }
+  .login h2 { color: var(--gold); margin-top: 0; }
+  .err { color: #ff8a8a; margin-bottom: 10px; font-size: 14px; }
+  .empty { color: var(--muted); }
+  #more { width: 100%; margin: 8px 0 24px; }
+  #workarea { display:flex; gap:16px; align-items:flex-start; max-width:1280px; margin:0 auto; padding:0 16px; }
+  #workarea main { flex:1; min-width:0; max-width:none; margin:0; padding:16px 0; }
+  #toolpanes { margin-top:16px; flex-shrink:0; }
+  @media (max-width:760px) { #workarea { flex-direction:column; } #toolpanes { margin-top:10px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>&#128737; Jtap Database Admin</h1>
+  <p id="sub">Sign in with an admin account</p>
+  <div id="crumb"></div>
+  <div id="aitools" style="display:none; margin-top:10px;">
+    <div style="position:relative; display:inline-block;">
+      <button id="menubtn" style="width:auto; padding:8px 16px; font-size:14px;" onclick="toggleMenu(event)">☰ <span id="menulabel">Tools</span></button>
+      <div id="toolmenu" style="display:none; position:absolute; top:110%; left:0; z-index:50; background:var(--card); border:1px solid #444; border-radius:10px; padding:6px; width:max-content; max-width:calc(100vw - 40px); box-shadow:0 8px 24px rgba(0,0,0,0.5);"></div>
+    </div>
+  </div>
+</header>
+<div id="workarea">
+  <div id="toolpanes">
+    <div id="tool-broadcast" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:480px; display:none;">
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">📢 Broadcast to global chat</div>
+      <input id="b_msg" placeholder="Announcement message…" maxlength="500" style="margin-bottom:8px;">
+      <label style="display:flex; align-items:center; gap:8px; font-size:13px; margin-bottom:8px; cursor:pointer;">
+        <input type="checkbox" id="b_push" style="width:auto; min-width:0; margin:0;"> Also push to all devices
+      </label>
+      <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="broadcast()">Send broadcast</button>
+    </div>
+    <div id="tool-audit" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:560px; display:none;">
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">📋 Admin audit log</div>
+      <div id="auditlist" style="max-height:420px; overflow-y:auto;"></div>
+      <button style="padding:8px 16px; font-size:13px; width:100%; margin-top:8px;" onclick="loadAuditLog()">Refresh</button>
+    </div>
+    <div id="tool-cancel" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:560px; display:none;">
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">🚫 Cancel tools</div>
+      <div style="color:var(--gold); font-size:12px; font-weight:600; margin:6px 0;">Active drops <span style="color:var(--muted); font-weight:400;">(unclaimed ducks refunded)</span></div>
+      <div id="cancel_drops" style="max-height:170px; overflow-y:auto; margin-bottom:10px;"></div>
+      <div style="color:var(--gold); font-size:12px; font-weight:600; margin:6px 0;">Upcoming meetups</div>
+      <div id="cancel_meetups" style="max-height:170px; overflow-y:auto; margin-bottom:10px;"></div>
+      <div style="color:var(--gold); font-size:12px; font-weight:600; margin:6px 0;">Pending trades</div>
+      <div id="cancel_trades" style="max-height:170px; overflow-y:auto; margin-bottom:10px;"></div>
+      <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="loadCancelTools()">Refresh</button>
+    </div>
+    <div id="tool-sos" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:560px; display:none;">
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">🆘 Active SOS monitor <span style="color:var(--muted); font-weight:400; font-size:12px;">(auto-refreshes every 30s)</span></div>
+      <div id="soslist" style="max-height:420px; overflow-y:auto;"></div>
+      <button style="padding:8px 16px; font-size:13px; width:100%; margin-top:8px;" onclick="loadSosMonitor()">Refresh now</button>
+    </div>
+    <div id="tool-jtapbot" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:480px; display:none;">
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">🤖 JtapBot scheduler</div>
+      <div id="jtb_status" style="font-size:13px; margin-bottom:10px;"></div>
+      <div style="display:flex; gap:8px; margin-bottom:8px;">
+        <input id="jtb_hours" type="number" step="any" min="0.25" max="168" placeholder="Hours between posts" style="flex:1; margin-bottom:0;">
+        <button style="padding:8px 16px; font-size:13px; margin:0;" onclick="jtbSetInterval()">Set</button>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button id="jtb_pausebtn" style="flex:1; padding:8px 16px; font-size:13px; margin:0;" onclick="jtbTogglePause()">Pause</button>
+        <button style="flex:1; padding:8px 16px; font-size:13px; margin:0;" onclick="jtbPostNow()">Post now</button>
+      </div>
+      <div style="color:var(--muted); font-size:12px; margin-top:8px;">Pausing stops scheduled posts &amp; drops. @-mentions and DMs still reply.</div>
+      <button class="ghost" style="padding:8px 16px; font-size:13px; width:100%; margin-top:8px;" onclick="loadJtapBot()">Refresh</button>
+    </div>
+    <div id="tool-lookup" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:480px; display:none;">
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">🔍 Find a user</div>
+      <div style="display:flex; gap:8px;">
+        <input id="l_email" type="email" placeholder="User email" style="margin-bottom:8px; flex:1;">
+        <button style="padding:8px 16px; font-size:13px; margin-bottom:8px;" onclick="lookupUser()">Go</button>
+      </div>
+    </div>
+    <div id="tool-mod" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:480px; display:none;">
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">🛒 Marketplace moderation</div>
+      <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="reviewListings()">Review newest listings</button>
+    </div>
+    <div id="tool-drop" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:480px; display:none;">
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">📍 Create duck drop</div>
+      <select id="p_duck" style="margin-bottom:8px;"></select>
+      <div style="display:flex; gap:8px;">
+        <input id="p_lat" type="number" step="any" placeholder="Latitude" style="margin-bottom:8px;">
+        <input id="p_lng" type="number" step="any" placeholder="Longitude" style="margin-bottom:8px;">
+      </div>
+      <div style="display:flex; gap:8px;">
+        <input id="p_radius" type="number" value="200" min="50" placeholder="Radius (m)" title="Radius in meters" style="margin-bottom:8px;">
+        <input id="p_hours" type="number" value="2" min="0.25" max="72" step="any" placeholder="Hours" title="Duration in hours" style="margin-bottom:8px;">
+        <input id="p_claims" type="number" value="5" min="1" max="500" placeholder="Claims" title="Max claims" style="margin-bottom:8px;">
+      </div>
+      <input id="p_label" placeholder="Label (optional)" style="margin-bottom:8px;">
+      <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="createDrop()">Drop it</button>
+    </div>
+    <div id="tool-meetup" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:480px; display:none;">
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">📍 Create meetup</div>
+      <input id="m_title" placeholder="Title (max 80 chars)" maxlength="80" style="margin-bottom:8px;">
+      <input id="m_desc" placeholder="Description (optional)" style="margin-bottom:8px;">
+      <div style="display:flex; gap:8px;">
+        <input id="m_lat" type="number" step="any" placeholder="Latitude" style="margin-bottom:8px;">
+        <input id="m_lng" type="number" step="any" placeholder="Longitude" style="margin-bottom:8px;">
+      </div>
+      <div style="display:flex; gap:8px;">
+        <input id="m_start" type="datetime-local" title="Start (local time)" style="margin-bottom:8px;">
+        <input id="m_end" type="datetime-local" title="End (local time)" style="margin-bottom:8px;">
+      </div>
+      <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="createMeetup()">Create meetup</button>
+    </div>
+    <div id="tool-give" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:480px; display:none;">
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">🎁 Give or take ducks</div>
+      <input id="g_email" type="email" placeholder="User email" style="margin-bottom:8px;">
+      <input id="g_filter" placeholder="Filter ducks (e.g. camo)" style="margin-bottom:8px;" oninput="filterDuckOptions()">
+      <div style="display:flex; gap:8px;">
+        <select id="g_duck" style="flex:1;"></select>
+        <input id="g_qty" type="number" value="1" min="-100" max="100" style="width:70px; min-width:0; margin-bottom:8px;" title="Negative removes ducks">
+      </div>
+      <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="grantDuck()">Give / take ducks</button>
+      <button style="padding:8px 16px; font-size:13px; width:100%; margin-top:8px;" onclick="grantAllDucks()">🎁 Grant to ALL users</button>
+      <button style="padding:8px 16px; font-size:13px; width:100%; margin-top:8px;" onclick="backfillLore()">✨ Backfill duck lore</button>
+    </div>
+    <div id="tool-create" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:480px; display:none;">
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">➕ Create duck type</div>
+      <input id="d_name" placeholder="Name (e.g. Trail Boss Duck)" style="margin-bottom:8px;">
+      <div style="display:flex; gap:8px;">
+        <select id="d_rarity" style="flex:1;">
+          <option value="common">common</option>
+          <option value="rare">rare</option>
+          <option value="epic">epic</option>
+          <option value="legendary">legendary</option>
+        </select>
+        <input id="d_emoji" placeholder="🐤" style="width:70px; min-width:0; margin-bottom:8px;">
+      </div>
+      <input id="d_desc" placeholder="Short description (optional)" style="margin-bottom:8px;">
+      <input id="d_seasonal" placeholder="Seasonal tag, e.g. halloween (optional)" style="margin-bottom:8px;">
+      <div style="color:var(--muted); font-size:12px; margin-bottom:6px;">Sprite (optional — overrides emoji)</div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <select id="d_theme" style="flex:1;" onchange="fillSpriteOptions()"></select>
+        <select id="d_sprite" style="flex:1;" onchange="previewSprite()"></select>
+        <img id="d_preview" style="width:48px; height:48px; border-radius:8px; background:var(--surface); display:none;">
+      </div>
+      <div style="margin-bottom:8px;"></div>
+      <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="createDuckType()">Create duck type</button>
+    </div>
+    <div id="tool-milestone" class="toolcard" style="background:var(--card); border-radius:10px; padding:12px; max-width:480px; display:none;">
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin-bottom:8px;">🏆 Create milestone</div>
+      <input id="m_name" placeholder="Name (e.g. Wave Master)" style="margin-bottom:8px;">
+      <input id="m_desc" placeholder="Description (e.g. Give 10 ducks to fellow Jeepers)" style="margin-bottom:8px;">
+      <div style="display:flex; gap:8px;">
+        <select id="m_track" style="flex:1;">
+          <option value="Activity">Activity</option>
+          <option value="Collection">Collection</option>
+        </select>
+        <select id="m_counter" style="flex:1;">
+          <option value="ducks_given">Ducks given</option>
+          <option value="drops_claimed">Drops claimed</option>
+          <option value="drops_created">Drops created</option>
+          <option value="trades_completed">Trades completed</option>
+          <option value="pond_unlocked">Pond ducks unlocked</option>
+          <option value="photo_reactions">Photo reactions</option>
+        </select>
+        <input id="m_target" type="number" value="5" min="1" style="width:70px; min-width:0; margin-bottom:8px;" title="Target count">
+      </div>
+      <div style="display:flex; gap:8px; margin-bottom:8px;">
+        <select id="m_reward_mode" style="flex:1;" onchange="toggleMilestoneReward()">
+          <option value="pool">Random rarity reward</option>
+          <option value="duck">Specific duck reward</option>
+        </select>
+        <select id="m_duck" style="flex:1; display:none;"></select>
+      </div>
+      <div id="m_pool" style="margin-bottom:8px; color:var(--muted); font-size:12px;">
+        Reward rarities:
+        <label><input type="checkbox" class="m_rar" style="width:auto; min-width:0; margin:0;" value="common" checked> common</label>
+        <label><input type="checkbox" class="m_rar" style="width:auto; min-width:0; margin:0;" value="rare"> rare</label>
+        <label><input type="checkbox" class="m_rar" style="width:auto; min-width:0; margin:0;" value="epic"> epic</label>
+        <label><input type="checkbox" class="m_rar" style="width:auto; min-width:0; margin:0;" value="legendary"> legendary</label>
+      </div>
+      <label style="color:var(--muted); font-size:12px; display:block; margin-bottom:8px;">
+        <input type="checkbox" id="m_prefer" style="width:auto; min-width:0; margin:0;"> Prefer ducks the user doesn't own yet
+      </label>
+      <button style="padding:8px 16px; font-size:13px; width:100%;" onclick="createMilestone()">Create milestone</button>
+      <div id="m_list" style="margin-top:10px;"></div>
+    </div>
+  </div>
+  <main id="app"></main>
+</div>
+<script>
+const app = document.getElementById('app');
+const crumb = document.getElementById('crumb');
+const sub = document.getElementById('sub');
+let tables = [], table = null, rows = [], offset = 0, hasMore = false, detailEditable = [];
+let sosTimer = null;
+const PAGE = 50;
+
+const SUMMARY = {
+  users: ['email'], duck_types: ['name', 'rarity'],
+  user_ducks: ['user_id', 'duck_type_id', 'count'],
+  duck_gives: ['giver_id', 'recipient_id', 'duck_type_id'],
+  duck_drops: ['label', 'duck_type_id', 'claims_count'],
+  drop_claims: ['drop_id', 'user_id'], trades: ['proposer_id', 'recipient_id', 'status'],
+  user_milestones: ['user_id', 'key'], milestones: ['name', 'target'], notifications: ['title', 'type'], photo_reactions: ['photo_owner_id', 'emoji'],
+  messages: ['user_id', 'channel', 'message'],
+};
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function api(path, opts = {}) {
+  const token = sessionStorage.getItem('jtap_admin_token');
+  const res = await fetch(path, { ...opts,
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } });
+  if (res.status === 401) { showLogin('Not signed in as admin.'); throw new Error('auth'); }
+  if (res.status === 403) {
+    let msg = 'forbidden';
+    try { const j = await res.json(); if (j && j.detail) msg = j.detail; } catch (e) {}
+    throw new Error(msg);
+  }
+  if (!res.ok) throw new Error(await res.text().catch(() => res.status));
+  return res.json();
+}
+
+function showLogin(msg) {
+  sub.textContent = 'Sign in with an admin account';
+  crumb.innerHTML = '';
+  app.innerHTML = `<div class="login"><h2>Admin sign in</h2>
+    ${msg ? `<div class="err">${esc(msg)}</div>` : ''}
+    <input id="em" type="email" placeholder="Email" autocomplete="username">
+    <input id="pw" type="password" placeholder="Password" autocomplete="current-password">
+    <button id="go" style="width:100%">Sign in</button></div>`;
+  const doLogin = async () => {
+    const email = document.getElementById('em').value.trim();
+    const password = document.getElementById('pw').value;
+    try {
+      const r = await fetch('/login', { method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }) });
+      if (!r.ok) throw new Error('Login failed');
+      const data = await r.json();
+      sessionStorage.setItem('jtap_admin_token', data.access_token);
+      loadTables();
+    } catch (e) { showLogin(e.message); }
+  };
+  document.getElementById('go').onclick = doLogin;
+  document.getElementById('pw').onkeydown = e => { if (e.key === 'Enter') doLogin(); };
+}
+
+const TOOLS = [
+  ["tool-broadcast", "📢 Broadcast"],
+  ["tool-audit", "📋 Audit log"],
+  ["tool-cancel", "🚫 Cancel tools"],
+  ["tool-sos", "🆘 SOS monitor"],
+  ["tool-jtapbot", "🤖 JtapBot"],
+  ["tool-lookup", "🔍 Find user"],
+  ["tool-mod", "🛒 Moderation"],
+  ["tool-drop", "📍 Create drop"],
+  ["tool-meetup", "📍 Create meetup"],
+  ["tool-give", "🎁 Give ducks"],
+  ["tool-create", "➕ New duck"],
+  ["tool-milestone", "🏆 Milestones"],
+];
+
+function buildToolMenu() {
+  const menu = document.getElementById('toolmenu');
+  menu.innerHTML = TOOLS.map(([id, label]) =>
+    `<button class="toolmenuitem" onclick="showTool('${id}')">${label}</button>`).join('');
+}
+
+function toggleMenu(e) {
+  e.stopPropagation();
+  const menu = document.getElementById('toolmenu');
+  menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+}
+
+function showTool(id) {
+  document.querySelectorAll('.toolcard').forEach(el => {
+    el.style.display = el.id === id ? 'block' : 'none';
+  });
+  const found = TOOLS.find(t => t[0] === id);
+  document.getElementById('menulabel').textContent = found ? found[1] : 'Tools';
+  document.getElementById('toolmenu').style.display = 'none';
+  if (sosTimer) { clearInterval(sosTimer); sosTimer = null; }
+  if (id === 'tool-milestone') loadMilestones();
+  if (id === 'tool-audit') loadAuditLog();
+  if (id === 'tool-cancel') loadCancelTools();
+  if (id === 'tool-sos') { loadSosMonitor(); sosTimer = setInterval(loadSosMonitor, 30000); }
+  if (id === 'tool-jtapbot') loadJtapBot();
+  if (id === 'tool-meetup' && !document.getElementById('m_start').value) meetupDefaults();
+}
+
+document.addEventListener('click', () => {
+  const menu = document.getElementById('toolmenu');
+  if (menu && menu.style.display === 'block') menu.style.display = 'none';
+});
+
+async function loadTables() {
+  try {
+    const data = await api('/admin/overview');
+    tables = data.tables;
+    sub.textContent = 'Browse every table in the app database';
+    crumb.innerHTML = '';
+    document.getElementById('aitools').style.display = 'block';
+    buildToolMenu();
+    showTool('tool-broadcast');
+    loadDuckOptions();
+    loadDuckSprites();
+    loadMilestones();
+    let statsHtml = '';
+    try {
+      const s = await api('/admin/stats');
+      const card = (label, big, small) =>
+        `<div style="background:var(--card); border-radius:10px; padding:12px; flex:1; min-width:140px;">
+           <div style="font-size:22px; font-weight:800; color:var(--gold);">${big}</div>
+           <div style="font-size:12px; color:var(--muted);">${label}</div>
+           ${small ? `<div style="font-size:11px; color:#888; margin-top:4px;">${small}</div>` : ''}
+         </div>`;
+      statsHtml = `<div style="color:var(--gold); font-weight:700; font-size:13px; margin:4px 0 8px;">📊 App health</div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;">` +
+        card('Users', s.users.total, `${s.users.admins} admin · ${s.users.banned} banned`) +
+        card('Ducks in circulation', s.ducks.inventory, `${s.ducks.types} types · ${s.ducks.pond_unlocks} pond unlocks`) +
+        card('Active drops', s.drops.active, `${s.drops.total} total · ${s.drops.created_7d} this week`) +
+        card('Pending trades', s.trades.pending, `${s.trades.total} total · ${s.trades.created_7d} this week`) +
+        card('Active listings', s.marketplace.active, `${s.marketplace.sold} sold · ${s.marketplace.created_7d} this week`) +
+        card('Chat messages', s.messages.total, '') +
+        `</div>`;
+    } catch (e) { /* stats are a bonus; tables still work */ }
+    app.innerHTML = statsHtml + tables.map(t =>
+      `<div class="card" onclick="openTable('${t.table}')">
+         <span class="name">${esc(t.table)}</span><span class="count">${t.count}</span><span>&#8250;</span>
+       </div>`).join('');
+  } catch (e) { /* showLogin already handled auth */ }
+}
+
+async function backfillLore() {
+  if (!confirm('Generate AI lore for every duck missing it? Takes a few minutes on CPU.')) return;
+  try {
+    const data = await api('/admin/duck-types/backfill-lore', { method: 'POST' });
+    alert(`Lore generation started for ${data.ducks} duck(s). Check back in a few minutes, then tap a duck in the pond.`);
+  } catch (e) { alert('Backfill failed: ' + e.message); }
+}
+
+let allDuckOptions = [];
+
+function renderDuckOptions() {
+  const f = (document.getElementById('g_filter').value || '').toLowerCase();
+  const opts = allDuckOptions
+    .filter(r => !f || (r.name || '').toLowerCase().includes(f))
+    .map(r =>
+      `<option value="${r.id}">${esc(r.emoji || '🦆')} ${esc(r.name)} (${esc(r.rarity)})</option>`).join('');
+  document.getElementById('g_duck').innerHTML = opts;
+  const p = document.getElementById('p_duck');
+  if (p) p.innerHTML = opts;
+}
+
+function filterDuckOptions() { renderDuckOptions(); }
+
+async function loadDuckOptions() {
+  try {
+    const data = await api('/admin/duck-types/options');
+    allDuckOptions = Array.isArray(data) ? data : [];
+    renderDuckOptions();
+  } catch (e) { /* auth handled elsewhere */ }
+}
+
+function toggleMilestoneReward() {
+  const mode = document.getElementById('m_reward_mode').value;
+  document.getElementById('m_duck').style.display = mode === 'duck' ? 'block' : 'none';
+  document.getElementById('m_pool').style.display = mode === 'duck' ? 'none' : 'block';
+}
+
+function milestoneRewardText(m) {
+  if (m.reward_slug) return 'duck: ' + m.reward_slug;
+  return 'random ' + (m.reward_pool || ['common']).join(' / ');
+}
+
+async function loadMilestones() {
+  try {
+    const [data, ducks] = await Promise.all([
+      api('/admin/milestones'),
+      api('/admin/tables/duck_types?limit=200&offset=0'),
+    ]);
+    document.getElementById('m_duck').innerHTML = ducks.rows.map(r =>
+      `<option value="${esc(r.slug)}">${esc(r.emoji || '🦆')} ${esc(r.name)} (${esc(r.rarity)})</option>`).join('');
+    const list = document.getElementById('m_list');
+    if (!data.length) {
+      list.innerHTML = `<div style="color:var(--muted); font-size:12px;">No custom milestones yet. Built-in ones aren't listed here.</div>`;
+      return;
+    }
+    list.innerHTML = data.map(m =>
+      `<div style="display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-top:1px solid var(--surface); font-size:12px;">
+        <div><b style="color:var(--gold);">${esc(m.name)}</b> <span style="color:var(--muted);">· ${esc(m.track)}</span><br>
+        <span style="color:var(--muted);">${esc(m.counter)} × ${m.target} · ${esc(milestoneRewardText(m))}</span></div>
+        <button class="danger" style="padding:4px 10px; font-size:12px; width:auto; flex-shrink:0;" onclick="deleteMilestone(${m.id})">Delete</button>
+      </div>`).join('');
+  } catch (e) { /* auth handled elsewhere */ }
+}
+
+async function createMilestone() {
+  const pool = [...document.querySelectorAll('.m_rar:checked')].map(c => c.value);
+  const body = {
+    name: document.getElementById('m_name').value.trim(),
+    description: document.getElementById('m_desc').value.trim(),
+    track: document.getElementById('m_track').value,
+    counter: document.getElementById('m_counter').value,
+    target: parseInt(document.getElementById('m_target').value, 10) || 1,
+    reward_mode: document.getElementById('m_reward_mode').value,
+    reward_pool: pool,
+    reward_slug: document.getElementById('m_duck').value,
+    prefer_unowned: document.getElementById('m_prefer').checked,
+  };
+  if (!body.name) { alert('Give the milestone a name.'); return; }
+  try {
+    const m = await api('/admin/milestones', { method: 'POST', body: JSON.stringify(body) });
+    alert(`Milestone "${m.name}" created — rewards at ${m.target}.`);
+    document.getElementById('m_name').value = '';
+    document.getElementById('m_desc').value = '';
+    loadMilestones();
+  } catch (e) { alert('Create failed: ' + e.message); }
+}
+
+async function deleteMilestone(id) {
+  if (!confirm('Delete this milestone? Users who already claimed it keep the reward.')) return;
+  try {
+    await api(`/admin/milestones/${id}`, { method: 'DELETE' });
+    loadMilestones();
+  } catch (e) { alert('Delete failed: ' + e.message); }
+}
+
+async function broadcast() {
+  const message = document.getElementById('b_msg').value.trim();
+  if (!message) { alert('Type the announcement first.'); return; }
+  const push = document.getElementById('b_push').checked;
+  if (!confirm(`Post this to global chat${push ? ' AND push it to all devices' : ''}?\n\n"${message}"`)) return;
+  try {
+    const res = await api('/admin/broadcast', { method: 'POST', body: JSON.stringify({ message, push }) });
+    alert(push ? `Broadcast sent to global chat + pushed to ${res.pushed} user(s).` : 'Broadcast sent to global chat.');
+    document.getElementById('b_msg').value = '';
+    document.getElementById('b_push').checked = false;
+  } catch (e) { alert('Broadcast failed: ' + e.message); }
+}
+
+async function lookupUser() {
+  const email = document.getElementById('l_email').value.trim();
+  if (!email) { alert('Enter the user\'s email.'); return; }
+  try {
+    const data = await api('/admin/users/lookup?email=' + encodeURIComponent(email));
+    const u = data.user;
+    sub.textContent = `user lookup · ${u.email}`;
+    crumb.innerHTML = `<a onclick="loadTables()">tables</a> / user lookup`;
+    const duckRows = data.ducks.length ? data.ducks.map(d =>
+      `<div class="kv"><span class="k">${esc(d.duck.emoji || '🐤')} ${esc(d.duck.name || '#' + d.duck.id)}</span><span class="v">×${d.count}</span></div>`).join('')
+      : '<div style="color:var(--muted); font-size:13px;">No ducks yet.</div>';
+    const listingRows = data.listings.length ? data.listings.map(l =>
+      `<div class="kv"><span class="k">${esc(l.title)}</span><span class="v">$${esc(l.price)} · ${l.is_sold ? 'sold' : 'active'}</span></div>`).join('')
+      : '<div style="color:var(--muted); font-size:13px;">No listings.</div>';
+    const tradeRows = data.trades.length ? data.trades.map(t =>
+      `<div class="kv"><span class="k">trade #${t.id}</span><span class="v">${esc(t.status)}</span></div>`).join('')
+      : '<div style="color:var(--muted); font-size:13px;">No trades.</div>';
+    const meetupRows = (data.meetups_hosted || []).length ? data.meetups_hosted.map(m =>
+      `<div class="kv"><span class="k">${esc(m.title)}</span><span class="v">${m.rsvps} RSVPs · ${esc((m.start || '').replace('T', ' ').slice(0, 16))}</span></div>`).join('')
+      : '<div style="color:var(--muted); font-size:13px;">Hosting none.</div>';
+    const attendingRows = (data.meetups_attending || []).length ? data.meetups_attending.map(m =>
+      `<div class="kv"><span class="k">${esc(m.title)}</span><span class="v">meetup #${m.id}</span></div>`).join('')
+      : '<div style="color:var(--muted); font-size:13px;">Attending none.</div>';
+    app.innerHTML =
+      `<div class="card" style="cursor:default; display:block">
+        <div class="kv"><span class="k">email</span><span class="v">${esc(u.email)}</span></div>
+        <div class="kv"><span class="k">id</span><span class="v">${u.id}</span></div>
+        <div class="kv"><span class="k">admin</span><span class="v">${u.is_admin ? 'yes' : 'no'}</span></div>
+        <div class="kv"><span class="k">banned</span><span class="v">${u.is_banned ? 'YES' : 'no'}</span></div>
+        <div class="kv"><span class="k">ducks unlocked</span><span class="v">${data.pond_unlocked}</span></div>
+        <div class="kv"><span class="k">ducks given / received</span><span class="v">${data.ducks_given} / ${data.ducks_received}</span></div>
+        <div class="kv"><span class="k">drops created / claimed</span><span class="v">${data.drops_created} / ${data.drops_claimed}</span></div>
+        <div class="kv"><span class="k">chat messages</span><span class="v">${data.chat_messages}</span></div>
+        <div class="kv"><span class="k">SOS requests</span><span class="v">${data.sos_requests}</span></div>
+        <div class="kv"><span class="k">milestones</span><span class="v">${data.milestones}</span></div>
+      </div>
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin:14px 0 6px;">Duck inventory</div>
+      <div class="card" style="cursor:default; display:block">${duckRows}</div>
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin:14px 0 6px;">Marketplace listings</div>
+      <div class="card" style="cursor:default; display:block">${listingRows}</div>
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin:14px 0 6px;">Trades</div>
+      <div class="card" style="cursor:default; display:block">${tradeRows}</div>
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin:14px 0 6px;">Meetups hosted</div>
+      <div class="card" style="cursor:default; display:block">${meetupRows}</div>
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin:14px 0 6px;">Meetups attending</div>
+      <div class="card" style="cursor:default; display:block">${attendingRows}</div>
+      <div style="display:flex; gap:10px;">
+        <button class="${u.is_banned ? 'ghost' : 'danger'}" style="flex:1; margin-top:0;" onclick="toggleBan(${u.id}, ${!!u.is_banned}, lookupUser)">${u.is_banned ? 'Unban' : 'Ban'} this user</button>
+        <button class="ghost" style="flex:1;" onclick="giveToUser('${esc(u.email)}')">🎁 Grant ducks</button>
+        <button class="ghost" style="flex:1;" onclick="openTable('users')">Users table</button>
+      </div>`;
+  } catch (e) { alert('Lookup failed: ' + e.message); }
+}
+
+async function giveToUser(email) {
+  showTool('tool-give');
+  document.getElementById('g_email').value = email;
+}
+
+async function loadAuditLog() {
+  const el = document.getElementById('auditlist');
+  try {
+    const data = await api('/admin/audit-log?limit=100');
+    el.innerHTML = data.length ? data.map(r => `
+      <div style="border-bottom:1px solid #333; padding:8px 2px; font-size:13px;">
+        <div style="color:var(--gold); font-weight:600;">${esc(r.action.replace(/_/g, ' '))}</div>
+        ${r.detail ? `<div style="color:#ccc;">${esc(r.detail)}</div>` : ''}
+        <div style="color:var(--muted); font-size:12px;">${esc(r.admin_email)}${r.target_type ? ` · ${esc(r.target_type)}${r.target_id ? ' #' + esc(r.target_id) : ''}` : ''} · ${esc((r.created_at || '').replace('T', ' ').slice(0, 19))}</div>
+      </div>`).join('')
+      : '<div style="color:var(--muted);">No admin actions logged yet.</div>';
+  } catch (e) { el.innerHTML = '<div style="color:#f66;">Could not load: ' + esc(e.message) + '</div>'; }
+}
+
+async function loadCancelTools() {
+  try {
+    const [drops, meetups, trades] = await Promise.all([
+      api('/admin/drops/active'), api('/admin/meetups/upcoming'), api('/admin/trades/pending')]);
+    const row = (label, sub, btn) => `
+      <div style="border-bottom:1px solid #333; padding:6px 2px; font-size:13px; display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <div><span style="color:#fff;">${label}</span> <span style="color:var(--muted); font-size:12px;">${sub}</span></div>${btn}</div>`;
+    const cancelBtn = (fn, id) => `<button class="danger" style="padding:4px 10px; font-size:12px; margin:0; flex-shrink:0;" onclick="${fn}(${id})">Cancel</button>`;
+    document.getElementById('cancel_drops').innerHTML = drops.length ? drops.map(d =>
+      row(esc(d.label || d.duck), `· ${esc(d.claims)} claimed · by ${esc(d.creator)}`, cancelBtn('cancelDrop', d.id))).join('')
+      : '<div style="color:var(--muted); font-size:13px;">None.</div>';
+    document.getElementById('cancel_meetups').innerHTML = meetups.length ? meetups.map(m =>
+      row(esc(m.title), `· ${m.rsvps} RSVPs · host ${esc(m.host)} · ${esc((m.start || '').replace('T', ' ').slice(0, 16))}`, cancelBtn('cancelMeetup', m.id))).join('')
+      : '<div style="color:var(--muted); font-size:13px;">None.</div>';
+    document.getElementById('cancel_trades').innerHTML = trades.length ? trades.map(t =>
+      row(`#${t.id}`, `· ${esc(t.proposer)} → ${esc(t.recipient)} · gives ${esc(t.offer)} · wants ${esc(t.request)}`, cancelBtn('cancelTrade', t.id))).join('')
+      : '<div style="color:var(--muted); font-size:13px;">None.</div>';
+  } catch (e) { alert('Could not load cancel tools: ' + e.message); }
+}
+
+async function cancelDrop(id) {
+  if (!confirm('Cancel drop #' + id + '? Unclaimed ducks go back to the creator.')) return;
+  try { const r = await api('/admin/duck-drops/' + id + '/cancel', { method: 'POST' }); loadCancelTools(); }
+  catch (e) { alert('Could not cancel: ' + e.message); }
+}
+
+async function cancelMeetup(id) {
+  if (!confirm('Cancel meetup #' + id + '? This deletes it for everyone.')) return;
+  try { await api('/meetups/' + id, { method: 'DELETE' }); loadCancelTools(); }
+  catch (e) { alert('Could not cancel: ' + e.message); }
+}
+
+async function cancelTrade(id) {
+  if (!confirm('Cancel trade #' + id + '? The offered ducks were never moved, so nothing needs refunding.')) return;
+  try { await api('/admin/trades/' + id + '/cancel', { method: 'POST' }); loadCancelTools(); }
+  catch (e) { alert('Could not cancel: ' + e.message); }
+}
+
+async function loadSosMonitor() {
+  const el = document.getElementById('soslist');
+  try {
+    const data = await api('/admin/sos/active');
+    el.innerHTML = data.length ? data.map(s => `
+      <div style="border:1px solid #a33; border-radius:8px; padding:10px; margin-bottom:8px; font-size:13px; background:#2a1a1a;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+          <span style="color:#ff8080; font-weight:700;">🆘 ${esc(s.issue_type.replace(/_/g, ' '))}</span>
+          <span style="color:var(--muted); font-size:12px; flex-shrink:0;">${s.age_min}m ago · ${s.responders} responder${s.responders === 1 ? '' : 's'}</span>
+        </div>
+        ${s.details ? `<div style="color:#fff; margin:6px 0;">${esc(s.details)}</div>` : ''}
+        <div style="color:var(--muted); font-size:12px;">${esc(s.user_name)} · ${esc(s.user_email)} · ${Number(s.latitude).toFixed(4)}, ${Number(s.longitude).toFixed(4)}</div>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button class="ghost" style="flex:1; padding:6px; font-size:12px; margin:0;" onclick="sosResolve(${s.id})">Resolve</button>
+          <button class="danger" style="flex:1; padding:6px; font-size:12px; margin:0;" onclick="sosCancel(${s.id})">Cancel</button>
+        </div>
+      </div>`).join('')
+      : '<div style="color:var(--muted);">No active SOS requests. 🎉</div>';
+  } catch (e) { el.innerHTML = '<div style="color:#f66;">Could not load: ' + esc(e.message) + '</div>'; }
+}
+
+async function sosResolve(id) {
+  if (!confirm('Mark SOS #' + id + ' as resolved?')) return;
+  try { await api('/admin/sos/' + id + '/resolve', { method: 'POST' }); loadSosMonitor(); }
+  catch (e) { alert('Failed: ' + e.message); }
+}
+
+async function sosCancel(id) {
+  if (!confirm('Cancel SOS #' + id + '?')) return;
+  try { await api('/admin/sos/' + id + '/cancel', { method: 'POST' }); loadSosMonitor(); }
+  catch (e) { alert('Failed: ' + e.message); }
+}
+
+let jtbPaused = false;
+async function loadJtapBot() {
+  const el = document.getElementById('jtb_status');
+  try {
+    const s = await api('/admin/jtapbot');
+    jtbPaused = !!s.paused;
+    const next = s.next_post_in_s == null ? 'paused' :
+      (s.next_post_in_s < 90 ? `${Math.round(s.next_post_in_s)}s` : `${Math.round(s.next_post_in_s / 60)}m`);
+    el.innerHTML =
+      `<div class="kv"><span class="k">status</span><span class="v">${s.paused ? '⏸ paused' : '▶ running'}</span></div>` +
+      `<div class="kv"><span class="k">post interval</span><span class="v">${s.post_interval_hours}h</span></div>` +
+      `<div class="kv"><span class="k">next post in</span><span class="v">${next}</span></div>` +
+      `<div class="kv"><span class="k">LLM</span><span class="v">${s.llm_available ? 'online' : 'DOWN'}</span></div>`;
+    document.getElementById('jtb_pausebtn').textContent = s.paused ? 'Resume' : 'Pause';
+    document.getElementById('jtb_hours').placeholder = `Hours between posts (now ${s.post_interval_hours})`;
+  } catch (e) { el.innerHTML = '<div style="color:#f66;">Could not load: ' + esc(e.message) + '</div>'; }
+}
+
+async function jtbTogglePause() {
+  try { await api('/admin/jtapbot/pause', { method: 'POST', body: JSON.stringify({ paused: !jtbPaused }) }); loadJtapBot(); }
+  catch (e) { alert('Failed: ' + e.message); }
+}
+
+async function jtbSetInterval() {
+  const hours = parseFloat(document.getElementById('jtb_hours').value);
+  if (!(hours >= 0.25 && hours <= 168)) { alert('Enter 0.25 to 168 hours.'); return; }
+  try { await api('/admin/jtapbot/interval', { method: 'POST', body: JSON.stringify({ hours }) }); loadJtapBot(); }
+  catch (e) { alert('Failed: ' + e.message); }
+}
+
+async function jtbPostNow() {
+  if (!confirm('Post a JtapBot message to global chat now?')) return;
+  try { await api('/admin/jtapbot/post-now', { method: 'POST' }); alert('Posted.'); loadJtapBot(); }
+  catch (e) { alert('Failed: ' + e.message); }
+}
+
+async function reviewListings() {
+  try {
+    const data = await api('/admin/marketplace/queue');
+    sub.textContent = 'marketplace moderation · newest first';
+    crumb.innerHTML = `<a onclick="loadTables()">tables</a> / moderation`;
+    app.innerHTML = data.listings.length ? data.listings.map(l => `
+      <div class="card" style="cursor:default; display:block">
+        ${l.photo_url ? `<img src="${esc(l.photo_url)}" style="width:100%; border-radius:8px; margin-bottom:8px;">` : ''}
+        <div class="kv"><span class="k">title</span><span class="v">${esc(l.title)} — $${esc(l.price)}</span></div>
+        <div class="kv"><span class="k">seller</span><span class="v">${esc(l.seller_email || l.seller_name || ('#' + l.user_id))}</span></div>
+        <div class="kv"><span class="k">status</span><span class="v">${l.is_sold ? 'sold' : 'active'} · ${esc(l.category || '')}</span></div>
+        <div style="color:#ccc; font-size:13px; margin:6px 0;">${esc(l.description || '')}</div>
+        <div style="display:flex; gap:10px;">
+          <button class="danger" style="flex:1; margin-top:0;" onclick="modDelete(${l.id})">Delete listing</button>
+          <button class="ghost" style="flex:1;" onclick="table='market_listings';openDetail(${l.id})">Full record</button>
+        </div>
+      </div>`).join('')
+      : '<div style="color:var(--muted);">No listings yet.</div>';
+  } catch (e) { alert('Could not load queue: ' + e.message); }
+}
+
+async function modDelete(id) {
+  if (!confirm(`Delete listing #${id}? Its photo is removed too. This cannot be undone.`)) return;
+  try {
+    await api(`/admin/tables/market_listings/${id}`, { method: 'DELETE' });
+    reviewListings();
+  } catch (e) { alert('Delete failed: ' + e.message); }
+}
+
+async function createDrop() {
+  const duck_type_id = parseInt(document.getElementById('p_duck').value, 10);
+  const latitude = parseFloat(document.getElementById('p_lat').value);
+  const longitude = parseFloat(document.getElementById('p_lng').value);
+  if (!duck_type_id) { alert('Pick a duck.'); return; }
+  if (!isFinite(latitude) || !isFinite(longitude)) { alert('Enter latitude and longitude.'); return; }
+  const body = {
+    duck_type_id, latitude, longitude,
+    radius_m: parseFloat(document.getElementById('p_radius').value) || 200,
+    duration_hours: parseFloat(document.getElementById('p_hours').value) || 2,
+    max_claims: parseInt(document.getElementById('p_claims').value, 10) || 5,
+    label: document.getElementById('p_label').value.trim() || null,
+  };
+  try {
+    const data = await api('/admin/drops', { method: 'POST', body: JSON.stringify(body) });
+    alert(`Drop #${data.id} is live! Clue is generating in the background.`);
+    document.getElementById('p_label').value = '';
+  } catch (e) { alert('Drop failed: ' + e.message); }
+}
+
+function meetupDefaults() {
+  // Default: starts 3h from now on the hour, ends 2h later. datetime-local
+  // wants 'YYYY-MM-DDTHH:MM' in local time.
+  const start = new Date(Date.now() + 3 * 3600e3);
+  start.setMinutes(0, 0, 0);
+  const end = new Date(start.getTime() + 2 * 3600e3);
+  const fmt = d => {
+    const p = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  };
+  document.getElementById('m_start').value = fmt(start);
+  document.getElementById('m_end').value = fmt(end);
+}
+
+async function createMeetup() {
+  const title = document.getElementById('m_title').value.trim();
+  const description = document.getElementById('m_desc').value.trim();
+  const latitude = parseFloat(document.getElementById('m_lat').value);
+  const longitude = parseFloat(document.getElementById('m_lng').value);
+  const startVal = document.getElementById('m_start').value;
+  const endVal = document.getElementById('m_end').value;
+  if (!title) { alert('Give the meetup a title.'); return; }
+  if (!isFinite(latitude) || !isFinite(longitude)) { alert('Enter latitude and longitude.'); return; }
+  if (!startVal || !endVal) { alert('Pick a start and end time.'); return; }
+  // datetime-local has no timezone; convert from the browser's local time to UTC.
+  const body = {
+    title, description: description || null, latitude, longitude,
+    start_time: new Date(startVal).toISOString(),
+    end_time: new Date(endVal).toISOString(),
+  };
+  try {
+    const data = await api('/admin/meetups', { method: 'POST', body: JSON.stringify(body) });
+    alert(`Meetup #${data.id} is live! Users within 25 miles were notified.`);
+    document.getElementById('m_title').value = '';
+    document.getElementById('m_desc').value = '';
+  } catch (e) { alert('Meetup failed: ' + e.message); }
+}
+
+async function grantDuck() {
+  const email = document.getElementById('g_email').value.trim();
+  const duck_type_id = parseInt(document.getElementById('g_duck').value, 10);
+  const qty = parseInt(document.getElementById('g_qty').value, 10) || 1;
+  if (!email) { alert('Enter the user\'s email.'); return; }
+  if (!duck_type_id) { alert('Pick a duck.'); return; }
+  try {
+    const data = await api('/admin/ducks/grant', { method: 'POST',
+      body: JSON.stringify({ email, duck_type_id, qty }) });
+    alert(qty < 0 ? `Removed ${data.removed}x duck from ${data.email}.` : `Gave ${data.qty}x duck to ${data.email}.`);
+    document.getElementById('g_email').value = '';
+  } catch (e) { alert('Grant failed: ' + e.message); }
+}
+
+async function grantAllDucks() {
+  const duckSel = document.getElementById('g_duck');
+  const duck_type_id = parseInt(duckSel.value, 10);
+  const duckName = duckSel.options[duckSel.selectedIndex] ? duckSel.options[duckSel.selectedIndex].text : ('#' + duckSel.value);
+  const qty = Math.max(1, Math.min(100, parseInt(document.getElementById('g_qty').value, 10) || 1));
+  if (!duck_type_id) { alert('Pick a duck.'); return; }
+  if (!confirm(`Grant ${duckName} ×${qty} to EVERY user (banned and JtapBot excluded)? Each user gets a duck notification.`)) return;
+  try {
+    const data = await api('/admin/ducks/grant-all', { method: 'POST',
+      body: JSON.stringify({ duck_type_id, qty }) });
+    alert(`Granted to ${data.users} users.`);
+  } catch (e) { alert('Bulk grant failed: ' + e.message); }
+}
+
+let spriteThemes = {};
+let spriteUsed = {};
+
+async function loadDuckSprites() {
+  try {
+    const data = await api('/admin/duck-sprites');
+    spriteThemes = data.themes || {};
+    spriteUsed = data.used || {};
+    const themes = Object.keys(spriteThemes);
+    document.getElementById('d_theme').innerHTML =
+      `<option value="">No sprite (use emoji)</option>` +
+      themes.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+    fillSpriteOptions();
+  } catch (e) { /* sprites are optional */ }
+}
+
+function fillSpriteOptions() {
+  const theme = document.getElementById('d_theme').value;
+  const sprites = spriteThemes[theme] || [];
+  document.getElementById('d_sprite').innerHTML = sprites.map(u => {
+    const name = u.split('/').pop().replace('.png', '');
+    const taken = spriteUsed[u];
+    return `<option value="${esc(u)}"${taken ? ' disabled' : ''}>${esc(name)}${taken ? ` — used by ${esc(taken)}` : ''}</option>`;
+  }).join('');
+  previewSprite();
+}
+
+function previewSprite() {
+  const url = document.getElementById('d_sprite').value;
+  const img = document.getElementById('d_preview');
+  if (url) { img.src = url; img.style.display = 'block'; }
+  else { img.style.display = 'none'; }
+}
+
+async function createDuckType() {
+  const name = document.getElementById('d_name').value.trim();
+  if (!name) { alert('Enter a duck name.'); return; }
+  const body = {
+    name,
+    rarity: document.getElementById('d_rarity').value,
+    emoji: document.getElementById('d_emoji').value.trim() || '🐤',
+    description: document.getElementById('d_desc').value.trim() || null,
+    seasonal: document.getElementById('d_seasonal').value.trim() || null,
+    image_url: document.getElementById('d_sprite').value || null,
+  };
+  try {
+    const data = await api('/admin/duck-types', { method: 'POST', body: JSON.stringify(body) });
+    alert(`Created "${data.name}" (${data.rarity})! Lore is generating in the background.`);
+    document.getElementById('d_name').value = '';
+    document.getElementById('d_desc').value = '';
+    document.getElementById('d_seasonal').value = '';
+    loadDuckOptions();
+    loadDuckSprites();
+  } catch (e) { alert('Create failed: ' + e.message); }
+}
+
+async function openTable(name) {
+  table = name; offset = 0;
+  try {
+    const data = await api(`/admin/tables/${name}?limit=${PAGE}&offset=0`);
+    rows = data.rows;
+    hasMore = data.total === undefined ? rows.length === PAGE : data.total > PAGE;
+    renderRows();
+  } catch (e) { alert('Could not load table: ' + e.message); }
+}
+
+function summarize(r) {
+  const fields = SUMMARY[table] || Object.keys(r).filter(k => k !== 'id').slice(0, 2);
+  return fields.map(f => r[f]).filter(v => v !== undefined && v !== null && v !== '')
+    .map(v => { v = String(v); return v.length > 40 ? v.slice(0, 40) + '…' : v; })
+    .slice(0, 2).join(' · ') || '—';
+}
+
+function renderRows() {
+  sub.textContent = `${rows.length} rows loaded · newest first`;
+  crumb.innerHTML = `<a onclick="loadTables()">tables</a> / ${esc(table)}`;
+  app.innerHTML = (rows.length ? rows.map(r =>
+    `<div class="card" onclick="openDetail(${r.id})">
+       <div class="rowline"><span class="id">#${r.id}</span><span class="sum">${esc(summarize(r))}</span><span>&#8250;</span></div>
+     </div>`).join('') : '<p class="empty">No rows in this table yet.</p>')
+    + (hasMore ? '<button id="more" class="ghost" onclick="loadMore()">Load more</button>' : '');
+}
+
+async function loadMore() {
+  const next = offset + PAGE;
+  try {
+    const data = await api(`/admin/tables/${table}?limit=${PAGE}&offset=${next}`);
+    rows = rows.concat(data.rows);
+    offset = next;
+    hasMore = data.total === undefined ? data.rows.length === PAGE : data.total > next + PAGE;
+    renderRows();
+  } catch (e) { alert('Could not load more: ' + e.message); }
+}
+
+async function openDetail(id) {
+  try {
+    const data = await api(`/admin/tables/${table}/${id}`);
+    const row = data.row;
+    detailEditable = data.editable || [];
+    sub.textContent = `${table} · full record`;
+    crumb.innerHTML = `<a onclick="loadTables()">tables</a> / <a onclick="openTable('${table}')">${esc(table)}</a> / #${id}`;
+    app.innerHTML = `<div class="card" style="cursor:default; display:block">` +
+      Object.entries(row).map(([k, v]) =>
+        `<div class="kv"><span class="k">${esc(k)}</span><span class="v">${esc(typeof v === 'object' ? JSON.stringify(v) : v)}</span></div>`).join('') +
+      `</div>
+      <div style="display:flex; gap:10px;">
+        ${detailEditable.length ? `<button class="ghost" style="flex:1;" onclick="editRow(${id})">Edit</button>` : ''}
+        ${table === 'users' ? `<button class="${row.is_banned ? 'ghost' : 'danger'}" style="flex:1; margin-top:0;" onclick="toggleBan(${id}, ${!!row.is_banned}, () => openDetail(${id}))">${row.is_banned ? 'Unban' : 'Ban'} user</button>` : ''}
+        <button class="danger" style="flex:1; margin-top:0;" onclick="delRow(${id})">Delete this row</button>
+      </div>`;
+  } catch (e) { alert('Could not load row: ' + e.message); }
+}
+
+async function toggleBan(id, currentlyBanned, refresh) {
+  const action = currentlyBanned ? 'unban' : 'ban';
+  if (!confirm(`${action === 'ban' ? 'Ban' : 'Unban'} user #${id}?${action === 'ban' ? ' They will be locked out immediately.' : ''}`)) return;
+  try {
+    await api(`/admin/users/${id}/${action}`, { method: 'POST' });
+    refresh();
+  } catch (e) { alert('Failed: ' + e.message); }
+}
+
+function editInput(col, value) {
+  const v = value === null || value === undefined ? '' : value;
+  const idAttr = `id="f_${col.name}"`;
+  if (table === 'duck_types' && col.name === 'image_url') {
+    return duckSpriteEditInput(String(v));
+  }
+  if (col.type === 'boolean') {
+    return `<input type="checkbox" ${idAttr} ${v ? 'checked' : ''} style="width:auto; transform:scale(1.4);">`;
+  }
+  const str = typeof v === 'object' ? JSON.stringify(v) : String(v);
+  if (str.length > 80 || col.type === 'json') {
+    return `<textarea ${idAttr} rows="3">${esc(str)}</textarea>`;
+  }
+  return `<input ${idAttr} value="${esc(str).replace(/"/g, '&quot;')}">`;
+}
+
+// Sprite picker used in place of the plain text field when editing a duck's
+// image_url. The <select> keeps id="f_image_url" so saveRow() picks it up.
+let duckSpriteEditCurrent = '';
+function duckSpriteEditInput(current) {
+  duckSpriteEditCurrent = current || '';
+  const themes = Object.keys(spriteThemes);
+  let curTheme = '';
+  for (const t of themes) {
+    if ((spriteThemes[t] || []).includes(duckSpriteEditCurrent)) { curTheme = t; break; }
+  }
+  const themeOpts = `<option value="">No sprite (use emoji)</option>` +
+    themes.map(t => `<option value="${esc(t)}"${t === curTheme ? ' selected' : ''}>${esc(t)}</option>`).join('');
+  return `<select id="f_image_url_theme" onchange="fillDuckSpriteEditOptions()" style="margin-bottom:6px;">${themeOpts}</select>` +
+    `<select id="f_image_url" onchange="previewDuckSpriteEdit()" style="margin-bottom:6px;"></select>` +
+    `<img id="f_image_url_preview" style="display:none; width:64px; height:64px; image-rendering:pixelated; background:#222; border-radius:8px;">`;
+}
+
+function fillDuckSpriteEditOptions() {
+  const sel = document.getElementById('f_image_url');
+  if (!sel) return;
+  const theme = document.getElementById('f_image_url_theme').value;
+  const sprites = spriteThemes[theme] || [];
+  const cur = duckSpriteEditCurrent;
+  sel.innerHTML = `<option value="">No sprite (use emoji)</option>` + sprites.map(u => {
+    const name = u.split('/').pop().replace('.png', '');
+    const taken = spriteUsed[u];
+    return `<option value="${esc(u)}"${u === cur ? ' selected' : ''}>${esc(name)}${taken ? ` — used by ${esc(taken)}` : ''}</option>`;
+  }).join('');
+  previewDuckSpriteEdit();
+}
+
+function previewDuckSpriteEdit() {
+  const url = document.getElementById('f_image_url').value;
+  const img = document.getElementById('f_image_url_preview');
+  if (url) { img.src = url; img.style.display = 'block'; }
+  else { img.style.display = 'none'; }
+}
+
+async function editRow(id) {
+  try {
+    const data = await api(`/admin/tables/${table}/${id}`);
+    const row = data.row;
+    detailEditable = data.editable || [];
+    sub.textContent = `${table} · edit record`;
+    crumb.innerHTML = `<a onclick="loadTables()">tables</a> / <a onclick="openTable('${table}')">${esc(table)}</a> / <a onclick="openDetail(${id})">#${id}</a> / edit`;
+    app.innerHTML = `<div class="card" style="cursor:default; display:block">` +
+      detailEditable.map(col =>
+        `<div class="kv"><span class="k">${esc(col.name)}<br><small style="color:var(--muted)">${col.type}</small></span>` +
+        `<span class="v">${editInput(col, row[col.name])}</span></div>`).join('') +
+      `</div>
+      <div style="display:flex; gap:10px;">
+        <button style="flex:1;" onclick="saveRow(${id})">Save</button>
+        <button class="ghost" style="flex:1;" onclick="openDetail(${id})">Cancel</button>
+      </div>`;
+    if (document.getElementById('f_image_url')) fillDuckSpriteEditOptions();
+  } catch (e) { alert('Could not load row: ' + e.message); }
+}
+
+async function saveRow(id) {
+  const payload = {};
+  for (const col of detailEditable) {
+    const el = document.getElementById('f_' + col.name);
+    if (!el) continue;
+    payload[col.name] = col.type === 'boolean' ? el.checked : el.value;
+  }
+  try {
+    await api(`/admin/tables/${table}/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+    openDetail(id);
+  } catch (e) { alert('Save failed: ' + e.message); }
+}
+
+async function delRow(id) {
+  if (!confirm(`Delete ${table} #${id}? This cannot be undone.`)) return;
+  try {
+    await api(`/admin/tables/${table}/${id}`, { method: 'DELETE' });
+    openTable(table);
+  } catch (e) { alert('Delete failed: ' + e.message); }
+}
+
+showLogin('');
+</script>
+</body>
+</html>
