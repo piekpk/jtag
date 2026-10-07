@@ -542,12 +542,16 @@ def _reply_worker(user_id, message, channel="global"):
 # --- JtapBot nearby places --------------------------------------------------
 
 _PLACES_KEYWORDS = {
-    "gas": {"gas", "fuel", "diesel"},
-    "mechanic": {"mechanic", "repair", "autorepair"},
-    "tow": {"tow", "towing"},
+    "gas": {"gas", "gasoline", "petrol", "fuel", "diesel", "pump", "pumps",
+            "fill", "fillup", "refuel", "gasstation"},
+    "mechanic": {"mechanic", "repair", "autorepair", "garage", "tire", "tires",
+                 "oil", "brakes", "alignment", "inspection"},
+    "tow": {"tow", "towing", "stranded", "stuck", "winch", "recovery", "roadside"},
     "food": {"food", "restaurant", "restaurants", "eat", "eating", "hungry",
              "pizza", "burger", "burgers", "taco", "tacos", "diner", "breakfast",
-             "lunch", "dinner", "sandwich", "bbq"},
+             "lunch", "dinner", "sandwich", "bbq", "coffee", "cafe", "espresso",
+             "latte", "starbucks", "dunkin", "snack", "snacks", "thirsty",
+             "drink", "drinks"},
 }
 
 _PLACES_EMOJI = {"gas": "⛽", "mechanic": "🔧", "tow": "🪝", "food": "🍔"}
