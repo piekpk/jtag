@@ -43,3 +43,5 @@ both terminals need to be in the C:\jeep-proximity-app\jtag\backend> directory
  ngrok http 8000 --url https://unknowing-dropper-starfish.ngrok-free.dev 
  2 terminal will need to run the lightSQL
  python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+MuseAI integrated [20:21 - 2026-10-07]
