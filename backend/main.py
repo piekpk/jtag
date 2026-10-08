@@ -2,6 +2,7 @@ import shutil
 import os
 import json
 import random
+import secrets
 import re
 import sqlite3
 from typing import Optional
@@ -17,6 +18,8 @@ from sqlalchemy import create_engine, or_, func
 from sqlalchemy.orm import sessionmaker, Session
 from passlib.context import CryptContext
 from pydantic import BaseModel
+from google.oauth2 import id_token as google_id_token
+from google.auth.transport import requests as google_requests
 from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, Milestone, PhotoReaction, MarketListing, Notification, Meetup, MeetupRsvp, PlaceSearch, SosRequest, SosResponse, AdminAuditLog
 from schemas import UserProfileUpdate, UserProfileResponse, UserCreate
 import duck_ai
@@ -127,6 +130,20 @@ def _ensure_fcm_token_column():
         conn.close()
 
 
+def _ensure_google_sub_column():
+    """Lightweight migration: add users.google_sub to link Google sign-ins."""
+    conn = get_raw_db()
+    try:
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(users)")]
+        if "google_sub" not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN google_sub TEXT")
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_google_sub ON users(google_sub)")
+            conn.commit()
+            print("Migration: added users.google_sub column.")
+    finally:
+        conn.close()
+
+
 def _install_duck_sprites():
     """Copy the bundled duck sprite library into the uploads dir.
 
@@ -200,6 +217,7 @@ _ensure_duck_ai_columns()
 _ensure_duck_image_column()
 _ensure_push_token_column()
 _ensure_fcm_token_column()
+_ensure_google_sub_column()
 _install_duck_sprites()
 _bootstrap_admins()
 
@@ -260,6 +278,10 @@ SECRET_KEY = os.environ.get("JTAP_SECRET_KEY", "jtap-dev-secret-change-me")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 30
 
+# Google Sign-In: web OAuth client ID used as the audience when verifying
+# Google ID tokens. Set GOOGLE_WEB_CLIENT_ID in the environment.
+GOOGLE_WEB_CLIENT_ID = os.environ.get("GOOGLE_WEB_CLIENT_ID", "")
+
 if SECRET_KEY == "jtap-dev-secret-change-me":
     print("WARNING: JTAP_SECRET_KEY not set - using insecure dev default. Set the env var in production.")
 
@@ -307,6 +329,10 @@ class AuthResponse(UserProfileResponse):
     access_token: str
     token_type: str = "bearer"
 
+class GoogleAuthRequest(BaseModel):
+    id_token: str
+
+
 # --- Auth Endpoints ---
 @app.post("/signup", response_model=AuthResponse)
 def signup(user: UserCreate, db: Session = Depends(get_db)):
@@ -345,6 +371,57 @@ def login(user_credentials: UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=403, detail="This account has been banned")
 
     _check_holiday_ducks(db, user)
+
+    return AuthResponse(
+        id=user.id,
+        email=user.email,
+        profile_picture_url=user.profile_picture_url,
+        settings=user.settings,
+        is_admin=user.is_admin,
+        access_token=create_access_token(user.id),
+    )
+
+@app.post("/auth/google", response_model=AuthResponse)
+def auth_google(body: GoogleAuthRequest, db: Session = Depends(get_db)):
+    """Sign in / sign up with a Google ID token verified against Google."""
+    if not GOOGLE_WEB_CLIENT_ID:
+        raise HTTPException(status_code=500, detail="Google sign-in is not configured on the server")
+    try:
+        info = google_id_token.verify_oauth2_token(
+            body.id_token, google_requests.Request(), GOOGLE_WEB_CLIENT_ID
+        )
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid Google token")
+    google_sub = info.get("sub")
+    email = (info.get("email") or "").strip().lower()
+    if not google_sub or not email:
+        raise HTTPException(status_code=400, detail="Google account did not provide an email")
+
+    user = db.query(User).filter(User.google_sub == google_sub).first()
+    if not user:
+        # Link Google sign-in to an existing email account, or create one.
+        user = db.query(User).filter(User.email == email).first()
+        if user:
+            user.google_sub = google_sub
+            db.commit()
+            db.refresh(user)
+        else:
+            # Unusable random password hash: this account can only sign in via Google.
+            new_user = User(
+                email=email,
+                hashed_password=pwd_context.hash(secrets.token_urlsafe(32)),
+                google_sub=google_sub,
+                profile_picture_url=info.get("picture"),
+                is_admin=email in _admin_emails(),
+            )
+            db.add(new_user)
+            db.commit()
+            db.refresh(new_user)
+            _ensure_starter_ducks(db, new_user.id)
+            _check_holiday_ducks(db, new_user)
+            user = new_user
+    if getattr(user, "is_banned", False):
+        raise HTTPException(status_code=403, detail="This account has been banned")
 
     return AuthResponse(
         id=user.id,
