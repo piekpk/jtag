@@ -10,7 +10,7 @@
 // one file so nothing else needs editing.
 
 export const GOOGLE_WEB_CLIENT_ID = "PASTE_WEB_CLIENT_ID_HERE";
-export const GOOGLE_ANDROID_CLIENT_ID = "PASTE_ANDROID_CLIENT_ID_HERE";
+export const GOOGLE_ANDROID_CLIENT_ID = "522179070431-rvj1a2vukkd8p45ld5pjcoi45qerab7v.apps.googleusercontent.com";
 export const GOOGLE_IOS_CLIENT_ID = "PASTE_IOS_CLIENT_ID_HERE";
 
 // True once the web client ID has been filled in.
