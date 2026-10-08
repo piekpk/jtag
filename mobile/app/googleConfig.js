@@ -1,16 +1,21 @@
 // Google Sign-In configuration.
 //
-// 1. Create your OAuth client IDs at:
-//    https://console.cloud.google.com/apis/credentials
-// 2. Paste each client ID below, replacing the PASTE_..._HERE placeholder.
+// You need TWO separate OAuth clients in Google Cloud
+// (https://console.cloud.google.com/apis/credentials). They can NEVER share
+// an ID - Google issues a unique client ID per client:
 //
-// The ANDROID client ID is REQUIRED for Google sign-in on real Android devices:
-// Google rejects the app's custom-scheme redirect when the web client is used.
-// (The iOS ID is optional until iOS is tested; the app falls back to the web ID.)
-// These IDs are public identifiers (not secrets), but keep them in this
-// one file so nothing else needs editing.
+//   1. Application type "Web application", name it "Jtag web"
+//      -> paste its client ID as GOOGLE_WEB_CLIENT_ID below.
+//   2. Application type "Android", name it "Jtag Android"
+//      Package name: com.jtap.app
+//      SHA-1: 5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25
+//      Advanced settings -> "Enable Custom URI Scheme" must be ON.
+//      -> paste its client ID as GOOGLE_ANDROID_CLIENT_ID below.
+//
+// The iOS client is optional until iOS is tested; the app falls back to the
+// web ID on iOS when the placeholder is left in place.
 
-export const GOOGLE_WEB_CLIENT_ID = "522179070431-rvj1a2vukkd8p45ld5pjcoi45qerab7v.apps.googleusercontent.com";
+export const GOOGLE_WEB_CLIENT_ID = "PASTE_WEB_CLIENT_ID_HERE";
 export const GOOGLE_ANDROID_CLIENT_ID = "522179070431-rvj1a2vukkd8p45ld5pjcoi45qerab7v.apps.googleusercontent.com";
 export const GOOGLE_IOS_CLIENT_ID = "PASTE_IOS_CLIENT_ID_HERE";
 
