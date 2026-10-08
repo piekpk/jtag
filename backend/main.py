@@ -144,6 +144,34 @@ def _ensure_google_sub_column():
         conn.close()
 
 
+def _ensure_facebook_id_column():
+    """Lightweight migration: add users.facebook_id to link Facebook logins."""
+    conn = get_raw_db()
+    try:
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(users)")]
+        if "facebook_id" not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN facebook_id TEXT")
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_facebook_id ON users(facebook_id)")
+            conn.commit()
+            print("Migration: added users.facebook_id column.")
+    finally:
+        conn.close()
+
+
+def _ensure_x_id_column():
+    """Lightweight migration: add users.x_id to link X sign-ins."""
+    conn = get_raw_db()
+    try:
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(users)")]
+        if "x_id" not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN x_id TEXT")
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_x_id ON users(x_id)")
+            conn.commit()
+            print("Migration: added users.x_id column.")
+    finally:
+        conn.close()
+
+
 def _install_duck_sprites():
     """Copy the bundled duck sprite library into the uploads dir.
 
@@ -218,6 +246,8 @@ _ensure_duck_image_column()
 _ensure_push_token_column()
 _ensure_fcm_token_column()
 _ensure_google_sub_column()
+_ensure_facebook_id_column()
+_ensure_x_id_column()
 _install_duck_sprites()
 _bootstrap_admins()
 
@@ -345,6 +375,14 @@ class GoogleAuthRequest(BaseModel):
     id_token: str
 
 
+class FacebookAuthRequest(BaseModel):
+    access_token: str
+
+
+class XAuthRequest(BaseModel):
+    access_token: str
+
+
 # --- Auth Endpoints ---
 @app.post("/signup", response_model=AuthResponse)
 def signup(user: UserCreate, db: Session = Depends(get_db)):
@@ -447,6 +485,125 @@ def auth_google(body: GoogleAuthRequest, db: Session = Depends(get_db)):
         is_admin=user.is_admin,
         access_token=create_access_token(user.id),
     )
+
+
+@app.post("/auth/facebook", response_model=AuthResponse)
+def auth_facebook(body: FacebookAuthRequest, db: Session = Depends(get_db)):
+    """Sign in / sign up with a Facebook access token verified via the Graph API."""
+    try:
+        resp = requests.get(
+            "https://graph.facebook.com/me",
+            params={"fields": "id,name,email,picture.type(large)", "access_token": body.access_token},
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        print(f"[auth/facebook] Graph API request failed: {exc}")
+        raise HTTPException(status_code=502, detail="Could not verify Facebook token")
+    if resp.status_code != 200:
+        print(f"[auth/facebook] Graph API rejected token: {resp.status_code} {resp.text[:200]}")
+        raise HTTPException(status_code=401, detail="Invalid Facebook token")
+    info = resp.json()
+    facebook_id = info.get("id")
+    email = (info.get("email") or "").strip().lower()
+    if not facebook_id or not email:
+        raise HTTPException(status_code=400, detail="Facebook account did not provide an email")
+
+    user = db.query(User).filter(User.facebook_id == facebook_id).first()
+    if not user:
+        # Link Facebook login to an existing email account, or create one.
+        user = db.query(User).filter(User.email == email).first()
+        if user:
+            user.facebook_id = facebook_id
+            db.commit()
+            db.refresh(user)
+        else:
+            # Unusable random password hash: this account can only sign in via Facebook.
+            picture = (info.get("picture") or {}).get("data", {}).get("url")
+            new_user = User(
+                email=email,
+                hashed_password=secrets.token_hex(32),
+                facebook_id=facebook_id,
+                profile_picture_url=picture,
+                is_admin=email in _admin_emails(),
+            )
+            db.add(new_user)
+            db.commit()
+            db.refresh(new_user)
+            _ensure_starter_ducks(db, new_user.id)
+            _check_holiday_ducks(db, new_user)
+            user = new_user
+    if getattr(user, "is_banned", False):
+        raise HTTPException(status_code=403, detail="This account has been banned")
+
+    return AuthResponse(
+        id=user.id,
+        email=user.email,
+        profile_picture_url=user.profile_picture_url,
+        settings=user.settings,
+        is_admin=user.is_admin,
+        access_token=create_access_token(data={"sub": str(user.id)}),
+    )
+
+@app.post("/auth/x", response_model=AuthResponse)
+def auth_x(body: XAuthRequest, db: Session = Depends(get_db)):
+    """Sign in / sign up with an X access token verified via the X API v2."""
+    try:
+        resp = requests.get(
+            "https://api.twitter.com/2/users/me",
+            params={"user.fields": "profile_image_url"},
+            headers={"Authorization": f"Bearer {body.access_token}"},
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        print(f"[auth/x] X API request failed: {exc}")
+        raise HTTPException(status_code=502, detail="Could not verify X token")
+    if resp.status_code != 200:
+        print(f"[auth/x] X API rejected token: {resp.status_code} {resp.text[:200]}")
+        raise HTTPException(status_code=401, detail="Invalid X token")
+    data = resp.json().get("data") or {}
+    x_id = data.get("id")
+    if not x_id:
+        raise HTTPException(status_code=400, detail="X account did not provide a user ID")
+
+    # X does not provide an email for this scope; use a stable synthetic email
+    # so the account stays unique and linkable. The user can set a real email
+    # later from their profile.
+    email = f"x_{x_id}@x.jtap"
+
+    user = db.query(User).filter(User.x_id == x_id).first()
+    if not user:
+        user = db.query(User).filter(User.email == email).first()
+        if user:
+            user.x_id = x_id
+            db.commit()
+            db.refresh(user)
+        else:
+            # Unusable random password hash: this account can only sign in via X.
+            new_user = User(
+                email=email,
+                hashed_password=secrets.token_hex(32),
+                x_id=x_id,
+                profile_picture_url=data.get("profile_image_url"),
+                is_admin=email in _admin_emails(),
+            )
+            db.add(new_user)
+            db.commit()
+            db.refresh(new_user)
+            _ensure_starter_ducks(db, new_user.id)
+            _check_holiday_ducks(db, new_user)
+            user = new_user
+    if getattr(user, "is_banned", False):
+        raise HTTPException(status_code=403, detail="This account has been banned")
+
+    return AuthResponse(
+        id=user.id,
+        email=user.email,
+        profile_picture_url=user.profile_picture_url,
+        settings=user.settings,
+        is_admin=user.is_admin,
+        access_token=create_access_token(data={"sub": str(user.id)}),
+    )
+
 
 # --- Profile Endpoints ---
 @app.get("/users/{user_id}/profile", response_model=UserProfileResponse)

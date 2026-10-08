@@ -19,6 +19,8 @@ class User(Base):
     push_token = Column(String, nullable=True)  # Expo push token for duck/push notifications
     fcm_token = Column(String, nullable=True)  # native Android FCM token (direct push, no Expo)
     google_sub = Column(String, nullable=True, unique=True)  # Google account ID for Sign in with Google
+    facebook_id = Column(String, nullable=True, unique=True)  # Facebook user ID for Login with Facebook
+    x_id = Column(String, nullable=True, unique=True)  # X (Twitter) user ID for Sign in with X
 
 
 # --- Duck Game Models ---

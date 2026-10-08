@@ -14,6 +14,8 @@ import {
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
+import * as Facebook from 'expo-auth-session/providers/facebook';
+import { useAuthRequest, exchangeCodeAsync } from 'expo-auth-session';
 import { showAlert } from './themedAlert.js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from './config.js';
@@ -25,6 +27,14 @@ import {
   googleConfigured,
   filledIn,
 } from './googleConfig.js';
+import { FB_APP_ID, facebookConfigured } from './facebookConfig.js';
+import {
+  X_CLIENT_ID,
+  X_AUTHORIZATION_ENDPOINT,
+  X_TOKEN_ENDPOINT,
+  X_REDIRECT_URI,
+  xConfigured,
+} from './xConfig.js';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -34,6 +44,8 @@ export default function LoginScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
   const [isGoogleBusy, setIsGoogleBusy] = useState(false);
+  const [isFacebookBusy, setIsFacebookBusy] = useState(false);
+  const [isXBusy, setIsXBusy] = useState(false);
 
   // Google Sign-In request (ID token flow: the token goes to our backend,
   // which verifies it with Google and returns the app's own JWT).
@@ -51,6 +63,30 @@ export default function LoginScreen() {
     // with Error 400. The manifest already registers the com.jtap.app scheme.
     redirectUri: Platform.OS === 'android' ? 'com.jtap.app:/oauthredirect' : undefined,
   });
+
+  // Facebook Sign-In request (OAuth access token flow; the token goes to our
+  // backend, which verifies it with Facebook's Graph API).
+  const [fbRequest, fbResponse, fbPromptAsync] = Facebook.useAuthRequest({
+    clientId: FB_APP_ID,
+    scopes: ['public_profile', 'email'],
+    redirectUri: 'com.jtap.app://oauthredirect',
+  });
+
+  // X Sign-In request (OAuth 2.0 Authorization Code Flow with PKCE; the
+  // authorization code is exchanged for an access token on-device, which goes
+  // to our backend for verification with the X API).
+  const [xRequest, xResponse, xPromptAsync] = useAuthRequest(
+    {
+      clientId: X_CLIENT_ID,
+      scopes: ['tweet.read', 'users.read'],
+      redirectUri: X_REDIRECT_URI,
+      usePKCE: true,
+    },
+    {
+      authorizationEndpoint: X_AUTHORIZATION_ENDPOINT,
+      tokenEndpoint: X_TOKEN_ENDPOINT,
+    }
+  );
 
   // Check if user is already logged in on app startup
   useEffect(() => {
@@ -79,6 +115,45 @@ export default function LoginScreen() {
       showAlert('Google Sign-In', 'Google sign-in failed. Please try again.');
     }
   }, [gResponse]);
+
+  // Handle the result of the Facebook sign-in browser flow
+  useEffect(() => {
+    if (fbResponse?.type === 'success') {
+      const accessToken = fbResponse.params.access_token;
+      handleFacebookLogin(accessToken);
+    } else if (fbResponse?.type === 'error') {
+      showAlert('Facebook Sign-In', 'Facebook sign-in failed. Please try again.');
+    }
+  }, [fbResponse]);
+
+  // Handle the result of the X sign-in browser flow (exchange code for token)
+  useEffect(() => {
+    const finishXLogin = async () => {
+      if (xResponse?.type === 'success') {
+        const { code } = xResponse.params;
+        try {
+          const tokenResult = await exchangeCodeAsync(
+            {
+              clientId: X_CLIENT_ID,
+              code,
+              redirectUri: X_REDIRECT_URI,
+              extraParams: { code_verifier: xRequest?.codeVerifier },
+            },
+            { tokenEndpoint: X_TOKEN_ENDPOINT }
+          );
+          handleXLogin(tokenResult.accessToken);
+        } catch (e) {
+          console.error('X token exchange error:', e);
+          showAlert('X Sign-In', 'Could not complete X sign-in. Please try again.');
+          setIsXBusy(false);
+        }
+      } else if (xResponse?.type === 'error') {
+        showAlert('X Sign-In', 'X sign-in failed. Please try again.');
+        setIsXBusy(false);
+      }
+    };
+    finishXLogin();
+  }, [xResponse]);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -156,6 +231,93 @@ export default function LoginScreen() {
     } catch (error) {
       console.error("Google login network error:", error);
       showAlert("Connection Error", "Failed to connect to the server. Please check your network and try again.");
+    }
+  };
+
+  const handleFacebookPress = async () => {
+    if (!facebookConfigured()) {
+      showAlert(
+        'Not Configured',
+        'Facebook sign-in needs your App ID first. Open facebookConfig.js and paste it in.'
+      );
+      return;
+    }
+    setIsFacebookBusy(true);
+    try {
+      await fbPromptAsync();
+    } finally {
+      setIsFacebookBusy(false);
+    }
+  };
+
+  const handleFacebookLogin = async (accessToken) => {
+    try {
+      const response = await fetch(`${API_URL}/auth/facebook`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        },
+        body: JSON.stringify({ access_token: accessToken }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        await saveSession(data.id, data.access_token);
+        router.replace('/(tabs)/profile');
+      } else {
+        showAlert("Facebook Sign-In Failed", data.detail || "Could not sign you in with Facebook.");
+      }
+    } catch (error) {
+      console.error("Facebook login network error:", error);
+      showAlert("Connection Error", "Failed to connect to the server. Please check your network and try again.");
+    }
+  };
+
+  const handleXPress = async () => {
+    if (!xConfigured()) {
+      showAlert(
+        'Not Configured',
+        'X sign-in needs your Client ID first. Open xConfig.js and paste it in.'
+      );
+      return;
+    }
+    setIsXBusy(true);
+    try {
+      await xPromptAsync();
+    } catch (e) {
+      console.error('X prompt error:', e);
+      setIsXBusy(false);
+    }
+    // Note: setIsXBusy(false) for the success path happens in finishXLogin's
+    // follow-ups; the busy flag is cleared on error above and in handleXLogin.
+  };
+
+  const handleXLogin = async (accessToken) => {
+    try {
+      const response = await fetch(`${API_URL}/auth/x`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        },
+        body: JSON.stringify({ access_token: accessToken }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        await saveSession(data.id, data.access_token);
+        router.replace('/(tabs)/profile');
+      } else {
+        showAlert("X Sign-In Failed", data.detail || "Could not sign you in with X.");
+      }
+    } catch (error) {
+      console.error("X login network error:", error);
+      showAlert("Connection Error", "Failed to connect to the server. Please check your network and try again.");
+    } finally {
+      setIsXBusy(false);
     }
   };
 
@@ -237,6 +399,30 @@ export default function LoginScreen() {
                   />
                   <Text style={styles.googleButtonText}>Continue with Google</Text>
                 </>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.facebookButton, (!fbRequest || isFacebookBusy) && styles.googleButtonDisabled]}
+              onPress={handleFacebookPress}
+              disabled={!fbRequest || isFacebookBusy}
+            >
+              {isFacebookBusy ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Text style={styles.facebookButtonText}>Continue with Facebook</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.xButton, (!xRequest || isXBusy) && styles.googleButtonDisabled]}
+              onPress={handleXPress}
+              disabled={!xRequest || isXBusy}
+            >
+              {isXBusy ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Text style={styles.xButtonText}>Continue with X</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -363,6 +549,34 @@ const styles = StyleSheet.create({
   },
   googleButtonText: {
     color: '#1a1a1a',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  facebookButton: {
+    backgroundColor: '#1877F2',
+    paddingVertical: 13,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  facebookButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  xButton: {
+    backgroundColor: '#000000',
+    paddingVertical: 13,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#333333',
+  },
+  xButtonText: {
+    color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
   },
