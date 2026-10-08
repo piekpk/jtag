@@ -23,6 +23,7 @@ import {
   GOOGLE_ANDROID_CLIENT_ID,
   GOOGLE_IOS_CLIENT_ID,
   googleConfigured,
+  filledIn,
 } from './googleConfig.js';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -36,10 +37,14 @@ export default function LoginScreen() {
 
   // Google Sign-In request (ID token flow: the token goes to our backend,
   // which verifies it with Google and returns the app's own JWT).
+  // Platform client IDs are optional: when left as placeholders, the web
+  // client ID is used on every platform.
+  const androidClientId = filledIn(GOOGLE_ANDROID_CLIENT_ID) || GOOGLE_WEB_CLIENT_ID;
+  const iosClientId = filledIn(GOOGLE_IOS_CLIENT_ID) || GOOGLE_WEB_CLIENT_ID;
   const [gRequest, gResponse, gPromptAsync] = Google.useIdTokenAuthRequest({
     webClientId: GOOGLE_WEB_CLIENT_ID,
-    androidClientId: GOOGLE_ANDROID_CLIENT_ID,
-    iosClientId: GOOGLE_IOS_CLIENT_ID,
+    androidClientId,
+    iosClientId,
   });
 
   // Check if user is already logged in on app startup
