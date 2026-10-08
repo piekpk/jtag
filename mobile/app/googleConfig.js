@@ -1,0 +1,17 @@
+// Google Sign-In configuration.
+//
+// 1. Create your OAuth client IDs at:
+//    https://console.cloud.google.com/apis/credentials
+// 2. Paste each client ID below, replacing the PASTE_..._HERE placeholder.
+//
+// These IDs are public identifiers (not secrets), but keep them in this
+// one file so nothing else needs editing.
+
+export const GOOGLE_WEB_CLIENT_ID = "PASTE_WEB_CLIENT_ID_HERE";
+export const GOOGLE_ANDROID_CLIENT_ID = "PASTE_ANDROID_CLIENT_ID_HERE";
+export const GOOGLE_IOS_CLIENT_ID = "PASTE_IOS_CLIENT_ID_HERE";
+
+// True once the web client ID has been filled in.
+export function googleConfigured() {
+  return !GOOGLE_WEB_CLIENT_ID.startsWith("PASTE_");
+}

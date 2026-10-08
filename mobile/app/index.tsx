@@ -12,16 +12,35 @@ import {
   Image,
 } from 'react-native';
 import { router } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
+import * as Google from 'expo-auth-session/providers/google';
 import { showAlert } from './themedAlert.js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL } from './config.js';
 import { saveSession } from './auth.js';
+import {
+  GOOGLE_WEB_CLIENT_ID,
+  GOOGLE_ANDROID_CLIENT_ID,
+  GOOGLE_IOS_CLIENT_ID,
+  googleConfigured,
+} from './googleConfig.js';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const [isGoogleBusy, setIsGoogleBusy] = useState(false);
+
+  // Google Sign-In request (ID token flow: the token goes to our backend,
+  // which verifies it with Google and returns the app's own JWT).
+  const [gRequest, gResponse, gPromptAsync] = Google.useIdTokenAuthRequest({
+    webClientId: GOOGLE_WEB_CLIENT_ID,
+    androidClientId: GOOGLE_ANDROID_CLIENT_ID,
+    iosClientId: GOOGLE_IOS_CLIENT_ID,
+  });
 
   // Check if user is already logged in on app startup
   useEffect(() => {
@@ -40,6 +59,16 @@ export default function LoginScreen() {
     };
     checkSession();
   }, []);
+
+  // Handle the result of the Google sign-in browser flow
+  useEffect(() => {
+    if (gResponse?.type === 'success') {
+      const idToken = gResponse.params.id_token;
+      handleGoogleLogin(idToken);
+    } else if (gResponse?.type === 'error') {
+      showAlert('Google Sign-In', 'Google sign-in failed. Please try again.');
+    }
+  }, [gResponse]);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -79,6 +108,47 @@ export default function LoginScreen() {
     }
   };
 
+  const handleGooglePress = async () => {
+    if (!googleConfigured()) {
+      showAlert(
+        'Not Configured',
+        'Google sign-in needs your client IDs first. Open googleConfig.js and paste them in.'
+      );
+      return;
+    }
+    setIsGoogleBusy(true);
+    try {
+      await gPromptAsync();
+    } finally {
+      setIsGoogleBusy(false);
+    }
+  };
+
+  const handleGoogleLogin = async (idToken) => {
+    try {
+      const response = await fetch(`${API_URL}/auth/google`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        },
+        body: JSON.stringify({ id_token: idToken }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        await saveSession(data.id, data.access_token);
+        router.replace('/(tabs)/profile');
+      } else {
+        showAlert("Google Sign-In Failed", data.detail || "Could not sign you in with Google.");
+      }
+    } catch (error) {
+      console.error("Google login network error:", error);
+      showAlert("Connection Error", "Failed to connect to the server. Please check your network and try again.");
+    }
+  };
+
   if (isCheckingSession) {
     return (
       <View style={styles.loadingContainer}>
@@ -86,6 +156,8 @@ export default function LoginScreen() {
       </View>
     );
   }
+
+  const googleDisabled = !gRequest || isGoogleBusy;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -122,8 +194,8 @@ export default function LoginScreen() {
               secureTextEntry
             />
 
-            <TouchableOpacity 
-              style={[styles.loginButton, isSubmitting && styles.loginButtonDisabled]} 
+            <TouchableOpacity
+              style={[styles.loginButton, isSubmitting && styles.loginButtonDisabled]}
               onPress={handleLogin}
               disabled={isSubmitting}
             >
@@ -131,6 +203,30 @@ export default function LoginScreen() {
                 <ActivityIndicator color="#ffffff" />
               ) : (
                 <Text style={styles.loginButtonText}>Sign In</Text>
+              )}
+            </TouchableOpacity>
+
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <TouchableOpacity
+              style={[styles.googleButton, googleDisabled && styles.googleButtonDisabled]}
+              onPress={handleGooglePress}
+              disabled={googleDisabled}
+            >
+              {isGoogleBusy ? (
+                <ActivityIndicator color="#1a1a1a" />
+              ) : (
+                <>
+                  <Image
+                    source={require('../assets/google-g.png')}
+                    style={styles.googleIcon}
+                  />
+                  <Text style={styles.googleButtonText}>Continue with Google</Text>
+                </>
               )}
             </TouchableOpacity>
           </View>
@@ -223,6 +319,42 @@ const styles = StyleSheet.create({
     color: '#121212',
     fontSize: 16,
     fontWeight: '700',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 18,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#333333',
+  },
+  dividerText: {
+    color: '#8e8e93',
+    fontSize: 13,
+    marginHorizontal: 12,
+  },
+  googleButton: {
+    backgroundColor: '#ffffff',
+    paddingVertical: 13,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  googleButtonDisabled: {
+    opacity: 0.6,
+  },
+  googleIcon: {
+    width: 20,
+    height: 20,
+    marginRight: 10,
+  },
+  googleButtonText: {
+    color: '#1a1a1a',
+    fontSize: 16,
+    fontWeight: '600',
   },
   footer: {
     flexDirection: 'row',
