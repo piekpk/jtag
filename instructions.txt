@@ -1,0 +1,15 @@
+Building the APK, step by step. Your eas.json already has a preview profile set to output an APK, so the simplest path is EAS cloud build:
+
+1. In a terminal inside the mobile/ folder, install the build tool once: npm install -g eas-cli
+
+2. Log in: eas login (use the Expo account under piekpks-team)
+
+3.Start the build: eas build -p android --profile preview
+
+4.Wait for the cloud build to finish (usually 10–20 min). You'll get a download link and QR code.
+
+5.On your phone, open the link, download the APK, allow "install unknown apps" when prompted, and install it.
+
+6.The backend has to be running and reachable: one terminal runs ngrok http 8000 --url https://unknowing-dropper-starfish.ngrok-free.dev, another runs python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload from the backend/ folder.
+
+7.Important: your config.js has the ngrok URL baked in at build time. If that URL ever changes, update config.js and rebuild the APK, or the app will talk to a dead address.
