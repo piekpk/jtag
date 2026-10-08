@@ -401,9 +401,12 @@ def auth_google(body: GoogleAuthRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Google sign-in is not configured on the server")
     try:
         info = google_id_token.verify_oauth2_token(body.id_token, google_requests.Request())
-    except ValueError:
+    except ValueError as exc:
+        print(f"[auth/google] token signature/expiry check failed: {exc}")
         raise HTTPException(status_code=401, detail="Invalid Google token")
-    if info.get("aud") not in audiences:
+    aud = info.get("aud")
+    if aud not in audiences:
+        print(f"[auth/google] audience mismatch: token aud={aud!r} is not among the server's configured Google client IDs")
         raise HTTPException(status_code=401, detail="Invalid Google token")
     google_sub = info.get("sub")
     email = (info.get("email") or "").strip().lower()
