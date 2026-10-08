@@ -45,12 +45,11 @@ export default function LoginScreen() {
     webClientId: GOOGLE_WEB_CLIENT_ID,
     androidClientId,
     iosClientId,
-    // Explicit redirect URI. The library's auto-detection is unreliable on this
-    // build, and on Android the redirect also passes through Expo Router, so it
-    // must exactly match a custom scheme the app handles. jtap:///oauthredirect
-    // is the URL Google actually redirects to (custom URI scheme is enabled on
-    // our Android OAuth client) and Android routes it back to the app.
-    redirectUri: Platform.OS === 'android' ? 'jtap:///oauthredirect' : undefined,
+    // Explicit redirect URI. For Android OAuth clients, Google only accepts the
+    // app's package name as the custom scheme (one slash): com.jtap.app:/oauthredirect.
+    // Verified against Google's servers; other forms (jtap://...) are rejected
+    // with Error 400. The manifest already registers the com.jtap.app scheme.
+    redirectUri: Platform.OS === 'android' ? 'com.jtap.app:/oauthredirect' : undefined,
   });
 
   // Check if user is already logged in on app startup
