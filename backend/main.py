@@ -278,9 +278,21 @@ SECRET_KEY = os.environ.get("JTAP_SECRET_KEY", "jtap-dev-secret-change-me")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 30
 
-# Google Sign-In: web OAuth client ID used as the audience when verifying
-# Google ID tokens. Set GOOGLE_WEB_CLIENT_ID in the environment.
-GOOGLE_WEB_CLIENT_ID = os.environ.get("GOOGLE_WEB_CLIENT_ID", "")
+# Google Sign-In: OAuth client IDs accepted as the audience when verifying
+# Google ID tokens. The web ID is required; Android/iOS IDs are optional and
+# only needed once those OAuth clients exist (tokens minted for them carry
+# their own client ID as the audience).
+GOOGLE_WEB_CLIENT_ID = os.environ.get("GOOGLE_WEB_CLIENT_ID", "").strip()
+GOOGLE_ANDROID_CLIENT_ID = os.environ.get("GOOGLE_ANDROID_CLIENT_ID", "").strip()
+GOOGLE_IOS_CLIENT_ID = os.environ.get("GOOGLE_IOS_CLIENT_ID", "").strip()
+
+
+def google_allowed_audiences():
+    return {
+        c
+        for c in (GOOGLE_WEB_CLIENT_ID, GOOGLE_ANDROID_CLIENT_ID, GOOGLE_IOS_CLIENT_ID)
+        if c
+    }
 
 if SECRET_KEY == "jtap-dev-secret-change-me":
     print("WARNING: JTAP_SECRET_KEY not set - using insecure dev default. Set the env var in production.")
@@ -384,13 +396,14 @@ def login(user_credentials: UserCreate, db: Session = Depends(get_db)):
 @app.post("/auth/google", response_model=AuthResponse)
 def auth_google(body: GoogleAuthRequest, db: Session = Depends(get_db)):
     """Sign in / sign up with a Google ID token verified against Google."""
-    if not GOOGLE_WEB_CLIENT_ID:
+    audiences = google_allowed_audiences()
+    if not audiences:
         raise HTTPException(status_code=500, detail="Google sign-in is not configured on the server")
     try:
-        info = google_id_token.verify_oauth2_token(
-            body.id_token, google_requests.Request(), GOOGLE_WEB_CLIENT_ID
-        )
+        info = google_id_token.verify_oauth2_token(body.id_token, google_requests.Request())
     except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid Google token")
+    if info.get("aud") not in audiences:
         raise HTTPException(status_code=401, detail="Invalid Google token")
     google_sub = info.get("sub")
     email = (info.get("email") or "").strip().lower()
