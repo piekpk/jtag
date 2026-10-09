@@ -15,7 +15,7 @@ export const X_TOKEN_ENDPOINT = "https://api.twitter.com/2/oauth2/token";
 // rejects the one-slash form that Google requires.
 export const X_REDIRECT_URI = "com.jtap.app://oauthredirect";
 
-export const X_CLIENT_ID = "MXNHU1hxR1pXMGFib2NuR2R3OXM6MTpjaQ";
+export const X_CLIENT_ID = "PASTE_X_CLIENT_ID_HERE";
 
 // True once a real X Client ID has been filled in.
 export function xConfigured() {
