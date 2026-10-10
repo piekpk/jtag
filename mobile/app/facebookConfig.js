@@ -7,7 +7,7 @@
 // Android, and "com.jtap.app://oauthredirect" must be listed under
 // Facebook Login -> Settings -> Valid OAuth Redirect URIs.
 
-export const FB_APP_ID = "PASTE_FB_APP_ID_HERE";
+export const FB_APP_ID = "2223284278283422";
 
 // True once a real Facebook App ID has been filled in.
 export function facebookConfigured() {
