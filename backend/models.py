@@ -245,3 +245,27 @@ class AdminAuditLog(Base):
     target_id = Column(String(60), nullable=True)
     detail = Column(String(500), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class Squad(Base):
+    """A named group/clan of users (Epic 2: Squads)."""
+    __tablename__ = "squads"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True, nullable=False)
+    description = Column(Text, nullable=True)
+    avatar_url = Column(String, nullable=True)
+    created_by = Column(Integer, index=True, nullable=False)
+    is_private = Column(Boolean, nullable=False, default=False, server_default="0")
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class SquadMember(Base):
+    """Membership of a user in a squad, with a role."""
+    __tablename__ = "squad_members"
+
+    id = Column(Integer, primary_key=True, index=True)
+    squad_id = Column(Integer, index=True, nullable=False)
+    user_id = Column(Integer, index=True, nullable=False)
+    role = Column(String, nullable=False, default="member")  # leader | member
+    joined_at = Column(DateTime, default=datetime.utcnow, nullable=False)
