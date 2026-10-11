@@ -104,3 +104,109 @@ This document outlines the vertical-slice user stories for Epic 1 of the TrailGr
 * **Given** a user attempts to view a peer's rig profile from the radar map.
 * **When** the target user has configured their account privacy settings to "Private."
 * **Then** the system displays a locked state reading "This rig profile is private" and strictly prevents any modification array data from being loaded or displayed.
+
+# Epic 2: Squads (Groups / Clans)
+
+This document outlines the vertical-slice user stories for Epic 2 of the TrailGrid application: named, joinable groups for the off-road community. All acceptance criteria strictly follow the Given/When/Then format to ensure requirements are testable and explicitly cover happy paths, error paths, empty states, and permission boundaries. Unquantified adjectives have been deliberately omitted.
+
+## Formation & Membership
+
+### Story 2.1: Create Squad
+*As a user, I want to create a squad with a name, description, and avatar, so that I can gather my off-road crew in one place.*
+
+**Acceptance Criteria:**
+* **Given** an authenticated user submits the Create Squad form with a valid name.
+* **When** the server processes the submission.
+* **Then** a squad is created, the creator is assigned the `leader` role, and the user is redirected to the new squad profile.
+* **Given** the user attempts to create a squad.
+* **When** the name field is left blank and the form is submitted.
+* **Then** the system prevents submission and surfaces an inline error reading "Squad name is required."
+* **Given** the user attempts to create a squad.
+* **When** the chosen name is already taken by another squad.
+* **Then** the API returns 400 and the form displays "That squad name is taken."
+
+### Story 2.2: Join and Leave Squads
+*As a user, I want to join public squads and leave squads I'm in, so that I control my own memberships.*
+
+**Acceptance Criteria:**
+* **Given** an authenticated user views a public squad they have not joined.
+* **When** they tap "Join Squad."
+* **Then** they become a member and the member count increments immediately.
+* **Given** a user who is already a squad member.
+* **When** they attempt to join the same squad again.
+* **Then** the API rejects the request and their membership is unchanged.
+* **Given** a squad member viewing the squad profile.
+* **When** they choose "Leave" and confirm the dialog reading "Leave this squad?"
+* **Then** they are removed from the squad and the member count decrements.
+* **Given** the squad leader attempts to leave.
+* **When** the leave request is processed.
+* **Then** the API returns 400 until leadership has been transferred to another member.
+
+### Story 2.3: Invite Members
+*As a squad member, I want to invite other users to my squad, so that my crew can grow.*
+
+**Acceptance Criteria:**
+* **Given** a squad member viewing the squad profile.
+* **When** they invite another user via the member picker.
+* **Then** the invited user receives a pending invite.
+* **Given** a user with a pending invite opens their invites list.
+* **When** the list loads.
+* **Then** each invite renders with Accept and Decline actions.
+* **Given** a user with no pending invites opens their invites list.
+* **When** the list loads.
+* **Then** the system displays the empty state reading "No pending invites".
+* **Given** a user attempts to accept or decline an invite addressed to someone else.
+* **When** the request is processed.
+* **Then** the API returns 403.
+
+## Profiles & Moderation
+
+### Story 2.4: View Squad Profile
+*As a user, I want to view a squad's profile with its members, so that I can decide whether to join.*
+
+**Acceptance Criteria:**
+* **Given** a user opens any squad profile.
+* **When** the profile loads.
+* **Then** the system displays the squad avatar, name, description, member count, and member grid with roles.
+* **Given** a user who is not a member attempts to view a private squad.
+* **When** the profile is requested.
+* **Then** the system displays a locked state reading "This squad is private" with no member list and no activity data.
+* **Given** a squad member views the squad profile.
+* **When** the profile loads.
+* **Then** the Join/Leave button reflects their current membership state.
+
+### Story 2.5: Manage Squad Roles
+*As a squad leader, I want to manage roles and remove members, so that I can moderate my squad.*
+
+**Acceptance Criteria:**
+* **Given** the squad leader views the squad profile.
+* **When** the profile loads.
+* **Then** Edit, Remove member, Transfer leadership, and Delete squad controls are visible.
+* **Given** a user who is not the squad leader views the squad profile.
+* **When** the profile loads.
+* **Then** the leader-only controls are completely hidden from the DOM, not merely disabled.
+* **Given** the squad leader transfers leadership to another member.
+* **When** the transfer is confirmed.
+* **Then** the target member becomes leader and the previous leader becomes a regular member.
+* **Given** the squad leader deletes the squad and confirms.
+* **When** the deletion is processed.
+* **Then** the squad, its memberships, and its pending invites are permanently removed.
+
+## Engagement
+
+### Story 2.6: Squad Activity Feed
+*As a squad member, I want to see my squad's recent activity, so that I stay in the loop on what my crew is up to.*
+
+**Acceptance Criteria:**
+* **Given** a squad member opens the squad feed.
+* **When** the feed loads.
+* **Then** member events (rig created, mod added, duck dropped) render newest-first, paginated.
+* **Given** a user who is not a squad member requests the feed.
+* **When** the request is processed.
+* **Then** the API returns 403.
+* **Given** a squad with no recorded activity.
+* **When** the feed loads.
+* **Then** the system displays the empty state reading "No squad activity yet — be the first to post."
+* **Given** a squad member viewing the feed.
+* **When** they pull to refresh.
+* **Then** the feed reloads from the latest events.
