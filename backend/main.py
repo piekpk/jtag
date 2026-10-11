@@ -17,8 +17,8 @@ from sqlalchemy import create_engine, or_, func
 from sqlalchemy.orm import sessionmaker, Session
 from passlib.context import CryptContext
 from pydantic import BaseModel
-from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, Milestone, PhotoReaction, MarketListing, Notification, Meetup, MeetupRsvp, PlaceSearch, SosRequest, SosResponse, AdminAuditLog
-from schemas import UserProfileUpdate, UserProfileResponse, UserCreate
+from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, Milestone, PhotoReaction, MarketListing, Notification, Meetup, MeetupRsvp, PlaceSearch, SosRequest, SosResponse, AdminAuditLog, Squad, SquadMember
+from schemas import UserProfileUpdate, UserProfileResponse, UserCreate, SquadCreate, SquadResponse
 import duck_ai
 import profanity
 import holiday_ducks
@@ -3318,3 +3318,38 @@ def admin_jtapbot_post_now(db: Session = Depends(get_db), admin: User = Depends(
         raise HTTPException(status_code=502, detail="Bot post failed (LLM may be down)")
     _log_admin(db, admin, "jtapbot_post_now")
     return {"posted": True}
+
+
+# --- Squads (Epic 2) ---
+@app.post("/squads", response_model=SquadResponse)
+def create_squad(payload: SquadCreate, db: Session = Depends(get_db),
+                 current_user: User = Depends(get_current_user)):
+    """Create a squad; the creator becomes its leader."""
+    name = (payload.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Squad name is required.")
+    if len(name) > 80:
+        raise HTTPException(status_code=400, detail="Squad name is too long (max 80 characters).")
+    if db.query(Squad).filter(Squad.name == name).first():
+        raise HTTPException(status_code=400, detail="That squad name is taken.")
+    description = (payload.description or "").strip() or None
+    if description and len(description) > 500:
+        raise HTTPException(status_code=400, detail="Description is too long (max 500 characters).")
+    squad = Squad(
+        name=name,
+        description=description,
+        avatar_url=(payload.avatar_url or "").strip() or None,
+        created_by=current_user.id,
+        is_private=bool(payload.is_private),
+    )
+    db.add(squad)
+    db.commit()
+    db.refresh(squad)
+    db.add(SquadMember(squad_id=squad.id, user_id=current_user.id, role="leader"))
+    db.commit()
+    return SquadResponse(
+        id=squad.id, name=squad.name, description=squad.description,
+        avatar_url=squad.avatar_url, created_by=squad.created_by,
+        is_private=squad.is_private, created_at=squad.created_at,
+        member_count=1, my_role="leader",
+    )
