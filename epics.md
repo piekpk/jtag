@@ -210,3 +210,25 @@ This document outlines the vertical-slice user stories for Epic 2 of the TrailGr
 * **Given** a squad member viewing the feed.
 * **When** they pull to refresh.
 * **Then** the feed reloads from the latest events.
+
+### Story 2.7: Squad Discovery (under Browse)
+*As a user, I want to discover squads from the Browse tab, so that I can find a crew to join without leaving the app's discovery surface.*
+
+**Acceptance Criteria:**
+* **Given** a user opens the Browse tab.
+* **When** it loads.
+* **Then** a People | Squads segmented control is visible, with People as the default.
+* **Given** the user switches to the Squads segment.
+* **When** they have squads.
+* **Then** "My squads" renders above the discovery results.
+* **Given** the user types in the squad search box.
+* **When** the query has 2+ characters.
+* **Then** results filter via `GET /squads?q=`.
+* **Given** no squads match the query.
+* **When** results load.
+* **Then** the system displays the empty state reading "No squads found. Create one to get started."
+* **Given** the user taps "Create squad".
+* **When** the action fires.
+* **Then** they navigate to `/squads/create`.
+
+**Placement note:** squad discovery lives inside the Browse tab rather than as a separate tab (decision 2026-10-11). People browsing is kept -- the squad invite flow (Story 2.3) depends on user search.
