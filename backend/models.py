@@ -263,6 +263,7 @@ class Squad(Base):
 class SquadMember(Base):
     """Membership of a user in a squad, with a role."""
     __tablename__ = "squad_members"
+    __table_args__ = (UniqueConstraint("squad_id", "user_id", name="uq_squad_members_squad_user"),)
 
     id = Column(Integer, primary_key=True, index=True)
     squad_id = Column(Integer, index=True, nullable=False)
