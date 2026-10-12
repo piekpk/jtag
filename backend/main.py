@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import jwt
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import create_engine, or_, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker, Session
 from passlib.context import CryptContext
 from pydantic import BaseModel
@@ -3335,6 +3336,7 @@ def create_squad(payload: SquadCreate, db: Session = Depends(get_db),
     description = (payload.description or "").strip() or None
     if description and len(description) > 500:
         raise HTTPException(status_code=400, detail="Description is too long (max 500 characters).")
+    _require_clean(name, description or "")
     squad = Squad(
         name=name,
         description=description,
@@ -3343,10 +3345,14 @@ def create_squad(payload: SquadCreate, db: Session = Depends(get_db),
         is_private=bool(payload.is_private),
     )
     db.add(squad)
-    db.commit()
-    db.refresh(squad)
+    db.flush()  # assign squad.id without committing yet
     db.add(SquadMember(squad_id=squad.id, user_id=current_user.id, role="leader"))
-    db.commit()
+    try:
+        db.commit()  # single transaction: squad + leader membership together
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="That squad name is taken.")
+    db.refresh(squad)
     return SquadResponse(
         id=squad.id, name=squad.name, description=squad.description,
         avatar_url=squad.avatar_url, created_by=squad.created_by,
