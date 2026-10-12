@@ -49,8 +49,11 @@ export default function CreateSquadScreen() {
         setInlineError(data.detail || 'Could not create squad. Please try again.');
         return;
       }
-      // Squad profile screen lands in S4.2 (#49); deep link is forward-compatible.
-      router.push(`/squads/${data.id}`);
+      // Squad profile screen lands in Story 2.4 (S4.2, #49); until then,
+      // go back with a success toast instead of pushing a dead route.
+      showAlert('Squad Created', `"${trimmedName}" is ready.`, [
+        { text: 'OK', onPress: () => router.back() },
+      ]);
     } catch (e) {
       showAlert('Network Error', 'Could not reach the server. Please try again.');
     } finally {
@@ -75,7 +78,7 @@ export default function CreateSquadScreen() {
             <TextInput
               style={styles.input}
               placeholder="e.g. Pine Barrens Riders"
-              placeholderTextColor="#8a8a8a"
+              placeholderTextColor="#8e8e93"
               value={name}
               onChangeText={(t) => { setName(t); if (inlineError) setInlineError(''); }}
               maxLength={80}
@@ -86,7 +89,7 @@ export default function CreateSquadScreen() {
             <TextInput
               style={[styles.input, styles.multiline]}
               placeholder="What is this crew about?"
-              placeholderTextColor="#8a8a8a"
+              placeholderTextColor="#8e8e93"
               value={description}
               onChangeText={setDescription}
               maxLength={500}
@@ -98,7 +101,7 @@ export default function CreateSquadScreen() {
             <TextInput
               style={styles.input}
               placeholder="https://..."
-              placeholderTextColor="#8a8a8a"
+              placeholderTextColor="#8e8e93"
               value={avatarUrl}
               onChangeText={setAvatarUrl}
               autoCapitalize="none"
@@ -125,7 +128,7 @@ export default function CreateSquadScreen() {
               disabled={isSubmitting}
             >
               {isSubmitting
-                ? <ActivityIndicator color="#fff" />
+                ? <ActivityIndicator color="#121212" />
                 : <Text style={styles.buttonText}>Create Squad</Text>}
             </TouchableOpacity>
 
@@ -140,34 +143,35 @@ export default function CreateSquadScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#fff' },
+  safeArea: { flex: 1, backgroundColor: '#121212' },
   container: { flex: 1 },
   content: { padding: 20 },
   header: { marginBottom: 24 },
-  title: { fontSize: 28, fontWeight: '700' },
-  subtitle: { fontSize: 15, color: '#666', marginTop: 4 },
+  title: { fontSize: 28, fontWeight: '700', color: '#fff' },
+  subtitle: { fontSize: 15, color: '#8e8e93', marginTop: 4 },
   form: { gap: 6 },
-  label: { fontSize: 14, fontWeight: '600', marginTop: 12 },
+  label: { fontSize: 14, fontWeight: '600', marginTop: 12, color: '#fff' },
   input: {
-    borderWidth: 1, borderColor: '#ddd', borderRadius: 10,
+    borderWidth: 1, borderColor: '#2c2c2e', borderRadius: 10,
+    backgroundColor: '#1c1c1e', color: '#fff',
     paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, marginTop: 6,
   },
   multiline: { minHeight: 80, textAlignVertical: 'top' },
   toggleRow: { flexDirection: 'row', alignItems: 'center', marginTop: 16 },
   toggle: {
     width: 26, height: 26, borderRadius: 13, borderWidth: 2,
-    borderColor: '#999', alignItems: 'center', justifyContent: 'center',
+    borderColor: '#8e8e93', alignItems: 'center', justifyContent: 'center',
   },
-  toggleOn: { backgroundColor: '#2e7d32', borderColor: '#2e7d32' },
-  toggleCheck: { color: '#fff', fontWeight: '700' },
-  toggleLabel: { marginLeft: 10, fontSize: 15 },
-  error: { color: '#b3261e', marginTop: 12, fontSize: 14 },
+  toggleOn: { backgroundColor: '#D4AF37', borderColor: '#D4AF37' },
+  toggleCheck: { color: '#121212', fontWeight: '700' },
+  toggleLabel: { marginLeft: 10, fontSize: 15, color: '#fff' },
+  error: { color: '#f28b82', marginTop: 12, fontSize: 14 },
   button: {
-    backgroundColor: '#2e7d32', borderRadius: 10,
+    backgroundColor: '#D4AF37', borderRadius: 10,
     paddingVertical: 14, alignItems: 'center', marginTop: 20,
   },
   buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#fff', fontSize: 17, fontWeight: '600' },
+  buttonText: { color: '#121212', fontSize: 17, fontWeight: '600' },
   cancel: { alignItems: 'center', marginTop: 12, paddingVertical: 8 },
-  cancelText: { color: '#666', fontSize: 15 },
+  cancelText: { color: '#8e8e93', fontSize: 15 },
 });
