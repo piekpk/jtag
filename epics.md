@@ -2,6 +2,8 @@
 
 This document outlines the vertical-slice user stories for Epic 1 of the TrailGrid application. All acceptance criteria strictly follow the Given/When/Then format to ensure requirements are testable and explicitly cover happy paths, error paths, empty states, and permission boundaries  . Unquantified adjectives have been deliberately omitted.
 
+Story-to-ticket mapping: 2.1 → #42/#43, 2.2 → #44/#45, 2.3 → #46/#47, 2.4 → #48/#49, 2.5 → #50/#51, 2.6 → #52/#53, 2.7 → #57/#58.
+
 ## Core Vehicle Identity
 
 ### Story 1.1: Create Base Profile
@@ -107,7 +109,7 @@ This document outlines the vertical-slice user stories for Epic 1 of the TrailGr
 
 # Epic 2: Squads (Groups / Clans)
 
-This document outlines the vertical-slice user stories for Epic 2 of the TrailGrid application: named, joinable groups for the off-road community. All acceptance criteria strictly follow the Given/When/Then format to ensure requirements are testable and explicitly cover happy paths, error paths, empty states, and permission boundaries. Unquantified adjectives have been deliberately omitted.
+This document outlines the vertical-slice user stories for Epic 2 of the Jtap application: named, joinable groups for the off-road community. All acceptance criteria strictly follow the Given/When/Then format to ensure requirements are testable and explicitly cover happy paths, error paths, empty states, and permission boundaries. Unquantified adjectives have been deliberately omitted.
 
 ## Formation & Membership
 
@@ -184,7 +186,7 @@ This document outlines the vertical-slice user stories for Epic 2 of the TrailGr
 * **Then** Edit, Remove member, Transfer leadership, and Delete squad controls are visible.
 * **Given** a user who is not the squad leader views the squad profile.
 * **When** the profile loads.
-* **Then** the leader-only controls are completely hidden from the DOM, not merely disabled.
+* **Then** the leader-only controls are not rendered at all, not merely disabled.
 * **Given** the squad leader transfers leadership to another member.
 * **When** the transfer is confirmed.
 * **Then** the target member becomes leader and the previous leader becomes a regular member.
@@ -231,4 +233,4 @@ This document outlines the vertical-slice user stories for Epic 2 of the TrailGr
 * **When** the action fires.
 * **Then** they navigate to `/squads/create`.
 
-**Placement note:** squad discovery lives inside the Browse tab rather than as a separate tab (decision 2026-10-11). People browsing is kept -- the squad invite flow (Story 2.3) depends on user search.
+**Placement note:** squad discovery lives inside the Browse tab (People | Squads segmented control) rather than as a separate tab. People browsing is kept -- the squad invite flow (Story 2.3) depends on user search.
