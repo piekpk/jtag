@@ -2,10 +2,58 @@
 
 An enthusiast mobile application designed for 4x4 and off-road vehicle owners to locate nearby rigs, compare builds, and request trail assistance.
 
+## Prototype
+
+**Figma (public link):** https://www.figma.com/design/fYy6iAItnbwtU5E939sQox/JTAP?node-id=0-1&p=f&t=Xjm7N0xS5kbk6JXT-0
+
+The prototype is a user-centered design built around the Product Goal: *a proximity-first mobile app that gives the 4x4/off-road community a home base — showing the rigs around you, connecting owners, and turning the "ducking" tradition into a game.*
+
+### Personas
+
+> Drafts — Pawel to finalize in his own words.
+
+**Primary — Mike, 34, Trail Rider.** Wheels every other weekend with a local Jeep club. Keeps running into impressive builds at trailheads but never learns who owns them or what's under the hood. Wants to see nearby rigs on a map, check build details, and coordinate rides. Android user, lives on his phone, low patience for clunky UI.
+
+**Secondary — Jess, 27, New Owner.** Bought her first Wrangler six months ago. Less interested in wrenching, drawn in by the community game — collecting ducks, hunting location drops, building her pond. Wants the app to feel fun and welcoming, not intimidating.
+
+### Context diagram
+
+![Jtap system context diagram](docs/context-diagram.svg)
+
+The system boundary sits around the Jtap backend (FastAPI + SQLite) and the Expo mobile app. External actors: the **4x4 Enthusiast** (app user — credentials, GPS location, profile/rig details in; nearby rigs, chat feed, ducks and milestones out), the **Administrator** (via the `/admin` panel), **Device GPS** (phone location services), **ngrok** (HTTPS tunnel exposing the PC-hosted backend), and the **Google Maps API** (map tiles).
+
+### UI — key screens (in Figma)
+
+Sign In (email/password + Google/Facebook/X) · Map (nearby rigs with live distances) · Browse (rig cards) · Rig Profile (build details, mods, duck showcase) · Ducks/Pond (collection) · Chat (global, local, JtapBot) · Marketplace (listings) · My Rig (profile, alerts).
+
+### UX — primary user journey
+
+Mike opens the app at a trailhead:
+1. The **Map** tab shows nearby rigs with live distances — proximity first, no searching needed.
+2. He taps a pin and views the **rig profile**: mods, specs, duck showcase.
+3. He sends a **Wave**; the owner gets a push notification.
+4. They connect in **local chat** and plan the next run.
+
+Every step serves the Product Goal: see who's around you, connect, wheel together.
+
 ## Architecture
-- **Backend:** Python 3.10+, FastAPI, Uvicorn, SQLite
-- **Mobile Client:** React Native, Expo, Expo Location
-- **Spatial Engine:** Haversine great-circle distance algorithm
+
+**Style: client–server, with a layered backend and a layered mobile client.**
+
+- **Mobile client (Expo / React Native):** layered — Expo Router screens → API client module → AsyncStorage cache. Screens never touch the network directly. Tab layout: My Rig, Ducks, Browse, Map, Chat, Market.
+- **Backend (FastAPI + Uvicorn, Python):** layered monolith — route handlers → Pydantic schemas → domain logic (auth, Haversine proximity, drop claims, trades, milestones) → SQLAlchemy ORM → SQLite. One deployable unit.
+- **Auth:** JWT bearer tokens (bcrypt passwords); Google/Facebook/X sign-in verifies provider tokens server-side and links to existing accounts.
+- **Live data:** client-driven polling (nearby rigs, chat, drops refresh on interval) — a deliberate simplification; push goes through FCM direct, not Expo.
+- **Spatial engine:** Haversine great-circle distance for proximity queries.
+- **Integrations:** Google Maps SDK (client map tiles), ngrok (HTTPS tunnel exposing the PC-hosted backend), Firebase Cloud Messaging (push).
+
+**Key trade-off:** a monolithic FastAPI + SQLite backend on a single host keeps the whole system in one deployable unit with zero hosting cost — the right call for a solo developer proving the concept. The cost is operational fragility: the PC is a single point of failure, and every ngrok restart mints a new URL that must be rebuilt into the APK.
+
+## Test Plan
+
+- **Unit tests** — isolated logic with no I/O: Haversine distance math (known city pairs, antipodal edge cases), duck rarity/award calculations, the profanity filter (leet-speak and masked forms vs. innocent words), JWT creation/validation and password hashing.
+- **Integration tests** — API endpoints against a throwaway SQLite database: signup → login → set location → nearby returns the rig; duck drop creation → claim → inventory updates; chat post → appears in feed. Each test gets a fresh DB so tests never leak state into each other.
+- **System / acceptance (manual):** release APK installed on a real Android phone — sign in (email + Google), verify nearby rigs appear on the map at a real location, send a wave, claim a test drop, confirm push notifications arrive with the app closed.
 
 ## Setup Instructions
 
@@ -43,3 +91,5 @@ both terminals need to be in the C:\jeep-proximity-app\jtag\backend> directory
  ngrok http 8000 --url https://unknowing-dropper-starfish.ngrok-free.dev 
  2 terminal will need to run the lightSQL
  python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+MuseAI integrated [20:21 - 2026-10-07]

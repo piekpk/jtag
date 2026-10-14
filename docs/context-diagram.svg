@@ -1,0 +1,104 @@
+<svg width="1200" height="860" viewBox="0 0 1200 860" xmlns="http://www.w3.org/2000/svg" font-family="Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#d4af37"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="860" fill="#0a0a0c"/>
+
+  <text x="600" y="44" text-anchor="middle" fill="#e8c547" font-size="26" font-weight="bold">Jtap — System Context Diagram</text>
+  <text x="600" y="70" text-anchor="middle" fill="#9a8f6a" font-size="14">one system box · external actors around it · every arrow names what crosses the boundary and its direction</text>
+
+  <!-- ============ SYSTEM BOX ============ -->
+  <rect x="430" y="310" width="340" height="190" rx="14" fill="#111114" stroke="#d4af37" stroke-width="2.5"/>
+  <text x="600" y="382" text-anchor="middle" fill="#e8c547" font-size="32" font-weight="bold">Jtap</text>
+  <text x="600" y="406" text-anchor="middle" fill="#9a8f6a" font-size="13">(formerly TrailGrid)</text>
+  <text x="600" y="434" text-anchor="middle" fill="#f5f5f5" font-size="14">FastAPI + SQLite backend</text>
+  <text x="600" y="456" text-anchor="middle" fill="#f5f5f5" font-size="14">Expo (React Native) mobile app</text>
+
+  <!-- ============ ACTORS ============ -->
+  <!-- 4x4 Enthusiast -->
+  <rect x="60" y="100" width="240" height="80" rx="10" fill="#151517" stroke="#d4af37" stroke-width="1.5"/>
+  <text x="180" y="132" text-anchor="middle" fill="#f5f5f5" font-size="16" font-weight="bold">4x4 Enthusiast</text>
+  <text x="180" y="156" text-anchor="middle" fill="#9a8f6a" font-size="12">app user (mobile)</text>
+
+  <!-- Administrator -->
+  <rect x="900" y="100" width="240" height="80" rx="10" fill="#151517" stroke="#d4af37" stroke-width="1.5"/>
+  <text x="1020" y="132" text-anchor="middle" fill="#f5f5f5" font-size="16" font-weight="bold">Administrator</text>
+  <text x="1020" y="156" text-anchor="middle" fill="#9a8f6a" font-size="12">Pawel · via /admin</text>
+
+  <!-- Device GPS -->
+  <rect x="60" y="650" width="240" height="80" rx="10" fill="#151517" stroke="#d4af37" stroke-width="1.5"/>
+  <text x="180" y="682" text-anchor="middle" fill="#f5f5f5" font-size="16" font-weight="bold">Device GPS</text>
+  <text x="180" y="706" text-anchor="middle" fill="#9a8f6a" font-size="12">phone location services</text>
+
+  <!-- ngrok -->
+  <rect x="480" y="682" width="240" height="80" rx="10" fill="#151517" stroke="#d4af37" stroke-width="1.5"/>
+  <text x="600" y="714" text-anchor="middle" fill="#f5f5f5" font-size="16" font-weight="bold">ngrok</text>
+  <text x="600" y="738" text-anchor="middle" fill="#9a8f6a" font-size="12">HTTPS tunnel service</text>
+
+  <!-- Google Maps API -->
+  <rect x="900" y="650" width="240" height="80" rx="10" fill="#151517" stroke="#d4af37" stroke-width="1.5"/>
+  <text x="1020" y="682" text-anchor="middle" fill="#f5f5f5" font-size="16" font-weight="bold">Google Maps API</text>
+  <text x="1020" y="706" text-anchor="middle" fill="#9a8f6a" font-size="12">map tiles · PROVIDER_GOOGLE</text>
+
+  <!-- ============ ARROWS ============ -->
+  <g stroke="#d4af37" stroke-width="2" fill="none">
+    <!-- Enthusiast -> Jtap -->
+    <line x1="300" y1="145" x2="520" y2="310" marker-end="url(#arrow)"/>
+    <!-- Jtap -> Enthusiast -->
+    <line x1="430" y1="420" x2="300" y2="165" marker-end="url(#arrow)"/>
+    <!-- Admin -> Jtap -->
+    <line x1="900" y1="145" x2="680" y2="310" marker-end="url(#arrow)"/>
+    <!-- Jtap -> Admin -->
+    <line x1="770" y1="420" x2="900" y2="165" marker-end="url(#arrow)"/>
+    <!-- GPS -> Jtap -->
+    <line x1="300" y1="685" x2="520" y2="500" marker-end="url(#arrow)"/>
+    <!-- ngrok -> Jtap -->
+    <line x1="590" y1="682" x2="590" y2="500" marker-end="url(#arrow)"/>
+    <!-- Jtap -> ngrok -->
+    <line x1="630" y1="500" x2="630" y2="682" marker-end="url(#arrow)"/>
+    <!-- Jtap -> Google Maps -->
+    <line x1="770" y1="470" x2="900" y2="655" marker-end="url(#arrow)"/>
+    <!-- Google Maps -> Jtap -->
+    <line x1="940" y1="650" x2="810" y2="490" marker-end="url(#arrow)"/>
+  </g>
+
+  <!-- ============ ARROW LABELS (dark pills so lines never cross text) ============ -->
+  <g font-size="12.5">
+    <!-- Enthusiast -> Jtap -->
+    <rect x="213" y="184" width="430" height="40" rx="8" fill="#0a0a0c"/>
+    <text x="428" y="199" text-anchor="middle" fill="#e8c547">IN → credentials, GPS location, profile &amp; rig details</text>
+    <text x="428" y="215" text-anchor="middle" fill="#e8c547">chat messages, duck gives / claims / trades, photo reactions</text>
+    <!-- Jtap -> Enthusiast -->
+    <rect x="100" y="260" width="400" height="40" rx="8" fill="#0a0a0c"/>
+    <text x="300" y="275" text-anchor="middle" fill="#e8c547">OUT → nearby rigs with distances, chat feed</text>
+    <text x="300" y="291" text-anchor="middle" fill="#e8c547">duck inventory / pond, milestones, leaderboards, drops</text>
+    <!-- Admin -> Jtap -->
+    <rect x="646" y="236" width="330" height="22" rx="8" fill="#0a0a0c"/>
+    <text x="811" y="252" text-anchor="middle" fill="#e8c547">IN → admin sign-in (JWT), delete-row commands</text>
+    <!-- Jtap -> Admin -->
+    <rect x="705" y="260" width="250" height="40" rx="8" fill="#0a0a0c"/>
+    <text x="830" y="275" text-anchor="middle" fill="#e8c547">OUT → /admin web page, row counts,</text>
+    <text x="830" y="291" text-anchor="middle" fill="#e8c547">full records from 10 tables</text>
+    <!-- GPS -> Jtap -->
+    <rect x="251" y="544" width="270" height="22" rx="8" fill="#0a0a0c"/>
+    <text x="386" y="560" text-anchor="middle" fill="#e8c547">IN → latitude / longitude coordinates</text>
+    <!-- ngrok -> Jtap -->
+    <rect x="596" y="573" width="220" height="22" rx="8" fill="#0a0a0c"/>
+    <text x="600" y="589" text-anchor="start" fill="#e8c547">IN → forwarded HTTPS requests</text>
+    <!-- Jtap -> ngrok -->
+    <rect x="636" y="600" width="145" height="22" rx="8" fill="#0a0a0c"/>
+    <text x="640" y="616" text-anchor="start" fill="#e8c547">OUT → API responses</text>
+    <!-- Jtap -> Google Maps -->
+    <rect x="732" y="524" width="264" height="22" rx="8" fill="#0a0a0c"/>
+    <text x="864" y="540" text-anchor="middle" fill="#e8c547">OUT → map tile requests (+ API key)</text>
+    <!-- Google Maps -> Jtap -->
+    <rect x="760" y="578" width="180" height="22" rx="8" fill="#0a0a0c"/>
+    <text x="850" y="594" text-anchor="middle" fill="#e8c547">IN → rendered map tiles</text>
+  </g>
+
+  <text x="600" y="806" text-anchor="middle" fill="#9a8f6a" font-size="13">IN = into Jtap · OUT = out of Jtap · the SQLite database and /uploads live inside the system box</text>
+  <text x="600" y="826" text-anchor="middle" fill="#9a8f6a" font-size="13">the app reaches the API through the ngrok public URL (https://unknowing-dropper-starfish.ngrok-free.dev)</text>
+</svg>
