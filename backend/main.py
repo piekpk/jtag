@@ -2,6 +2,7 @@ import shutil
 import os
 import json
 import random
+import secrets
 import re
 import sqlite3
 from typing import Optional
@@ -18,6 +19,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker, Session
 from passlib.context import CryptContext
 from pydantic import BaseModel
+from google.oauth2 import id_token as google_id_token
+from google.auth.transport import requests as google_requests
 from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, Milestone, PhotoReaction, MarketListing, Notification, Meetup, MeetupRsvp, PlaceSearch, SosRequest, SosResponse, AdminAuditLog, Squad, SquadMember
 from schemas import UserProfileUpdate, UserProfileResponse, UserCreate, SquadCreate, SquadResponse
 import duck_ai
@@ -128,6 +131,48 @@ def _ensure_fcm_token_column():
         conn.close()
 
 
+def _ensure_google_sub_column():
+    """Lightweight migration: add users.google_sub to link Google sign-ins."""
+    conn = get_raw_db()
+    try:
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(users)")]
+        if "google_sub" not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN google_sub TEXT")
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_google_sub ON users(google_sub)")
+            conn.commit()
+            print("Migration: added users.google_sub column.")
+    finally:
+        conn.close()
+
+
+def _ensure_facebook_id_column():
+    """Lightweight migration: add users.facebook_id to link Facebook logins."""
+    conn = get_raw_db()
+    try:
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(users)")]
+        if "facebook_id" not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN facebook_id TEXT")
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_facebook_id ON users(facebook_id)")
+            conn.commit()
+            print("Migration: added users.facebook_id column.")
+    finally:
+        conn.close()
+
+
+def _ensure_x_id_column():
+    """Lightweight migration: add users.x_id to link X sign-ins."""
+    conn = get_raw_db()
+    try:
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(users)")]
+        if "x_id" not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN x_id TEXT")
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_x_id ON users(x_id)")
+            conn.commit()
+            print("Migration: added users.x_id column.")
+    finally:
+        conn.close()
+
+
 def _install_duck_sprites():
     """Copy the bundled duck sprite library into the uploads dir.
 
@@ -201,6 +246,9 @@ _ensure_duck_ai_columns()
 _ensure_duck_image_column()
 _ensure_push_token_column()
 _ensure_fcm_token_column()
+_ensure_google_sub_column()
+_ensure_facebook_id_column()
+_ensure_x_id_column()
 _install_duck_sprites()
 _bootstrap_admins()
 
@@ -261,6 +309,22 @@ SECRET_KEY = os.environ.get("JTAP_SECRET_KEY", "jtap-dev-secret-change-me")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 30
 
+# Google Sign-In: OAuth client IDs accepted as the audience when verifying
+# Google ID tokens. The web ID is required; Android/iOS IDs are optional and
+# only needed once those OAuth clients exist (tokens minted for them carry
+# their own client ID as the audience).
+GOOGLE_WEB_CLIENT_ID = os.environ.get("GOOGLE_WEB_CLIENT_ID", "").strip()
+GOOGLE_ANDROID_CLIENT_ID = os.environ.get("GOOGLE_ANDROID_CLIENT_ID", "").strip()
+GOOGLE_IOS_CLIENT_ID = os.environ.get("GOOGLE_IOS_CLIENT_ID", "").strip()
+
+
+def google_allowed_audiences():
+    return {
+        c
+        for c in (GOOGLE_WEB_CLIENT_ID, GOOGLE_ANDROID_CLIENT_ID, GOOGLE_IOS_CLIENT_ID)
+        if c
+    }
+
 if SECRET_KEY == "jtap-dev-secret-change-me":
     print("WARNING: JTAP_SECRET_KEY not set - using insecure dev default. Set the env var in production.")
 
@@ -307,6 +371,18 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
 class AuthResponse(UserProfileResponse):
     access_token: str
     token_type: str = "bearer"
+
+class GoogleAuthRequest(BaseModel):
+    id_token: str
+
+
+class FacebookAuthRequest(BaseModel):
+    access_token: str
+
+
+class XAuthRequest(BaseModel):
+    access_token: str
+
 
 # --- Auth Endpoints ---
 @app.post("/signup", response_model=AuthResponse)
@@ -355,6 +431,180 @@ def login(user_credentials: UserCreate, db: Session = Depends(get_db)):
         is_admin=user.is_admin,
         access_token=create_access_token(user.id),
     )
+
+@app.post("/auth/google", response_model=AuthResponse)
+def auth_google(body: GoogleAuthRequest, db: Session = Depends(get_db)):
+    """Sign in / sign up with a Google ID token verified against Google."""
+    audiences = google_allowed_audiences()
+    if not audiences:
+        raise HTTPException(status_code=500, detail="Google sign-in is not configured on the server")
+    try:
+        info = google_id_token.verify_oauth2_token(body.id_token, google_requests.Request())
+    except ValueError as exc:
+        print(f"[auth/google] token signature/expiry check failed: {exc}")
+        raise HTTPException(status_code=401, detail="Invalid Google token")
+    aud = info.get("aud")
+    if aud not in audiences:
+        print(f"[auth/google] audience mismatch: token aud={aud!r} is not among the server's configured Google client IDs")
+        raise HTTPException(status_code=401, detail="Invalid Google token")
+    google_sub = info.get("sub")
+    email = (info.get("email") or "").strip().lower()
+    if not google_sub or not email:
+        raise HTTPException(status_code=400, detail="Google account did not provide an email")
+
+    user = db.query(User).filter(User.google_sub == google_sub).first()
+    if not user:
+        # Link Google sign-in to an existing email account, or create one.
+        user = db.query(User).filter(User.email == email).first()
+        if user:
+            user.google_sub = google_sub
+            db.commit()
+            db.refresh(user)
+        else:
+            # Unusable random password hash: this account can only sign in via Google.
+            new_user = User(
+                email=email,
+                hashed_password=pwd_context.hash(secrets.token_urlsafe(32)),
+                google_sub=google_sub,
+                profile_picture_url=info.get("picture"),
+                is_admin=email in _admin_emails(),
+            )
+            db.add(new_user)
+            db.commit()
+            db.refresh(new_user)
+            _ensure_starter_ducks(db, new_user.id)
+            _check_holiday_ducks(db, new_user)
+            user = new_user
+    if getattr(user, "is_banned", False):
+        raise HTTPException(status_code=403, detail="This account has been banned")
+
+    return AuthResponse(
+        id=user.id,
+        email=user.email,
+        profile_picture_url=user.profile_picture_url,
+        settings=user.settings,
+        is_admin=user.is_admin,
+        access_token=create_access_token(user.id),
+    )
+
+
+@app.post("/auth/facebook", response_model=AuthResponse)
+def auth_facebook(body: FacebookAuthRequest, db: Session = Depends(get_db)):
+    """Sign in / sign up with a Facebook access token verified via the Graph API."""
+    try:
+        resp = requests.get(
+            "https://graph.facebook.com/me",
+            params={"fields": "id,name,email,picture.type(large)", "access_token": body.access_token},
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        print(f"[auth/facebook] Graph API request failed: {exc}")
+        raise HTTPException(status_code=502, detail="Could not verify Facebook token")
+    if resp.status_code != 200:
+        print(f"[auth/facebook] Graph API rejected token: {resp.status_code} {resp.text[:200]}")
+        raise HTTPException(status_code=401, detail="Invalid Facebook token")
+    info = resp.json()
+    facebook_id = info.get("id")
+    email = (info.get("email") or "").strip().lower()
+    if not facebook_id or not email:
+        raise HTTPException(status_code=400, detail="Facebook account did not provide an email")
+
+    user = db.query(User).filter(User.facebook_id == facebook_id).first()
+    if not user:
+        # Link Facebook login to an existing email account, or create one.
+        user = db.query(User).filter(User.email == email).first()
+        if user:
+            user.facebook_id = facebook_id
+            db.commit()
+            db.refresh(user)
+        else:
+            # Unusable random password hash: this account can only sign in via Facebook.
+            picture = (info.get("picture") or {}).get("data", {}).get("url")
+            new_user = User(
+                email=email,
+                hashed_password=secrets.token_hex(32),
+                facebook_id=facebook_id,
+                profile_picture_url=picture,
+                is_admin=email in _admin_emails(),
+            )
+            db.add(new_user)
+            db.commit()
+            db.refresh(new_user)
+            _ensure_starter_ducks(db, new_user.id)
+            _check_holiday_ducks(db, new_user)
+            user = new_user
+    if getattr(user, "is_banned", False):
+        raise HTTPException(status_code=403, detail="This account has been banned")
+
+    return AuthResponse(
+        id=user.id,
+        email=user.email,
+        profile_picture_url=user.profile_picture_url,
+        settings=user.settings,
+        is_admin=user.is_admin,
+        access_token=create_access_token(data={"sub": str(user.id)}),
+    )
+
+@app.post("/auth/x", response_model=AuthResponse)
+def auth_x(body: XAuthRequest, db: Session = Depends(get_db)):
+    """Sign in / sign up with an X access token verified via the X API v2."""
+    try:
+        resp = requests.get(
+            "https://api.twitter.com/2/users/me",
+            params={"user.fields": "profile_image_url"},
+            headers={"Authorization": f"Bearer {body.access_token}"},
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        print(f"[auth/x] X API request failed: {exc}")
+        raise HTTPException(status_code=502, detail="Could not verify X token")
+    if resp.status_code != 200:
+        print(f"[auth/x] X API rejected token: {resp.status_code} {resp.text[:200]}")
+        raise HTTPException(status_code=401, detail="Invalid X token")
+    data = resp.json().get("data") or {}
+    x_id = data.get("id")
+    if not x_id:
+        raise HTTPException(status_code=400, detail="X account did not provide a user ID")
+
+    # X does not provide an email for this scope; use a stable synthetic email
+    # so the account stays unique and linkable. The user can set a real email
+    # later from their profile.
+    email = f"x_{x_id}@x.jtap"
+
+    user = db.query(User).filter(User.x_id == x_id).first()
+    if not user:
+        user = db.query(User).filter(User.email == email).first()
+        if user:
+            user.x_id = x_id
+            db.commit()
+            db.refresh(user)
+        else:
+            # Unusable random password hash: this account can only sign in via X.
+            new_user = User(
+                email=email,
+                hashed_password=secrets.token_hex(32),
+                x_id=x_id,
+                profile_picture_url=data.get("profile_image_url"),
+                is_admin=email in _admin_emails(),
+            )
+            db.add(new_user)
+            db.commit()
+            db.refresh(new_user)
+            _ensure_starter_ducks(db, new_user.id)
+            _check_holiday_ducks(db, new_user)
+            user = new_user
+    if getattr(user, "is_banned", False):
+        raise HTTPException(status_code=403, detail="This account has been banned")
+
+    return AuthResponse(
+        id=user.id,
+        email=user.email,
+        profile_picture_url=user.profile_picture_url,
+        settings=user.settings,
+        is_admin=user.is_admin,
+        access_token=create_access_token(data={"sub": str(user.id)}),
+    )
+
 
 # --- Profile Endpoints ---
 @app.get("/users/{user_id}/profile", response_model=UserProfileResponse)
