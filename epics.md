@@ -407,3 +407,83 @@ This document outlines the vertical-slice user stories for Epic 3 of the Jtap ap
 * **Given** a moderator opens the moderation queue.
 * **When** the queue loads
 * **Then** flagged listings render with their flag reasons, counts, and reporter notes.
+
+# Epic 4: Marketplace Engagement and Trust
+
+This document outlines the vertical-slice user stories for Epic 4 of the Jtap application, covering the retentioin and trust layer that ships after the core marketplace: saved searches, watchlists, alerts, seller verification, and pricing intelligence. All acceptance criteria strictly follow the Given/When/Then format to ensure requirements are testable and explicitly cover happy paths, error paths, empty states, and permission boundaries. Unquantified adjectives have been deliberately omitted.
+
+# Retention 
+
+### Story 4.1: Saved Searches With Push Notifications
+*As a buyer, I want to save a search and get a push notification when a matching listing is posted, so that I do not miss deals.*
+
+**Acceptance Criteria:**
+* **Given** a buyer saves a search for "35-inch tires" in the "Wheels & Tires" category.
+* **When** a new listing matching those keywords and that category is posted.
+* **Then** the buyer receives a push notification withihn 5 minutes.
+* **Given** a buyer deletes a saved search.
+* **When** a matching listing is later posted.
+* **Then** no notification is sent.
+* **Given** a buyer has push notifications disabled at the OS level.
+* **When** they attempt to save a search with alerts on.
+* **Then** the system warns "Push notifications are disabled — enable them in Settings to receive alerts" and still saves the search.
+
+### Story 4.2: Watchlist / Favorite Listings
+*As a buyer, I want to heart listings into a watchlist, so that I can come back to them later.*
+
+**Acceptance Criteria:**
+* **Given** a buyer taps the heart icon on a listing.
+* **When** they open their watchlist.
+* **Then** the listing appears in the watchlist.
+* **Given** a watched listing is marked as sold by the seller.
+* **When** the buyer opens their watchlist.
+* **Then** the listing remains visible with a "Sold" overlay.
+* **Given** a buyer removes a listing from the watchlist.
+* **When** they reopen the watchlist.
+* **Then** the listing no longer appears.
+
+### Story 4.3: Price-Drop Alerts on Favorited Listings
+*As a buyer, I want a notification when the price drops on a listing I have favorited, so that I can jump on the deal.*
+
+**Acceptance Criteria:**
+* **Given** a buyer favorited a listing priced at $300.
+* **When** the seller edits the price to $250.
+* **Then** the buyer receives a notification reading "Price drop: $300 → $350".
+* **Given** a buyer favorited a listing priced at $300.
+* **When** the seller edits the price to $350.
+* **Then** no notification is sent.
+* **Given** a buyer unfavorited a listing before a price drop.
+* **When** the seller lowers the price.
+* **Then** no notification is sent to that buyer.
+
+# Trust Signals
+
+### Story 4.4: Verified Seller Badge
+*As a buyer, I want to see a verified badge on trustworthy sellers, so that I can buy with confidence.*
+
+**Acceptance Criteria:**
+* **Given** a seller whose account is older than 90 days with at least one marked-sold listing.
+* **When** a buyer views their listing.
+* **Then** a verified badge renders next to the seller's name.
+* **Given** a seller whose account is 10 days old with zero sold listings.
+* **When** a buyer views their listing.
+* **Then** no verified badge renders.
+* **Given** a seller who previously qualified drops below the criteria (e.g., account flagged).
+* **When** a buyer views their listing.
+* **Then** the badge is no longer displayed.
+
+# Pricing Intelligence
+
+### Story 4.5: Sold Price History Per Category
+*As a seller, I want to see what similar items actually sold for in each category, so that I can price my listing fairly.*
+
+**Acceptance Criteria:**
+* **Given** the "Wheels & Tires" category has 20 sold listings in the last 90 days.
+* **When** a seller opens the price history for that category.
+* **Then** the system displays the median and range of sold prices.
+* **Given** a category has 3 sold listing in the last 90 days.
+* **When** a seller opens the price history for that category.
+* **Then** the system displays "Not enough data yet" instead of statistics.
+* **Given** price history is displayed.
+* **When** the data loads.
+* **Then** no individual seller or listing is identifiable in the aggregates. 
