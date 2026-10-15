@@ -103,12 +103,16 @@ def find_profanity(text: str) -> str | None:
     """Return the offending word if `text` contains profanity, else None."""
     if not text:
         return None
-    for pat in _MASKED:
-        if pat.search(text):
-            return "masked profanity"
+    # Plain (and leet-normalized) words first, so the return value names the
+    # actual word per the docstring. Masked patterns are broader (each class
+    # also matches the literal letter), so checking them first would swallow
+    # plain matches and always return "masked profanity".
     for word in re.findall(r"[a-z]+", _normalize(text)):
         if word in _WORDS:
             return word
+    for pat in _MASKED:
+        if pat.search(text):
+            return "masked profanity"
     return None
 
 
