@@ -234,3 +234,256 @@ This document outlines the vertical-slice user stories for Epic 2 of the Jtap ap
 * **Then** they navigate to `/squads/create`.
 
 **Placement note:** squad discovery lives inside the Browse tab (People | Squads segmented control) rather than as a separate tab. People browsing is kept -- the squad invite flow (Story 2.3) depends on user search.
+
+# Epic 3: Marketplace Core
+
+This document outlines the vertical-slice user stories for Epic 3 of the Jtap application, covering the minimum viable marketplace: sellers can create and maintain listings, buyers can discover them by proximity, contact sellers, and flag abuse. All acceptance criteria strictly follow the Given/When/Then format to ensure requirements are testable and explicitly cover happy paths, error paths, empty states, and permission boundaries. Unquantified adjectives have been deliberately omitted.
+
+# Create and Edit Listings
+
+### Story 3.1: Edit Listing After Posting
+*As a seller, I want to edit my marketplace listing after posting, so that I can fix mistakes without deleting and re-creating.*
+
+**Acceptance Criteria:**
+* **Given** a seller opens their own active listing detail page.
+* **When** they tap "Edit", change the price, and save.
+* **Then** the backend persists the change and the new price renders on the listing detail and feed card in the same session.
+* **Given** a seller is editing a listing.
+* **When** they clear the title field entirely and attempt to save.
+* **Then** the system prevents submission and surfaces an inline error reading "Lisiting title is required".
+* **Given** a user views a listing posted by a different account.
+* **When** the listing detail page loads.
+* **Then** no edit control is rendered, enforcing the ownership boundary.
+
+### Story 3.2: Multiple Photos Per Listing
+*As a buyer, I want to swipe through several photos on a listing, so that I can inspect the item before contacting the seller.*
+
+**Acceptance Criteria:**
+* **Given** a seller uploads 3 photos while creating a listing.
+* **When** a buyer opens the listing detail page.
+* **Then** all 3 photos render in a swipeable carousel with a position indicator reading "1 of 3".
+* **Given** a seller attempts to upload a 6th photo.
+* **When** the upload is submitted.
+* **Then** the system blocks the upload and displays an error reading "Maximum 5 photos per listing".
+* **Given** a listing with a single photo.
+* **When** the detail page loads. 
+* **Then** the photo renders exactly as a single image with no carousel controls.
+
+# Seller Dashboard
+
+### Story 3.3: My Listings View
+*As a seller, I want a "My Listings" view showing everything I have posted, so that I can manage active, sold, and expired items in one place.*
+
+**Acceptance Criteria:**
+* **Given** a signed-in seller with 2 active, 1 sold, and 1 expired listing navigates to "My Listings".
+* **When** the screen loads.
+* **Then** all 4 listings render, each labeled with its status and age in days.
+* **Given** a signed-in seller who has never posted a listing navigates to "My Listings".
+* **When** the screen loads.
+* **Then** the system displays an empty state reading "No listings" with a "Create listing" call to action.
+* **Given** a signed-out user.
+* **When** they attempt to open "My Listings".
+* **Then** the system redirects to the sign-in screen.
+
+### Story 3.4: Listing Expiry With One-Tap Repost
+*As a seller, I want my listings to expire after 30 days with a one-tap repost option, so that the marketplace does not fill with stale posts.*
+
+**Acceptance Criteria:**
+* **Given** a listing that was posted 31 days ago.
+* **When** a buyer loads the marketplace feed.
+* **Then** the expired listing does not appear in the feed.
+* **Given** a seller opens "My Listings" on an expired item.
+* **When** they tap "Repost".
+* **Then** the listing becomes active again with the current date and appears in the feed.
+* **Given** a listing that was posted 29 days ago.
+* **When** a buyer loads the marketplace feed.
+* **Then** the listing still appears in the feed.
+
+# Listing Attributes
+
+### Story 3.5: Condition Field on Listings
+*As a seller, I want to mark my item's condition, so that buyers know what to expect.*
+
+**Acceptance Criteria:**
+* **Given** a seller creates a listing.
+* **When** they select "Used" from the condition dropdown and submit.
+* **Then** the condition saves and renders as a badge on the listing detail and feed card.
+* **Given** a buyer opens the filter panel.
+* **When** they select the "Like-new" condition filter.
+* **Then** only listings marked as "Like-new" appear in the results.
+* **Given** a seller submits without selecting a condition.
+* **When** the form is submitted.
+* **Then** the system blocks submission and surfaces an inline error reading "Item condition is required".
+
+### Story 3.6: OBO / Trade-Offers Toggle on Price
+*As a seller, I want to mark my price as "or best offer" or open to trades, so that I receive more responses.*
+
+**Acceptance Criteria:**
+* **Given** a seller enables "Or best offer" on a $300 listing.
+* **When** a buyer views the feed card.
+* **Then** the price renders as "$300 OBO".
+* **Given** a seller enables "Open to trades".
+* **When** a buyer opens the listing detail page.
+* **Then** an "Open to trades" badge is visible below the price.
+* **Given** a seller enables neither toggle.
+* **When** a buyer views the listing.
+* **Then** the price renders as a plain amount with no badges.
+
+# Proximity Discovery
+
+### Story 3.7: Show Distance on Each Listing
+*As a buyer, I want to see how far away each listing is, so that I can decide whether pickup is realistic.*
+
+**Acceptance Criteria:**
+* **Given** a listing posted by a seller 12 miles from the buyer.
+* **When** the marketplace feed card renders.
+* **Then** the card displays "12 mi aways".
+* **Given** a seller has hidden their location via the privacy toggle.
+* **When** a buyer views their listing.
+* **Then** the card displays "Location hidden" instead of a distance.
+* **Given** the buyer's device location permission is denied.
+* **When** the feed loads.
+* **Then** distance labels are omitted and a prompt reads "Enable location to see distances".
+
+### Story 3.8: Search-Radius Filter
+*As a buyer, I want to filter marketplace results by distance, so that I only see items I can realistically pick up.*
+
+**Acceptance Criteria:**
+* **Given** a buyer sets the radius filter to 25 miles.
+* **When** the feed reloads.
+* **Then** every visible listing is within 25 miles of the buyer.
+* **Given** a buyer sets a radius in which zero listings exist.
+* **When** the feed reloads.
+* **Then** the system displays an empty state reading "No listings with 25 miles. Try widening your search".
+* **Given** a buyer clears the radius filter.
+* **When** the feed reloads.
+* **Then** all listings render regardless of location.
+
+# Buyer-Seller Connection
+
+### Story 3.9: Link Listing to Seller's Rig Profile
+*As a buyer, I want to see the seller's rig profile from their listing, so that I can judge whether the part fits a build like mine.*
+
+**Acceptance Criteria:**
+* **Given** a listing posted by a seller with a public rig profile.
+* **When** the buyer taps the sellers' name.
+* **Then** the seller's Rig Details page opens.
+* **Given** a listing posted by a seller with a private rig profile.
+* **When** the buyer taps the seller's name.
+* **Then** the system displays a locked state reading "This rig profile is private".
+* **Given** a seller has no rig profile.
+* **When** a buyer views their listing.
+* **Then** the seller's name renders as plain text with no tap action.
+
+### Story 3.10: "Message Seller" Deep Link Into Chat
+*As a buyer, I want a "Message Seller" button on a listing that opens the chat tab with a prefilled thread, so that I do not have to hunt for the seller.*
+
+**Acceptance Criteria:**
+* **Given** a buyer taps "Message Seller" on a listing with no prior thread with that seller.
+* **When** the chat tab opens.
+* **Then** a new thread is created with the seller and the listing title is prefilled in the message draft.
+* **Given** a buyer taps 'Message Seller" when a thread with that seller already exists.
+* **When** the chat tab opens.
+* **Then** the existing thread opens and no duplicate thread is created.
+* **Given** a seller opens their own listing.
+* **When** the page loads.
+* **Then** the "Message Seller" button is not rendered.
+
+# Safety Minimum
+
+### Story 3.11: Report a Listing With Moderation Queue
+*As a buyer, I want to flag an inappropriate or scammy listing, so that the marketplace stays trustworthy.*
+
+**Acceptance Criteria:**
+* **Given** a buyer opens the report dialog on a listing.
+* **When** they select the reason "Scam" and submit.
+* **Then** the system records the flag and displays confirmation reading "Thanks - we'll review this listing".
+* **Given** a buyer has already flagged a specific listing.
+* **When** they attempt to flag the same listing again.
+* **Then** the system blocks the duplicate and displays "You've already reported this listing".
+* **Given** a listing has received 3 flags.
+* **When** the third flag is recorded.
+* **Then** the backend automatically hides the listing from the feed pending review.
+* **Given** a moderator opens the moderation queue.
+* **When** the queue loads
+* **Then** flagged listings render with their flag reasons, counts, and reporter notes.
+
+# Epic 4: Marketplace Engagement and Trust
+
+This document outlines the vertical-slice user stories for Epic 4 of the Jtap application, covering the retentioin and trust layer that ships after the core marketplace: saved searches, watchlists, alerts, seller verification, and pricing intelligence. All acceptance criteria strictly follow the Given/When/Then format to ensure requirements are testable and explicitly cover happy paths, error paths, empty states, and permission boundaries. Unquantified adjectives have been deliberately omitted.
+
+# Retention 
+
+### Story 4.1: Saved Searches With Push Notifications
+*As a buyer, I want to save a search and get a push notification when a matching listing is posted, so that I do not miss deals.*
+
+**Acceptance Criteria:**
+* **Given** a buyer saves a search for "35-inch tires" in the "Wheels & Tires" category.
+* **When** a new listing matching those keywords and that category is posted.
+* **Then** the buyer receives a push notification withihn 5 minutes.
+* **Given** a buyer deletes a saved search.
+* **When** a matching listing is later posted.
+* **Then** no notification is sent.
+* **Given** a buyer has push notifications disabled at the OS level.
+* **When** they attempt to save a search with alerts on.
+* **Then** the system warns "Push notifications are disabled — enable them in Settings to receive alerts" and still saves the search.
+
+### Story 4.2: Watchlist / Favorite Listings
+*As a buyer, I want to heart listings into a watchlist, so that I can come back to them later.*
+
+**Acceptance Criteria:**
+* **Given** a buyer taps the heart icon on a listing.
+* **When** they open their watchlist.
+* **Then** the listing appears in the watchlist.
+* **Given** a watched listing is marked as sold by the seller.
+* **When** the buyer opens their watchlist.
+* **Then** the listing remains visible with a "Sold" overlay.
+* **Given** a buyer removes a listing from the watchlist.
+* **When** they reopen the watchlist.
+* **Then** the listing no longer appears.
+
+### Story 4.3: Price-Drop Alerts on Favorited Listings
+*As a buyer, I want a notification when the price drops on a listing I have favorited, so that I can jump on the deal.*
+
+**Acceptance Criteria:**
+* **Given** a buyer favorited a listing priced at $300.
+* **When** the seller edits the price to $250.
+* **Then** the buyer receives a notification reading "Price drop: $300 → $350".
+* **Given** a buyer favorited a listing priced at $300.
+* **When** the seller edits the price to $350.
+* **Then** no notification is sent.
+* **Given** a buyer unfavorited a listing before a price drop.
+* **When** the seller lowers the price.
+* **Then** no notification is sent to that buyer.
+
+# Trust Signals
+
+### Story 4.4: Verified Seller Badge
+*As a buyer, I want to see a verified badge on trustworthy sellers, so that I can buy with confidence.*
+
+**Acceptance Criteria:**
+* **Given** a seller whose account is older than 90 days with at least one marked-sold listing.
+* **When** a buyer views their listing.
+* **Then** a verified badge renders next to the seller's name.
+* **Given** a seller whose account is 10 days old with zero sold listings.
+* **When** a buyer views their listing.
+* **Then** no verified badge renders.
+* **Given** a seller who previously qualified drops below the criteria (e.g., account flagged).
+* **When** a buyer views their listing.
+* **Then** the badge is no longer displayed.
+
+# Pricing Intelligence
+
+### Story 4.5: Sold Price History Per Category
+*As a seller, I want to see what similar items actually sold for in each category, so that I can price my listing fairly.*
+
+**Acceptance Criteria:**
+* **Given** the "Wheels & Tires" category has 20 sold listings in the last 90 days.
+* **When** a seller opens the price history for that category.
+* **Then** the system displays the median and range of sold prices.
+* **Given** a category has 3 sold listing in the last 90 days.
+* **When** a seller opens the price history for that category.
+* **Then** the system displays "Not enough data yet" instead of statistics.
+* **Given** price history is displayed.
+* **When** the data loads.
+* **Then** no individual seller or listing is identifiable in the aggregates. 
