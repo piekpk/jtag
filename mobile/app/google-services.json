@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "609102213018",
+    "project_id": "jtap-548a3",
+    "storage_bucket": "jtap-548a3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:609102213018:android:5f449458c7aa56d5b3d423",
+        "android_client_info": {
+          "package_name": "com.jtap.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBVvpys-3WADxNApdTVvfQiFbLVYGaHcrE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

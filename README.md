@@ -10,7 +10,7 @@ The prototype is a user-centered design built around the Product Goal: *a proxim
 
 ### Personas
 
-> Drafts — Pawel to finalize in his own words.
+
 
 **Primary — Mike, 34, Trail Rider.** Wheels every other weekend with a local Jeep club. Keeps running into impressive builds at trailheads but never learns who owns them or what's under the hood. Wants to see nearby rigs on a map, check build details, and coordinate rides. Android user, lives on his phone, low patience for clunky UI.
 
