@@ -22,6 +22,7 @@ The prototype is a user-centered design built around the Product Goal: *a proxim
 
 ![Jtap system context diagram](docs/context-diagram.svg)
 
+
 The system boundary sits around the Jtap backend (FastAPI + SQLite) and the Expo mobile app. External actors: the **4x4 Enthusiast** (app user — credentials, GPS location, profile/rig details in; nearby rigs, chat feed, ducks and milestones out), the **Administrator** (via the `/admin` panel), **Device GPS** (phone location services), **ngrok** (HTTPS tunnel exposing the PC-hosted backend), and the **Google Maps API** (map tiles).
 
 ### UI — key screens (in Figma)
@@ -41,6 +42,10 @@ Every step serves the Product Goal: see who's around you, connect, wheel togethe
 ## Architecture
 
 **Style: client–server, with a layered backend and a layered mobile client.**
+
+![Jtap architecture diagram](docs/architecture-diagram.svg)
+
+**Interfaces:** REST/JSON over HTTPS. Every request carries a JWT bearer token in the `Authorization` header; the mobile client polls `GET /users/nearby`, `GET /chat`, and `GET /drops/active` on an interval for live data, with push arriving out-of-band via FCM.
 
 - **Mobile client (Expo / React Native):** layered — Expo Router screens → API client module → AsyncStorage cache. Screens never touch the network directly. Tab layout: My Rig, Ducks, Browse, Map, Chat, Market.
 - **Backend (FastAPI + Uvicorn, Python):** layered monolith — route handlers → Pydantic schemas → domain logic (auth, Haversine proximity, drop claims, trades, milestones) → SQLAlchemy ORM → SQLite. One deployable unit.
