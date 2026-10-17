@@ -250,7 +250,7 @@ This document outlines the vertical-slice user stories for Epic 3 of the Jtap ap
 * **Then** the backend persists the change and the new price renders on the listing detail and feed card in the same session.
 * **Given** a seller is editing a listing.
 * **When** they clear the title field entirely and attempt to save.
-* **Then** the system prevents submission and surfaces an inline error reading "Lisiting title is required".
+* **Then** the system prevents submission and surfaces an inline error reading "Listing title is required".
 * **Given** a user views a listing posted by a different account.
 * **When** the listing detail page loads.
 * **Then** no edit control is rendered, enforcing the ownership boundary.
@@ -337,7 +337,7 @@ This document outlines the vertical-slice user stories for Epic 3 of the Jtap ap
 **Acceptance Criteria:**
 * **Given** a listing posted by a seller 12 miles from the buyer.
 * **When** the marketplace feed card renders.
-* **Then** the card displays "12 mi aways".
+* **Then** the card displays "12 mi away".
 * **Given** a seller has hidden their location via the privacy toggle.
 * **When** a buyer views their listing.
 * **Then** the card displays "Location hidden" instead of a distance.
@@ -382,7 +382,7 @@ This document outlines the vertical-slice user stories for Epic 3 of the Jtap ap
 * **Given** a buyer taps "Message Seller" on a listing with no prior thread with that seller.
 * **When** the chat tab opens.
 * **Then** a new thread is created with the seller and the listing title is prefilled in the message draft.
-* **Given** a buyer taps 'Message Seller" when a thread with that seller already exists.
+* **Given** a buyer taps "Message Seller" when a thread with that seller already exists.
 * **When** the chat tab opens.
 * **Then** the existing thread opens and no duplicate thread is created.
 * **Given** a seller opens their own listing.
@@ -410,7 +410,7 @@ This document outlines the vertical-slice user stories for Epic 3 of the Jtap ap
 
 # Epic 4: Marketplace Engagement and Trust
 
-This document outlines the vertical-slice user stories for Epic 4 of the Jtap application, covering the retentioin and trust layer that ships after the core marketplace: saved searches, watchlists, alerts, seller verification, and pricing intelligence. All acceptance criteria strictly follow the Given/When/Then format to ensure requirements are testable and explicitly cover happy paths, error paths, empty states, and permission boundaries. Unquantified adjectives have been deliberately omitted.
+This document outlines the vertical-slice user stories for Epic 4 of the Jtap application, covering the retention and trust layer that ships after the core marketplace: saved searches, watchlists, alerts, seller verification, and pricing intelligence. All acceptance criteria strictly follow the Given/When/Then format to ensure requirements are testable and explicitly cover happy paths, error paths, empty states, and permission boundaries. Unquantified adjectives have been deliberately omitted.
 
 # Retention 
 
@@ -420,7 +420,7 @@ This document outlines the vertical-slice user stories for Epic 4 of the Jtap ap
 **Acceptance Criteria:**
 * **Given** a buyer saves a search for "35-inch tires" in the "Wheels & Tires" category.
 * **When** a new listing matching those keywords and that category is posted.
-* **Then** the buyer receives a push notification withihn 5 minutes.
+* **Then** the buyer receives a push notification within 5 minutes.
 * **Given** a buyer deletes a saved search.
 * **When** a matching listing is later posted.
 * **Then** no notification is sent.
@@ -448,7 +448,7 @@ This document outlines the vertical-slice user stories for Epic 4 of the Jtap ap
 **Acceptance Criteria:**
 * **Given** a buyer favorited a listing priced at $300.
 * **When** the seller edits the price to $250.
-* **Then** the buyer receives a notification reading "Price drop: $300 → $350".
+* **Then** the buyer receives a notification reading "Price drop: $300 → $250".
 * **Given** a buyer favorited a listing priced at $300.
 * **When** the seller edits the price to $350.
 * **Then** no notification is sent.
