@@ -14,6 +14,10 @@ The prototype is a user-centered design built around the Product Goal: *a proxim
 
 **Secondary — Jess, 27, New Owner.** Bought her first Wrangler six months ago. Less interested in wrenching, drawn in by the community game — collecting ducks, hunting location drops, building her pond. Wants the app to feel fun and welcoming, not intimidating.
 
+**Alternate path — no rigs in range.** If the Map tab finds nobody within the radius, it shows an empty state ("No rigs nearby yet — invite riders to check in") instead of a blank map, and Mike can still use the duck feed and global chat. The app never dead-ends: every empty state offers a next action.
+
+**Error path — location unavailable.** If Mike denies location permission or GPS is off, nearby features degrade gracefully: the Map tab explains what's missing and links straight to the permission setting, while the rest of the app (pond, marketplace, global chat) keeps working. No crash, no silent empty list.
+
 ### Context diagram
 
 ![Jtap system context diagram](docs/context-diagram.svg)
