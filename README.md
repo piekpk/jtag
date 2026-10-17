@@ -64,11 +64,6 @@ Every step serves the Product Goal: see who's around you, connect, wheel togethe
 
 - **System / acceptance (manual)** — scope: end-to-end on a real build, the way a user experiences it. Tools: release APK installed on a physical Android phone, step-by-step checklist. Concrete case: new-rider onboarding — fresh install, sign up with a new email → lands on the Map tab, pond shows the 10 starter ducks, Send Wave on a nearby rig card delivers a notification to the other device. Other cases: sign in (email + Google), verify nearby rigs appear at a real location, claim a test drop, confirm push arrives with the app closed.
   
-- **Unit tests** — isolated logic with no I/O: Haversine distance math (known city pairs, antipodal edge cases), duck rarity/award calculations, the profanity filter (leet-speak and masked forms vs. innocent words), JWT creation/validation and password hashing.
-  
-- **Integration tests** — API endpoints against a throwaway SQLite database: signup → login → set location → nearby returns the rig; duck drop creation → claim → inventory updates; chat post → appears in feed. Each test gets a fresh DB so tests never leak state into each other.
-  
-- **System / acceptance (manual):** release APK installed on a real Android phone — sign in (email + Google), verify nearby rigs appear on the map at a real location, send a wave, claim a test drop, confirm push notifications arrive with the app closed.
 
 ## Setup Instructions
 
