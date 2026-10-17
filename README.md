@@ -58,8 +58,16 @@ Every step serves the Product Goal: see who's around you, connect, wheel togethe
 
 ## Test Plan
 
+- **Unit tests** — scope: isolated logic with no I/O. Tools: `pytest`. Concrete case: Haversine distance — `haversine(40.7128, -74.0060, 40.7128, -74.0060)` must return `0 m`, and two points one degree of longitude apart at the equator must return ≈ 111,195 m (±1 m). Other cases: duck rarity/award calculations, the profanity filter (leet-speak and masked forms blocked, innocent words pass), JWT creation/validation and password hashing.
+
+- **Integration tests** — scope: API endpoints against a throwaway SQLite database; each test gets a fresh DB so tests never leak state. Tools: `pytest` + FastAPI `TestClient`. Concrete case: drop-claim radius enforcement — create a drop with `radius_m=200`, claim from 5 km away → `400` and the claimant's inventory is unchanged; claim from 50 m away → `200`, inventory gains exactly one duck, `claims_left` drops by one. Other cases: signup → login → set location → nearby returns the rig; chat post → appears in feed.
+
+- **System / acceptance (manual)** — scope: end-to-end on a real build, the way a user experiences it. Tools: release APK installed on a physical Android phone, step-by-step checklist. Concrete case: new-rider onboarding — fresh install, sign up with a new email → lands on the Map tab, pond shows the 10 starter ducks, Send Wave on a nearby rig card delivers a notification to the other device. Other cases: sign in (email + Google), verify nearby rigs appear at a real location, claim a test drop, confirm push arrives with the app closed.
+  
 - **Unit tests** — isolated logic with no I/O: Haversine distance math (known city pairs, antipodal edge cases), duck rarity/award calculations, the profanity filter (leet-speak and masked forms vs. innocent words), JWT creation/validation and password hashing.
+  
 - **Integration tests** — API endpoints against a throwaway SQLite database: signup → login → set location → nearby returns the rig; duck drop creation → claim → inventory updates; chat post → appears in feed. Each test gets a fresh DB so tests never leak state into each other.
+  
 - **System / acceptance (manual):** release APK installed on a real Android phone — sign in (email + Google), verify nearby rigs appear on the map at a real location, send a wave, claim a test drop, confirm push notifications arrive with the app closed.
 
 ## Setup Instructions
