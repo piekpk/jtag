@@ -10,15 +10,18 @@ The prototype is a user-centered design built around the Product Goal: *a proxim
 
 ### Personas
 
-
-
 **Primary — Mike, 34, Trail Rider.** Wheels every other weekend with a local Jeep club. Keeps running into impressive builds at trailheads but never learns who owns them or what's under the hood. Wants to see nearby rigs on a map, check build details, and coordinate rides. Android user, lives on his phone, low patience for clunky UI.
 
 **Secondary — Jess, 27, New Owner.** Bought her first Wrangler six months ago. Less interested in wrenching, drawn in by the community game — collecting ducks, hunting location drops, building her pond. Wants the app to feel fun and welcoming, not intimidating.
 
+**Alternate path — no rigs in range.** If the Map tab finds nobody within the radius, it shows an empty state ("No rigs nearby yet — invite riders to check in") instead of a blank map, and Mike can still use the duck feed and global chat. The app never dead-ends: every empty state offers a next action.
+
+**Error path — location unavailable.** If Mike denies location permission or GPS is off, nearby features degrade gracefully: the Map tab explains what's missing and links straight to the permission setting, while the rest of the app (pond, marketplace, global chat) keeps working. No crash, no silent empty list.
+
 ### Context diagram
 
 ![Jtap system context diagram](docs/context-diagram.svg)
+
 
 The system boundary sits around the Jtap backend (FastAPI + SQLite) and the Expo mobile app. External actors: the **4x4 Enthusiast** (app user — credentials, GPS location, profile/rig details in; nearby rigs, chat feed, ducks and milestones out), the **Administrator** (via the `/admin` panel), **Device GPS** (phone location services), **ngrok** (HTTPS tunnel exposing the PC-hosted backend), and the **Google Maps API** (map tiles).
 
@@ -40,6 +43,10 @@ Every step serves the Product Goal: see who's around you, connect, wheel togethe
 
 **Style: client–server, with a layered backend and a layered mobile client.**
 
+![Jtap architecture diagram](docs/architecture-diagram.svg)
+
+**Interfaces:** REST/JSON over HTTPS. Every request carries a JWT bearer token in the `Authorization` header; the mobile client polls `GET /users/nearby`, `GET /chat`, and `GET /drops/active` on an interval for live data, with push arriving out-of-band via FCM.
+
 - **Mobile client (Expo / React Native):** layered — Expo Router screens → API client module → AsyncStorage cache. Screens never touch the network directly. Tab layout: My Rig, Ducks, Browse, Map, Chat, Market.
 - **Backend (FastAPI + Uvicorn, Python):** layered monolith — route handlers → Pydantic schemas → domain logic (auth, Haversine proximity, drop claims, trades, milestones) → SQLAlchemy ORM → SQLite. One deployable unit.
 - **Auth:** JWT bearer tokens (bcrypt passwords); Google/Facebook/X sign-in verifies provider tokens server-side and links to existing accounts.
@@ -51,9 +58,12 @@ Every step serves the Product Goal: see who's around you, connect, wheel togethe
 
 ## Test Plan
 
-- **Unit tests** — isolated logic with no I/O: Haversine distance math (known city pairs, antipodal edge cases), duck rarity/award calculations, the profanity filter (leet-speak and masked forms vs. innocent words), JWT creation/validation and password hashing.
-- **Integration tests** — API endpoints against a throwaway SQLite database: signup → login → set location → nearby returns the rig; duck drop creation → claim → inventory updates; chat post → appears in feed. Each test gets a fresh DB so tests never leak state into each other.
-- **System / acceptance (manual):** release APK installed on a real Android phone — sign in (email + Google), verify nearby rigs appear on the map at a real location, send a wave, claim a test drop, confirm push notifications arrive with the app closed.
+- **Unit tests** — scope: isolated logic with no I/O. Tools: `pytest`. Concrete case: Haversine distance — `haversine(40.7128, -74.0060, 40.7128, -74.0060)` must return `0 m`, and two points one degree of longitude apart at the equator must return ≈ 111,195 m (±1 m). Other cases: duck rarity/award calculations, the profanity filter (leet-speak and masked forms blocked, innocent words pass), JWT creation/validation and password hashing.
+
+- **Integration tests** — scope: API endpoints against a throwaway SQLite database; each test gets a fresh DB so tests never leak state. Tools: `pytest` + FastAPI `TestClient`. Concrete case: drop-claim radius enforcement — create a drop with `radius_m=200`, claim from 5 km away → `400` and the claimant's inventory is unchanged; claim from 50 m away → `200`, inventory gains exactly one duck, `claims_left` drops by one. Other cases: signup → login → set location → nearby returns the rig; chat post → appears in feed.
+
+- **System / acceptance (manual)** — scope: end-to-end on a real build, the way a user experiences it. Tools: release APK installed on a physical Android phone, step-by-step checklist. Concrete case: new-rider onboarding — fresh install, sign up with a new email → lands on the Map tab, pond shows the 10 starter ducks, Send Wave on a nearby rig card delivers a notification to the other device. Other cases: sign in (email + Google), verify nearby rigs appear at a real location, claim a test drop, confirm push arrives with the app closed.
+  
 
 ## Setup Instructions
 
