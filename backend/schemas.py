@@ -51,3 +51,21 @@ class SquadResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class RigCreate(BaseModel):
+    year: Optional[int] = None
+    make: Optional[str] = None
+    model: Optional[str] = None
+
+
+class RigResponse(BaseModel):
+    id: int
+    user_id: int
+    year: Optional[int] = None
+    make: str
+    model: str
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True

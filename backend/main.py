@@ -5,7 +5,7 @@ import random
 import secrets
 import re
 import sqlite3
-from typing import Optional
+from typing import List, Optional
 from datetime import datetime, timedelta
 from uuid import uuid4
 from math import radians, cos, sin, asin, sqrt
@@ -21,8 +21,8 @@ from passlib.context import CryptContext
 from pydantic import BaseModel
 from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
-from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, Milestone, PhotoReaction, MarketListing, Notification, Meetup, MeetupRsvp, PlaceSearch, SosRequest, SosResponse, AdminAuditLog, Squad, SquadMember
-from schemas import UserProfileUpdate, UserProfileResponse, UserCreate, SquadCreate, SquadResponse
+from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, Milestone, PhotoReaction, MarketListing, Notification, Meetup, MeetupRsvp, PlaceSearch, SosRequest, SosResponse, AdminAuditLog, Squad, SquadMember, RigProfile
+from schemas import UserProfileUpdate, UserProfileResponse, UserCreate, SquadCreate, SquadResponse, RigCreate, RigResponse
 import duck_ai
 import profanity
 import holiday_ducks
@@ -3609,3 +3609,49 @@ def create_squad(payload: SquadCreate, db: Session = Depends(get_db),
         is_private=squad.is_private, created_at=squad.created_at,
         member_count=1, my_role="leader",
     )
+
+
+# --- Rigs (Epic 1) ---
+@app.post("/rigs", response_model=RigResponse)
+def create_rig(payload: RigCreate, db: Session = Depends(get_db),
+               current_user: User = Depends(get_current_user)):
+    """Create a rig profile for the caller (Ticket 1.1.1)."""
+    make = (payload.make or "").strip()
+    model = (payload.model or "").strip()
+    if not make or not model:
+        raise HTTPException(status_code=400, detail="Make and Model are required fields.")
+    if len(make) > 60 or len(model) > 60:
+        raise HTTPException(status_code=400, detail="Make and Model are too long (max 60 characters).")
+    _require_clean(make, model)
+    rig = RigProfile(
+        user_id=current_user.id,
+        year=payload.year,
+        make=make,
+        model=model,
+    )
+    db.add(rig)
+    db.commit()
+    db.refresh(rig)
+    return RigResponse(
+        id=rig.id, user_id=rig.user_id, year=rig.year,
+        make=rig.make, model=rig.model, created_at=rig.created_at,
+    )
+
+
+@app.get("/rigs", response_model=List[RigResponse])
+def list_my_rigs(db: Session = Depends(get_db),
+                 current_user: User = Depends(get_current_user)):
+    """List the caller's rig profiles, newest first."""
+    rigs = (
+        db.query(RigProfile)
+        .filter(RigProfile.user_id == current_user.id)
+        .order_by(RigProfile.created_at.desc(), RigProfile.id.desc())
+        .all()
+    )
+    return [
+        RigResponse(
+            id=r.id, user_id=r.user_id, year=r.year,
+            make=r.make, model=r.model, created_at=r.created_at,
+        )
+        for r in rigs
+    ]
