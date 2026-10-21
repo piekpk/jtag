@@ -152,7 +152,7 @@ export default function BrowseScreen() {
         const headers = await getAuthHeaders();
         const q = squadQuery.trim();
         const [mineRes, allRes] = await Promise.all([
-          fetch(`${API_URL}/squads?mine=true&limit=50`, { headers }),
+          fetch(`${API_URL}/squads?mine=true&limit=50${q ? `&q=${encodeURIComponent(q)}` : ''}`, { headers }),
           fetch(`${API_URL}/squads?limit=20${q ? `&q=${encodeURIComponent(q)}` : ''}`, { headers }),
         ]);
         if (cancelled) return;
@@ -167,6 +167,10 @@ export default function BrowseScreen() {
     const t = setTimeout(load, 350);
     return () => { cancelled = true; clearTimeout(t); };
   }, [segment, squadQuery]);
+
+  // Discover excludes squads the user already joined (they render under "My squads").
+  const joinedSquadIds = new Set(mySquads.map((s) => s.id));
+  const discoverSquads = squads.filter((s) => !joinedSquadIds.has(s.id));
 
   const renderUser = ({ item }) => {
     const ownerName = item.settings?.ownerName || 'Fellow Jeeper';
@@ -357,15 +361,15 @@ export default function BrowseScreen() {
               ))}
             </View>
           )}
-          {squads.length > 0 && (
+          {discoverSquads.length > 0 && (
             <View>
               <Text style={styles.sectionHeader}>Discover</Text>
-              {squads.map((s) => (
+              {discoverSquads.map((s) => (
                 <View key={`all-${s.id}`}>{renderSquad({ item: s })}</View>
               ))}
             </View>
           )}
-          {mySquads.length === 0 && squads.length === 0 && (
+          {mySquads.length === 0 && discoverSquads.length === 0 && (
             <View style={styles.centered}>
               <Text style={styles.emptyText}>No squads found. Create one to get started.</Text>
             </View>
