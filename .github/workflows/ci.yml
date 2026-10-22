@@ -1,0 +1,71 @@
+name: CI
+
+# Runs on every pull request and on every push to main.
+# Three independent jobs: backend tests, frontend typecheck, and the
+# repo's buildInfo.js bump convention.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend-tests:
+    name: Backend tests (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Run tests
+        run: pytest backend/tests -q
+
+  frontend-typecheck:
+    name: Frontend typecheck (tsc)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+  build-number:
+    name: buildInfo.js bumped
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check BUILD_NUMBER increased vs the base branch
+        run: |
+          base=$(git show "origin/${{ github.base_ref }}:mobile/app/buildInfo.js" | grep -oE 'BUILD_NUMBER = [0-9]+' | grep -oE '[0-9]+')
+          head=$(grep -oE 'BUILD_NUMBER = [0-9]+' mobile/app/buildInfo.js | grep -oE '[0-9]+')
+          echo "BUILD_NUMBER — base (${{ github.base_ref }}): $base, this PR: $head"
+          if [ "$head" -le "$base" ]; then
+            echo "::error::mobile/app/buildInfo.js was not bumped. Repo convention: bump BUILD_NUMBER by 1 in every commit."
+            exit 1
+          fi
