@@ -519,6 +519,14 @@ async function lookupUser() {
       <div class="card" style="cursor:default; display:block">${meetupRows}</div>
       <div style="color:var(--gold); font-weight:700; font-size:13px; margin:14px 0 6px;">Meetups attending</div>
       <div class="card" style="cursor:default; display:block">${attendingRows}</div>
+      <div style="color:var(--gold); font-weight:700; font-size:13px; margin:14px 0 6px;">Reset password</div>
+      <div class="card" style="cursor:default; display:block">
+        <div style="display:flex; gap:10px;">
+          <input type="password" id="rp_pw" placeholder="New password" autocomplete="new-password" style="flex:1;">
+          <button class="ghost" style="margin-top:0;" onclick="resetPassword(${u.id}, '${esc(u.email)}')">Reset password</button>
+        </div>
+        <div style="color:var(--muted); font-size:12px; margin-top:6px;">Sets a new login password for this account, effective immediately.</div>
+      </div>
       <div style="display:flex; gap:10px;">
         <button class="${u.is_banned ? 'ghost' : 'danger'}" style="flex:1; margin-top:0;" onclick="toggleBan(${u.id}, ${!!u.is_banned}, lookupUser)">${u.is_banned ? 'Unban' : 'Ban'} this user</button>
         <button class="ghost" style="flex:1;" onclick="giveToUser('${esc(u.email)}')">🎁 Grant ducks</button>
@@ -888,6 +896,17 @@ async function toggleBan(id, currentlyBanned, refresh) {
     await api(`/admin/users/${id}/${action}`, { method: 'POST' });
     refresh();
   } catch (e) { alert('Failed: ' + e.message); }
+}
+
+async function resetPassword(id, email) {
+  const pw = document.getElementById('rp_pw').value;
+  if (!pw) { alert('Enter a new password first.'); return; }
+  if (!confirm(`Set a new password for ${email}? Their old password stops working immediately.`)) return;
+  try {
+    await api(`/admin/users/${id}/reset-password`, { method: 'POST', body: JSON.stringify({ password: pw }) });
+    document.getElementById('rp_pw').value = '';
+    alert(`Password reset for ${email}. They can log in with the new password now.`);
+  } catch (e) { alert('Reset failed: ' + e.message); }
 }
 
 function editInput(col, value) {

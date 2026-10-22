@@ -3246,6 +3246,28 @@ def admin_unban_user(user_id: int, db: Session = Depends(get_db),
     return _set_banned(db, admin, user_id, False)
 
 
+@app.post("/admin/users/{user_id}/reset-password")
+def admin_reset_password(user_id: int, payload: dict,
+                         db: Session = Depends(get_db),
+                         admin: User = Depends(require_admin)):
+    """Set a user's password (stored bcrypt-hashed, same as signup).
+
+    There is no self-service reset; this is how an admin recovers an
+    account whose password is lost or whose hash is unusable.
+    """
+    new_password = (payload or {}).get("password") or ""
+    if not isinstance(new_password, str) or not new_password:
+        raise HTTPException(status_code=400, detail="Password must not be empty")
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    new_hash = pwd_context.hash(new_password)
+    setattr(user, "hashed_password", new_hash)
+    db.commit()
+    _log_admin(db, admin, "reset_password", "user", user.id, user.email)
+    return {"ok": True, "user_id": user.id, "email": user.email}
+
+
 class AdminDropCreate(BaseModel):
     duck_type_id: int
     latitude: float
