@@ -84,7 +84,7 @@ Story-to-ticket mapping: Setup 1.0.1 → #11, 1.0.2 → #12, 1.0.3 → #13, 1.0.
 **Acceptance Criteria:**
 * **Given** a rig owner is viewing their own active Rig Details page.
 * **When** they click "Add Mod", select "Suspension" from the dropdown, input "2-inch lift kit", and submit.
-* **Then** the database updates the document array, and the new modification instantly appears nested under the "Suspension" header on the profile UI.
+* **Then** the backend updates the mods array in SQLite, and the new modification instantly appears nested under the "Suspension" header on the profile UI.
 * **Given** a rig owner is typing a part name into the "Add Mod" input field.
 * **When** the character count exceeds 100 characters.
 * **Then** the input field blocks further text entry and displays a warning stating the maximum character limit has been reached.
@@ -268,7 +268,7 @@ Story-to-ticket mapping: 2.1 → #42/#43, 2.2 → #44/#45, 2.3 → #46/#47, 2.4 
 * **When** they have squads.
 * **Then** "My squads" renders above the discovery results.
 * **Given** the user types in the squad search box.
-* **When** the query has 2+ characters.
+* **When** the query is non-empty (debounced).
 * **Then** results filter via `GET /squads?q=`.
 * **Given** no squads match the query.
 * **When** results load.
