@@ -3609,3 +3609,45 @@ def create_squad(payload: SquadCreate, db: Session = Depends(get_db),
         is_private=squad.is_private, created_at=squad.created_at,
         member_count=1, my_role="leader",
     )
+
+# --- Squads: discovery (S7.1, #57) ---
+@app.get("/squads", response_model=list[SquadResponse])
+def list_squads(q: Optional[str] = None, mine: bool = False,
+                limit: int = 20, offset: int = 0,
+                db: Session = Depends(get_db),
+                current_user: User = Depends(get_current_user)):
+    """Discover squads: public squads plus the caller's private squads.
+
+    Query params: q (case-insensitive name search), mine (only squads the
+    caller joined), limit (default 20, max 50), offset (default 0).
+    Newest squads first.
+    """
+    limit = max(1, min(limit, 50))
+    offset = max(0, offset)
+    my_squad_ids = db.query(SquadMember.squad_id).filter(
+        SquadMember.user_id == current_user.id)
+    query = db.query(Squad)
+    if q and q.strip():
+        query = query.filter(Squad.name.ilike(f"%{q.strip()}%"))
+    if mine:
+        query = query.filter(Squad.id.in_(my_squad_ids))
+    else:
+        # Public squads, plus private squads the caller belongs to.
+        query = query.filter(or_(Squad.is_private == False,  # noqa: E712
+                                 Squad.id.in_(my_squad_ids)))
+    squads = (query.order_by(Squad.created_at.desc())
+              .offset(offset).limit(limit).all())
+    ids = [s.id for s in squads]
+    counts = dict(db.query(SquadMember.squad_id, func.count(SquadMember.id))
+                  .filter(SquadMember.squad_id.in_(ids))
+                  .group_by(SquadMember.squad_id).all()) if ids else {}
+    roles = dict(db.query(SquadMember.squad_id, SquadMember.role)
+                 .filter(SquadMember.user_id == current_user.id,
+                         SquadMember.squad_id.in_(ids)).all()) if ids else {}
+    return [SquadResponse(
+        id=s.id, name=s.name, description=s.description,
+        avatar_url=s.avatar_url, created_by=s.created_by,
+        is_private=s.is_private, created_at=s.created_at,
+        member_count=counts.get(s.id, 0), my_role=roles.get(s.id),
+    ) for s in squads]
+
