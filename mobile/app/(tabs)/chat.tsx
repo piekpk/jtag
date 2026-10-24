@@ -104,6 +104,33 @@ export default function ChatScreen() {
   const messageCountRef = useRef(0); // tracks last-seen count so auto-scroll only fires on new messages
   const isNearBottomRef = useRef(true); // false once the user scrolls up to read history
 
+  // JtapBot "thinking" indicator: shown after the user sends a message the bot
+  // will answer (any DM message, or a global message @-mentioning it), until the
+  // bot's reply arrives in a poll or the safety timeout fires. Purely local —
+  // nothing is posted to the channel, so no stray "thinking" message lingers in
+  // history (chat messages can't be edited or deleted server-side).
+  const [botThinking, setBotThinking] = useState(false);
+  const thinkingSentIdRef = useRef(null); // id of the user's message the bot is answering
+  const thinkingTimerRef = useRef(null);
+  const lastBotAskRef = useRef({ channel: null, at: 0 });
+  const BOT_THINKING_TIMEOUT_MS = 180000; // backend worst case (~2 min) + margin
+
+  const clearBotThinking = () => {
+    if (thinkingTimerRef.current) {
+      clearTimeout(thinkingTimerRef.current);
+      thinkingTimerRef.current = null;
+    }
+    thinkingSentIdRef.current = null;
+    setBotThinking(false);
+  };
+
+  const startBotThinking = (sentId) => {
+    clearBotThinking();
+    thinkingSentIdRef.current = sentId;
+    setBotThinking(true);
+    thinkingTimerRef.current = setTimeout(clearBotThinking, BOT_THINKING_TIMEOUT_MS);
+  };
+
   // Track whether the user is currently near the bottom of the chat.
   const handleChatScroll = (e) => {
     const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
@@ -140,6 +167,12 @@ export default function ChatScreen() {
       if (response.ok) {
         const data = await response.json();
         setMessages(data);
+        // A bot reply to the message we're waiting on clears the indicator.
+        // owner_name identifies bot messages precisely in every channel.
+        if (thinkingSentIdRef.current != null) {
+          const replied = data.some(m => m.owner_name === 'JtapBot' && Number(m.id) > Number(thinkingSentIdRef.current));
+          if (replied) clearBotThinking();
+        }
       }
     } catch (error) {
       console.error('Failed to fetch messages:', error);
@@ -149,6 +182,7 @@ export default function ChatScreen() {
   };
 
   useEffect(() => {
+    clearBotThinking();
     setIsLoading(true);
     messageCountRef.current = 0; // fresh channel load should land at the bottom
     isNearBottomRef.current = true;
@@ -156,7 +190,7 @@ export default function ChatScreen() {
     const intervalId = setInterval(() => {
       fetchMessages(false);
     }, 3000);
-    return () => clearInterval(intervalId);
+    return () => { clearInterval(intervalId); clearBotThinking(); };
   }, [apiChannel]);
 
   const handleSendMessage = async () => {
@@ -177,6 +211,23 @@ export default function ChatScreen() {
       });
 
       if (response.ok) {
+        // The bot answers every DM message and any global message that
+        // @-mentions it (see jtapbot.maybe_reply). Show the thinking
+        // indicator for exactly those sends — but mirror the backend's
+        // per-channel reply cooldown (60s global, 5s DM): a bot-addressed
+        // message inside the window is dropped server-side, so showing the
+        // indicator would leave it spinning with no reply coming.
+        const addressesBot = isBotDm || messageContent.toLowerCase().includes('@jtapbot');
+        if (addressesBot) {
+          const cooldownMs = isBotDm ? 5000 : 60000;
+          const now = Date.now();
+          const last = lastBotAskRef.current;
+          if (!(last.channel === apiChannel && now - last.at < cooldownMs)) {
+            lastBotAskRef.current = { channel: apiChannel, at: now };
+            const body = await response.json().catch(() => null);
+            startBotThinking(body && body.id != null ? body.id : 0);
+          }
+        }
         fetchMessages(false);
       } else {
         const err = await response.json().catch(() => null);
@@ -420,6 +471,13 @@ export default function ChatScreen() {
             scrollEventThrottle={16}
           />
 
+          {botThinking && (
+            <View style={styles.thinkingRow}>
+              <ActivityIndicator size="small" color="#d4af37" />
+              <Text style={styles.thinkingText}>JtapBot is thinking…</Text>
+            </View>
+          )}
+
           <View style={styles.inputContainer}>
             <TextInput
               style={styles.input}
@@ -521,6 +579,8 @@ const styles = StyleSheet.create({
   botBanner: { backgroundColor: 'rgba(212,175,55,0.10)', borderBottomWidth: 1, borderBottomColor: 'rgba(212,175,55,0.35)', paddingVertical: 8, paddingHorizontal: 20 },
   botBannerText: { color: '#d4af37', fontSize: 13, fontWeight: '600' },
   botBg: { backgroundColor: '#161207' },
+  thinkingRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 8, backgroundColor: '#1a1a1a', borderTopWidth: 1, borderTopColor: '#2c2c2e' },
+  thinkingText: { color: '#d4af37', fontSize: 13, fontStyle: 'italic', marginLeft: 8 },
   localBanner: { backgroundColor: 'rgba(212,175,55,0.10)', borderBottomWidth: 1, borderBottomColor: 'rgba(212,175,55,0.35)', paddingVertical: 8, paddingHorizontal: 20 },
   localBannerText: { color: '#d4af37', fontSize: 13, fontWeight: '600' },
   senderRow: { flexDirection: 'row', alignItems: 'center' },
