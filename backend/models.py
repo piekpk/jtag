@@ -287,4 +287,5 @@ class RigProfile(Base):
     year = Column(Integer, nullable=True)
     make = Column(String(60), nullable=False)
     model = Column(String(60), nullable=False)
+    photo_url = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

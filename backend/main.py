@@ -3675,7 +3675,8 @@ def create_rig(payload: RigCreate, db: Session = Depends(get_db),
     db.refresh(rig)
     return RigResponse(
         id=rig.id, user_id=rig.user_id, year=rig.year,
-        make=rig.make, model=rig.model, created_at=rig.created_at,
+        make=rig.make, model=rig.model, photo_url=rig.photo_url,
+        created_at=rig.created_at,
     )
 
 
@@ -3692,7 +3693,38 @@ def list_my_rigs(db: Session = Depends(get_db),
     return [
         RigResponse(
             id=r.id, user_id=r.user_id, year=r.year,
-            make=r.make, model=r.model, created_at=r.created_at,
+            make=r.make, model=r.model, photo_url=r.photo_url,
+            created_at=r.created_at,
         )
         for r in rigs
     ]
+
+
+@app.post("/rigs/{rig_id}/photo", response_model=RigResponse)
+def upload_rig_photo(rig_id: int, file: UploadFile = File(...), db: Session = Depends(get_db),
+                     current_user: User = Depends(get_current_user)):
+    """Upload a rig's primary photo (Ticket 1.2.1). JPG/PNG only, max 5MB."""
+    rig = db.query(RigProfile).filter(RigProfile.id == rig_id).first()
+    if not rig:
+        raise HTTPException(status_code=404, detail="Rig not found")
+    if rig.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You can only edit your own rig.")
+    ext = (file.filename or "").rsplit(".", 1)[-1].lower()
+    if file.content_type not in ("image/jpeg", "image/png") or ext not in ("jpg", "jpeg", "png"):
+        raise HTTPException(status_code=400, detail="Invalid file format. Please upload a JPG or PNG")
+    contents = file.file.read()
+    if len(contents) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File size exceeds 5MB limit")
+    os.makedirs(os.path.join(UPLOAD_DIR, "rigs"), exist_ok=True)
+    unique_filename = f"rig_{rig_id}_{uuid4().hex}.{ext}"
+    file_location = os.path.join(UPLOAD_DIR, "rigs", unique_filename)
+    with open(file_location, "wb+") as file_object:
+        file_object.write(contents)
+    rig.photo_url = f"/uploads/rigs/{unique_filename}"
+    db.commit()
+    db.refresh(rig)
+    return RigResponse(
+        id=rig.id, user_id=rig.user_id, year=rig.year,
+        make=rig.make, model=rig.model, photo_url=rig.photo_url,
+        created_at=rig.created_at,
+    )

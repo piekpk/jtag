@@ -65,6 +65,7 @@ class RigResponse(BaseModel):
     year: Optional[int] = None
     make: str
     model: str
+    photo_url: Optional[str] = None
     created_at: Optional[datetime] = None
 
     class Config:
