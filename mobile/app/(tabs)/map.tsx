@@ -70,7 +70,7 @@ export default function RadarMapScreen() {
   useEffect(() => {
     if (routeParams.placePins) {
       try {
-        const parsed = JSON.parse(routeParams.placePins);
+        const parsed = JSON.parse(routeParams.placePins as string);
         const pins = (parsed.results || []).filter((r) => r.lat && r.lng);
         setPlacePins(pins);
         setPlaceCategory(parsed.category || null);
