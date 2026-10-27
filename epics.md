@@ -25,6 +25,8 @@ The working app underneath the coursework epics — shipped on main and in daily
 
 # Epic 1: Rig Profiles & Build Comparisons (The "Garage")
 
+**Implementation note (2026-10-26):** Rig profiles are implemented on the **user profile**, not on a separate rig table. The build (vehicle title, specs, mods, social links) is stored on the user record (`User.settings`), edited from the My Rig tab, and shown on peer profiles via `GET /users/{id}/profile`; the profile picture serves as the rig photo. Team decision 2026-10-26: keep this implementation and do not migrate rig data to a separate table. The `rig_profiles` table merged in PR #89 (ticket #16) is unused by the app and is being rolled back. Story statuses below are marked against this implementation: ✅ implemented, ⚠️ partial, 📋 outstanding — the partial and outstanding stories are the remaining work, to be built on the user profile.
+
 This document outlines the vertical-slice user stories for Epic 1 of the Jtap application. All acceptance criteria strictly follow the Given/When/Then format to ensure requirements are testable and explicitly cover happy paths, error paths, empty states, and permission boundaries  . Unquantified adjectives have been deliberately omitted.
 
 Story-to-ticket mapping: Setup 1.0.1 → #11, 1.0.2 → #12, 1.0.3 → #13, 1.0.4 → #14, 1.0.5 → #15; 1.1 → #16/#17/#18, 1.2 → #19/#20, 1.3 → #21/#22, 1.4 → #23/#24/#25, 1.5 → #26/#27, 1.6 → #28/#29, 1.7 → #30/#31, 1.8 → #32/#33/#34.
@@ -34,7 +36,7 @@ Story-to-ticket mapping: Setup 1.0.1 → #11, 1.0.2 → #12, 1.0.3 → #13, 1.0.
 ## Core Vehicle Identity
 
 ### Story 1.1: Create Base Profile
-**Status:** 🔨 Implemented 2026-10-20 on stacked branches, held for PR — not yet on main. Previously ⚠️ partial via the `User.settings` blob.
+**Status:** ✅ Implemented — on the user profile: one build per user, stored in `User.settings` (vehicle title, specs) and edited from the My Rig tab.
 *As a new app user, I want to create a base vehicle profile by inputting my rig's Year, Make, and Model, so that I have a foundation to document my specific off-road build.*
 
 **Acceptance Criteria:**
@@ -49,7 +51,7 @@ Story-to-ticket mapping: Setup 1.0.1 → #11, 1.0.2 → #12, 1.0.3 → #13, 1.0.
 * **Then** the system prevents the form submission and surfaces an inline error message reading "Make and Model are required fields."
 
 ### Story 1.2: Upload Rig Photo
-**Status:** 🔨 Implemented 2026-10-20 on stacked branches, held for PR — not yet on main. Previously ⚠️ partial (upload worked; no type/size guards).
+**Status:** ⚠️ Partial — photo upload works (the profile picture, `POST /users/{id}/profile-picture`), but it has **no format or size validation**. The JPG/PNG and 5MB acceptance criteria below are outstanding and are to be added to the existing upload.
 *As a rig owner, I want to upload a primary photo of my vehicle, so that peers can visually identify my build.*
 
 **Acceptance Criteria:**
@@ -64,7 +66,7 @@ Story-to-ticket mapping: Setup 1.0.1 → #11, 1.0.2 → #12, 1.0.3 → #13, 1.0.
 * **Then** the system blocks the upload and displays an error reading "Invalid file format. Please upload a JPG or PNG".
 
 ### Story 1.3: Delete Vehicle Profile
-**Status:** 🔨 Implemented 2026-10-20 on stacked branches, held for PR — not yet on main. Previously 📋 not implemented — confirmed by code audit 2026-10-20.
+**Status:** 📋 Outstanding — not implemented: no delete exists for a vehicle profile. To be built on the user profile.
 *As a user, I want to delete my vehicle profile, so that I can remove rigs I no longer own.*  
 
 **Acceptance Criteria:**
@@ -78,7 +80,7 @@ Story-to-ticket mapping: Setup 1.0.1 → #11, 1.0.2 → #12, 1.0.3 → #13, 1.0.
 ## Build Tracking & Modifications
 
 ### Story 1.4: Add Modification
-**Status:** 🔨 Implemented 2026-10-20 on stacked branches, held for PR — not yet on main. Previously ⚠️ partial (mods were one free-text field).
+**Status:** ⚠️ Partial — mods exist as one free-text field in `User.settings` (500-character cap). Per-item structured mods by category, per the acceptance criteria below, are outstanding.
 *As a rig owner, I want to add individual parts to my profile by category, so that I can track my exact build.*  
 
 **Acceptance Criteria:**
@@ -93,7 +95,7 @@ Story-to-ticket mapping: Setup 1.0.1 → #11, 1.0.2 → #12, 1.0.3 → #13, 1.0.
 * **Then** the "Add Mod" action is completely hidden from the UI, enforcing strict permission boundaries.
 
 ### Story 1.5: Edit Existing Modification
-**Status:** 🔨 Implemented 2026-10-20 on stacked branches, held for PR — not yet on main. Previously ⚠️ partial (free-text editing only).
+**Status:** ⚠️ Partial — mods can be edited as free text. Per-item edit is outstanding (depends on Story 1.4).
 *As a rig owner, I want to update a saved modification, so that I can correct typos or update brand names.*  
 
 **Acceptance Criteria:**
@@ -105,7 +107,7 @@ Story-to-ticket mapping: Setup 1.0.1 → #11, 1.0.2 → #12, 1.0.3 → #13, 1.0.
 * **Then** the system disables the save button and requires at least 1 character to be present to submit.
 
 ### Story 1.6: Remove Modification
-**Status:** 🔨 Implemented 2026-10-20 on stacked branches, held for PR — not yet on main. Previously ⚠️ partial (by editing the mods text).
+**Status:** ⚠️ Partial — a mod can only be removed by editing the free-text field. Per-item remove is outstanding (depends on Story 1.4).
 *As a rig owner, I want to delete a specific modification from my list, so that my build accurately reflects parts I have uninstalled.*  
 
 **Acceptance Criteria:**
@@ -119,7 +121,7 @@ Story-to-ticket mapping: Setup 1.0.1 → #11, 1.0.2 → #12, 1.0.3 → #13, 1.0.
 ## Social Visibility
 
 ### Story 1.7: View Peer Build Sheet
-**Status:** 🔨 Implemented 2026-10-20 on stacked branches, held for PR — not yet on main. Was already ✅ done in substance via the settings blob (`GET /users/{id}/profile`); now also implemented per spec on the RigProfile entity.
+**Status:** ✅ Implemented — peer build sheet via `GET /users/{id}/profile` and the Browse/peer profile screens, with photos.
 *As a trail driver, I want to view the modification list of another public user, so that I can research their setup.*  
 
 **Acceptance Criteria:**
@@ -131,7 +133,7 @@ Story-to-ticket mapping: Setup 1.0.1 → #11, 1.0.2 → #12, 1.0.3 → #13, 1.0.
 * **Then** the modifications section displays an empty state reading "This user has not listed any modifications yet".
 
 ### Story 1.8: Privacy Toggle
-**Status:** 🔨 Implemented 2026-10-20 on stacked branches, held for PR — not yet on main. Previously ⚠️ partial (`discoverable` gated search only, not profile view).
+**Status:** ⚠️ Partial — the `discoverable` flag hides a user from search and nearby results, but the profile view itself is not gated. The private/locked state in the acceptance criteria below is outstanding.
 *As a driver, I want to toggle my garage profile to private, so that strangers cannot view my modification inventory.*  
 
 **Acceptance Criteria:**
@@ -545,4 +547,5 @@ This document outlines the vertical-slice user stories for Epic 4 of the Jtap ap
 
 ## Update log
 
+- **2026-10-26:** Epic 1 revised to the implementation the app actually ships: rig profiles live on the user profile (`User.settings`), per the team decision to keep the current implementation rather than migrate to a separate rig table. Stories 1.1 and 1.7 marked ✅ implemented in that form; 1.2 (photo validation), 1.4–1.6 (structured mods), and 1.8 (privacy gating of profile views) marked ⚠️ partial with the unmet criteria left as the outstanding work; 1.3 (delete) marked 📋 outstanding. The `rig_profiles` table from PR #89 is unused and is being rolled back.
 - **2026-10-20:** Added Epic 0 (shipped platform) and per-story statuses throughout. Epic 1 gained its story→ticket mapping; the Epic 2 mapping (previously sitting under Epic 1's header) moved under Epic 2. Epic 1 AC stack references corrected (MongoDB → SQLite, Django → FastAPI). Stories 1.1–1.8 marked 🔨 implemented on branches pending PR (verified end-to-end 2026-10-20); Story 2.7 marked 🔄 in review. Proposed Story 3.12 (AI listing draft assistant) added.
