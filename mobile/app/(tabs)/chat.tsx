@@ -293,7 +293,7 @@ export default function ChatScreen() {
   const renderMessageItem = ({ item }) => {
     const isMe = item.user_id?.toString() === userId?.toString();
     const reactions = item.reactions || {};
-    const hasReactions = Object.values(reactions).some(count => count > 0);
+    const hasReactions = Object.values(reactions).some((count: number) => count > 0);
     const isPickerOpen = activeMessageId === item.id;
 
     const mapMatch = !isMe && typeof item.message === 'string' && item.message.match(/\[map:(\d+)\]/);
@@ -437,20 +437,22 @@ export default function ChatScreen() {
           keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
         >
           {channel === 'global' && (
-            <Image
-              source={require('../../assets/chat-headers/world-dots.webp')}
-              style={styles.worldWatermark}
-              resizeMode="cover"
-              pointerEvents="none"
-            />
+            <View pointerEvents="none" style={styles.worldWatermark}>
+              <Image
+                source={require('../../assets/chat-headers/world-dots.webp')}
+                style={styles.worldWatermarkImage}
+                resizeMode="cover"
+              />
+            </View>
           )}
           {channel === 'local' && (
-            <Image
-              source={require('../../assets/chat-headers/local-radar.webp')}
-              style={styles.worldWatermark}
-              resizeMode="cover"
-              pointerEvents="none"
-            />
+            <View pointerEvents="none" style={styles.worldWatermark}>
+              <Image
+                source={require('../../assets/chat-headers/local-radar.webp')}
+                style={styles.worldWatermarkImage}
+                resizeMode="cover"
+              />
+            </View>
           )}
           <FlatList
             ref={flatListRef}
@@ -589,6 +591,7 @@ const styles = StyleSheet.create({
   globalBanner: { backgroundColor: 'rgba(212,175,55,0.10)', borderBottomWidth: 1, borderBottomColor: 'rgba(212,175,55,0.35)', paddingVertical: 8, paddingHorizontal: 20 },
   globalBannerText: { color: '#d4af37', fontSize: 13, fontWeight: '600' },
   worldWatermark: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0.3 },
+  worldWatermarkImage: { width: '100%', height: '100%' },
   tabContainer: { flexDirection: 'row', backgroundColor: '#2c2c2e', borderRadius: 8, padding: 4 },
   tabButton: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 6 },
   activeTab: { backgroundColor: '#d4af37' },
