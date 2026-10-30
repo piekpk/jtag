@@ -3696,3 +3696,71 @@ def list_my_rigs(db: Session = Depends(get_db),
         )
         for r in rigs
     ]
+
+
+def _squad_or_404(db: Session, squad_id: int) -> Squad:
+    squad = db.query(Squad).filter(Squad.id == squad_id).first()
+    if not squad:
+        raise HTTPException(status_code=404, detail="Squad not found.")
+    return squad
+
+
+def _membership(db: Session, squad_id: int, user_id: int):
+    return db.query(SquadMember).filter(
+        SquadMember.squad_id == squad_id,
+        SquadMember.user_id == user_id).first()
+
+
+def _squad_response(db: Session, squad: Squad, current_user: User) -> SquadResponse:
+    count = db.query(SquadMember).filter(
+        SquadMember.squad_id == squad.id).count()
+    mine = _membership(db, squad.id, current_user.id)
+    return SquadResponse(
+        id=squad.id, name=squad.name, description=squad.description,
+        avatar_url=squad.avatar_url, created_by=squad.created_by,
+        is_private=squad.is_private, created_at=squad.created_at,
+        member_count=count, my_role=mine.role if mine else None,
+    )
+
+
+@app.post("/squads/{squad_id}/join", response_model=SquadResponse)
+def join_squad(squad_id: int, db: Session = Depends(get_db),
+               current_user: User = Depends(get_current_user)):
+    """Join a public squad. Private squads are invite-only (S2.3)."""
+    squad = _squad_or_404(db, squad_id)
+    if _membership(db, squad.id, current_user.id):
+        raise HTTPException(status_code=400,
+                            detail="You are already a member of this squad.")
+    if squad.is_private:
+        # Invite-only: joining requires a pending invite. Invites land in
+        # S2.3 (#46); until then no direct join can qualify.
+        raise HTTPException(status_code=403,
+                            detail="This squad is invite-only.")
+    db.add(SquadMember(squad_id=squad.id, user_id=current_user.id,
+                       role="member"))
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400,
+                            detail="You are already a member of this squad.")
+    return _squad_response(db, squad, current_user)
+
+
+@app.delete("/squads/{squad_id}/leave", response_model=SquadResponse)
+def leave_squad(squad_id: int, db: Session = Depends(get_db),
+                current_user: User = Depends(get_current_user)):
+    """Leave a squad. The leader must transfer leadership first (S2.5)."""
+    squad = _squad_or_404(db, squad_id)
+    mine = _membership(db, squad.id, current_user.id)
+    if not mine:
+        raise HTTPException(status_code=400,
+                            detail="You are not a member of this squad.")
+    if mine.role == "leader":
+        raise HTTPException(
+            status_code=400,
+            detail="The squad leader cannot leave. "
+                   "Transfer leadership to another member first.")
+    db.delete(mine)
+    db.commit()
+    return _squad_response(db, squad, current_user)
