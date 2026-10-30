@@ -566,8 +566,26 @@ export default function RadarMapScreen() {
 
   const maxClaimsFor = (item) => Math.min(item ? item.count : 1, 20);
 
+  // FastAPI error bodies arrive as raw JSON ({"detail": "..."} or a 422 list);
+  // surface the readable message instead of the JSON dump.
+  const friendlyError = (message) => {
+    if (!message) return null;
+    try {
+      const parsed = JSON.parse(message);
+      if (typeof parsed.detail === 'string') return parsed.detail;
+      if (Array.isArray(parsed.detail) && parsed.detail[0]?.msg) return parsed.detail[0].msg;
+    } catch {
+      // Not JSON — use it as-is.
+    }
+    return message;
+  };
+
   const handleCreateDrop = async () => {
     if (!dropDuck || !dropCoord || isDropping) return;
+    if (!dropLabel.trim()) {
+      showAlert("Label can't be blank", "Add a label for your drop before dropping it.");
+      return;
+    }
     setIsDropping(true);
     try {
       const result = await createDrop({
@@ -577,7 +595,7 @@ export default function RadarMapScreen() {
         radius_m: dropRadius,
         duration_hours: dropDuration,
         max_claims: dropClaims,
-        label: dropLabel.trim() || null,
+        label: dropLabel.trim(),
       });
       celebrateMilestones(result.milestones_completed);
       setDropModalVisible(false);
@@ -585,7 +603,7 @@ export default function RadarMapScreen() {
       setDrops(fresh);
       showAlert("🦆 Drop is live!", `${dropClaims}× ${dropDuck.duck.emoji} ${dropDuck.duck.name} waiting for nearby Jeepers.`);
     } catch (e) {
-      showAlert("Couldn't create drop", e.message || "Not enough ducks of that type.");
+      showAlert("Couldn't create drop", friendlyError(e.message) || "Not enough ducks of that type.");
     } finally {
       setIsDropping(false);
     }
@@ -1172,7 +1190,7 @@ export default function RadarMapScreen() {
 
             <TextInput
               style={styles.labelInput}
-              placeholder="Label (optional)"
+              placeholder="Label"
               placeholderTextColor="#757575"
               value={dropLabel}
               onChangeText={setDropLabel}

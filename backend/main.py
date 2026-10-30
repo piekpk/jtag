@@ -1770,7 +1770,10 @@ class DropCreate(BaseModel):
     radius_m: float = 200.0
     duration_hours: float = 2.0
     max_claims: int = 5
-    label: str = None
+    # Required for user drops, but kept Optional here so a missing/blank label
+    # fails in the endpoint with a plain "Label can't be blank" instead of
+    # Pydantic's raw 422.
+    label: Optional[str] = None
 
 
 class DropClaimCreate(BaseModel):
@@ -1790,11 +1793,12 @@ def create_drop(payload: DropCreate, background_tasks: BackgroundTasks,
     if active >= MAX_ACTIVE_DROPS_PER_USER:
         raise HTTPException(status_code=400, detail="You already have 3 active drops")
     claims = max(1, min(payload.max_claims, 500))
-    label = (payload.label or "").strip() or None
-    if label and len(label) > 80:
+    label = (payload.label or "").strip()
+    if not label:
+        raise HTTPException(status_code=400, detail="Label can't be blank")
+    if len(label) > 80:
         raise HTTPException(status_code=400, detail="Drop label too long (max 80 characters)")
-    if label:
-        _require_clean(label)
+    _require_clean(label)
     # Drops are stocked from the creator's inventory: 1 duck per claim.
     # No minting — a legendary drop costs legendary ducks.
     _ensure_starter_ducks(db, current_user.id)
