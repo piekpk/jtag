@@ -1210,7 +1210,9 @@ export default function RadarMapScreen() {
         <Text style={styles.sosFabText}>SOS</Text>
       </TouchableOpacity>
 
-      {/* Map layer filters */}
+      {/* Map layer filters. The row is inset between the weather widget
+          (left) and the help button (right) so the chips can never slide
+          under either icon on narrow screens; chips wrap inside the band. */}
       <View style={styles.filterRow} pointerEvents="box-none">
         {[
           { label: 'Rigs', on: showRigs, set: setShowRigs },
@@ -1227,17 +1229,19 @@ export default function RadarMapScreen() {
             <Text style={[styles.filterChipText, !f.on && styles.filterChipTextOff]}>{f.label}</Text>
           </TouchableOpacity>
         ))}
+        {/* Clear-places flows as another chip in the same band, so it wraps
+            below the filters instead of sitting at a fixed top that the
+            wrapped chip rows could collide with. */}
+        {placePins.length > 0 && (
+          <TouchableOpacity
+            style={styles.clearPlacesChip}
+            onPress={() => { setPlacePins([]); setPlaceCategory(null); setSelectedPlace(null); }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.clearPlacesText}>✕ Clear {placeCategory || 'places'}</Text>
+          </TouchableOpacity>
+        )}
       </View>
-
-      {placePins.length > 0 && (
-        <TouchableOpacity
-          style={styles.clearPlacesChip}
-          onPress={() => { setPlacePins([]); setPlaceCategory(null); setSelectedPlace(null); }}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.clearPlacesText}>✕ Clear {placeCategory || 'places'}</Text>
-        </TouchableOpacity>
-      )}
 
       {/* Duck drop tutorial popup */}
       <Modal
@@ -1438,9 +1442,8 @@ const styles = StyleSheet.create({
   },
   meetupBadgeText: { color: '#d4af37', fontSize: 11, fontWeight: 'bold' },
   filterRow: {
-    position: 'absolute', top: 64, left: 0, right: 0, zIndex: 2,
+    position: 'absolute', top: 64, left: 140, right: 56, zIndex: 2,
     flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap',
-    paddingHorizontal: 8,
   },
   filterChip: {
     backgroundColor: 'rgba(18,18,18,0.88)',
@@ -1450,8 +1453,9 @@ const styles = StyleSheet.create({
   filterChipOff: { borderColor: '#444', opacity: 0.6 },
   filterChipText: { color: '#d4af37', fontSize: 12, fontWeight: '700' },
   clearPlacesChip: {
-    position: 'absolute', top: 104, alignSelf: 'center', backgroundColor: '#1e1e1e',
-    borderWidth: 1, borderColor: '#d4af37', borderRadius: 16, paddingVertical: 6, paddingHorizontal: 12, zIndex: 5,
+    backgroundColor: '#1e1e1e',
+    borderWidth: 1, borderColor: '#d4af37', borderRadius: 16, paddingVertical: 6, paddingHorizontal: 12,
+    marginHorizontal: 4,
   },
   clearPlacesText: { color: '#d4af37', fontSize: 13, fontWeight: '600' },
   filterChipTextOff: { color: '#888' },
