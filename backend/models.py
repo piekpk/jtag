@@ -1,4 +1,4 @@
-﻿from sqlalchemy import Column, Integer, String, Text, JSON, Float, DateTime, Boolean, UniqueConstraint
+﻿from sqlalchemy import Column, Integer, String, Text, JSON, Float, DateTime, Boolean, UniqueConstraint, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 
@@ -273,3 +273,18 @@ class SquadMember(Base):
     user_id = Column(Integer, index=True, nullable=False)
     role = Column(String, nullable=False, default="member")  # leader | member
     joined_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class RigProfile(Base):
+    """A user's rig (vehicle) profile (Epic 1: Rig Profiles).
+
+    Supersedes the legacy rig data kept in the User.settings JSON blob.
+    """
+    __tablename__ = "rig_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    year = Column(Integer, nullable=True)
+    make = Column(String(60), nullable=False)
+    model = Column(String(60), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

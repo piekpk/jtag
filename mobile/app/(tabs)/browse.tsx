@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, SafeAreaView, TextInput, Animated } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator, SafeAreaView, TextInput, Animated, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
@@ -35,6 +35,12 @@ export default function BrowseScreen() {
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState(null); // null = not searching
   const [isSearching, setIsSearching] = useState(false);
+  // Squads section state (S7.2, #58).
+  const [segment, setSegment] = useState('people'); // 'people' | 'squads'
+  const [squadQuery, setSquadQuery] = useState('');
+  const [mySquads, setMySquads] = useState([]);
+  const [squads, setSquads] = useState([]);
+  const [squadsLoading, setSquadsLoading] = useState(false);
   const [headerIdx, setHeaderIdx] = useState(0);
   const headerFade = useRef(new Animated.Value(1)).current;
 
@@ -136,6 +142,36 @@ export default function BrowseScreen() {
     return () => clearTimeout(t);
   }, [query]);
 
+  // Squad discovery (S7.2, #58): "My squads" plus public discovery, debounced search.
+  useEffect(() => {
+    if (segment !== 'squads') return;
+    let cancelled = false;
+    const load = async () => {
+      setSquadsLoading(true);
+      try {
+        const headers = await getAuthHeaders();
+        const q = squadQuery.trim();
+        const [mineRes, allRes] = await Promise.all([
+          fetch(`${API_URL}/squads?mine=true&limit=50${q ? `&q=${encodeURIComponent(q)}` : ''}`, { headers }),
+          fetch(`${API_URL}/squads?limit=20${q ? `&q=${encodeURIComponent(q)}` : ''}`, { headers }),
+        ]);
+        if (cancelled) return;
+        if (mineRes.ok) setMySquads(await mineRes.json());
+        if (allRes.ok) setSquads(await allRes.json());
+      } catch (e) {
+        console.error('Squad discovery failed:', e);
+      } finally {
+        if (!cancelled) setSquadsLoading(false);
+      }
+    };
+    const t = setTimeout(load, 350);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [segment, squadQuery]);
+
+  // Discover excludes squads the user already joined (they render under "My squads").
+  const joinedSquadIds = new Set(mySquads.map((s) => s.id));
+  const discoverSquads = squads.filter((s) => !joinedSquadIds.has(s.id));
+
   const renderUser = ({ item }) => {
     const ownerName = item.settings?.ownerName || 'Fellow Jeeper';
     const vehicleTitle = item.settings?.vehicleTitle || 'Unknown Rig';
@@ -169,6 +205,45 @@ export default function BrowseScreen() {
         <TouchableOpacity 
           style={styles.viewBtn} 
           onPress={() => router.push(`/rig/${item.id}`)}
+        >
+          <Text style={styles.viewBtnText}>View</Text>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderSquad = ({ item }) => {
+    return (
+      <TouchableOpacity
+        style={styles.userCard}
+        onPress={() => router.push(`/squads/${item.id}`)}
+      >
+        <View style={styles.avatarContainer}>
+          {item.avatar_url ? (
+            <Image
+              source={{
+                uri: getImageUrl(item.avatar_url),
+                headers: {
+                  'ngrok-skip-browser-warning': 'true',
+                  'User-Agent': 'JtapApp/1.0'
+                }
+              }}
+              style={styles.avatar}
+            />
+          ) : (
+            <Text style={styles.avatarPlaceholder}>\uD83D\uDEE1\uFE0F</Text>
+          )}
+        </View>
+        <View style={styles.userInfo}>
+          <Text style={styles.userName}>{item.name}{item.is_private ? ' \uD83D\uDD12' : ''}</Text>
+          <Text style={styles.vehicleName}>
+            {item.member_count} {item.member_count === 1 ? 'member' : 'members'}
+            {item.my_role ? ` \u00B7 ${item.my_role}` : ''}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={styles.viewBtn}
+          onPress={() => router.push(`/squads/${item.id}`)}
         >
           <Text style={styles.viewBtnText}>View</Text>
         </TouchableOpacity>
@@ -213,6 +288,22 @@ export default function BrowseScreen() {
           ))}
         </View>
       </TouchableOpacity>
+      <View style={styles.segmentRow}>
+        <TouchableOpacity
+          style={[styles.segmentBtn, segment === 'people' && styles.segmentBtnActive]}
+          onPress={() => setSegment('people')}
+        >
+          <Text style={[styles.segmentText, segment === 'people' && styles.segmentTextActive]}>People</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.segmentBtn, segment === 'squads' && styles.segmentBtnActive]}
+          onPress={() => setSegment('squads')}
+        >
+          <Text style={[styles.segmentText, segment === 'squads' && styles.segmentTextActive]}>Squads</Text>
+        </TouchableOpacity>
+      </View>
+      {segment === 'people' ? (
+      <>
       <View style={styles.searchBar}>
         <TextInput
           style={styles.searchInput}
@@ -235,6 +326,57 @@ export default function BrowseScreen() {
           renderItem={renderUser}
           contentContainerStyle={styles.list}
         />
+      )}
+      </>
+      ) : (
+      <>
+      <View style={styles.searchBar}>
+        <TextInput
+          style={styles.searchInput}
+          value={squadQuery}
+          onChangeText={setSquadQuery}
+          placeholder="Search squads by name\u2026"
+          placeholderTextColor="#888"
+          autoCapitalize="none"
+          returnKeyType="search"
+        />
+      </View>
+      <TouchableOpacity
+        style={styles.createSquadBtn}
+        onPress={() => router.push('/squads/create')}
+      >
+        <Text style={styles.createSquadText}>+ Create squad</Text>
+      </TouchableOpacity>
+      {squadsLoading ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#d4af37" />
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={styles.list}>
+          {mySquads.length > 0 && (
+            <View>
+              <Text style={styles.sectionHeader}>My squads</Text>
+              {mySquads.map((s) => (
+                <View key={`mine-${s.id}`}>{renderSquad({ item: s })}</View>
+              ))}
+            </View>
+          )}
+          {discoverSquads.length > 0 && (
+            <View>
+              <Text style={styles.sectionHeader}>Discover</Text>
+              {discoverSquads.map((s) => (
+                <View key={`all-${s.id}`}>{renderSquad({ item: s })}</View>
+              ))}
+            </View>
+          )}
+          {mySquads.length === 0 && discoverSquads.length === 0 && (
+            <View style={styles.centered}>
+              <Text style={styles.emptyText}>No squads found. Create one to get started.</Text>
+            </View>
+          )}
+        </ScrollView>
+      )}
+      </>
       )}
     </SafeAreaView>
   );
@@ -267,5 +409,13 @@ const styles = StyleSheet.create({
   vehicleName: { fontSize: 14, color: '#aaa', marginTop: 4 },
   viewBtn: { backgroundColor: '#d4af37', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8 },
   viewBtnText: { color: '#121212', fontWeight: 'bold', fontSize: 16 },
-  emptyText: { fontSize: 16, color: '#888' }
+  emptyText: { fontSize: 16, color: '#888' },
+  segmentRow: { flexDirection: 'row', backgroundColor: '#1a1a1a', paddingHorizontal: 20, paddingTop: 12 },
+  segmentBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  segmentBtnActive: { borderBottomColor: '#d4af37' },
+  segmentText: { fontSize: 16, fontWeight: '600', color: '#888' },
+  segmentTextActive: { color: '#d4af37' },
+  sectionHeader: { fontSize: 18, fontWeight: 'bold', color: '#fff', marginTop: 4, marginBottom: 8 },
+  createSquadBtn: { backgroundColor: '#d4af37', marginHorizontal: 20, marginTop: 12, paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
+  createSquadText: { color: '#121212', fontWeight: 'bold', fontSize: 16 },
 });

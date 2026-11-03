@@ -5,7 +5,7 @@ import random
 import secrets
 import re
 import sqlite3
-from typing import Optional
+from typing import List, Optional
 from datetime import datetime, timedelta
 from uuid import uuid4
 from math import radians, cos, sin, asin, sqrt
@@ -21,8 +21,8 @@ from passlib.context import CryptContext
 from pydantic import BaseModel
 from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
-from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, Milestone, PhotoReaction, MarketListing, Notification, Meetup, MeetupRsvp, PlaceSearch, SosRequest, SosResponse, AdminAuditLog, Squad, SquadMember
-from schemas import UserProfileUpdate, UserProfileResponse, UserCreate, SquadCreate, SquadResponse
+from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, Milestone, PhotoReaction, MarketListing, Notification, Meetup, MeetupRsvp, PlaceSearch, SosRequest, SosResponse, AdminAuditLog, Squad, SquadMember, RigProfile
+from schemas import UserProfileUpdate, UserProfileResponse, UserCreate, SquadCreate, SquadResponse, RigCreate, RigResponse
 import duck_ai
 import profanity
 import holiday_ducks
@@ -3609,3 +3609,90 @@ def create_squad(payload: SquadCreate, db: Session = Depends(get_db),
         is_private=squad.is_private, created_at=squad.created_at,
         member_count=1, my_role="leader",
     )
+
+# --- Squads: discovery (S7.1, #57) ---
+@app.get("/squads", response_model=list[SquadResponse])
+def list_squads(q: Optional[str] = None, mine: bool = False,
+                limit: int = 20, offset: int = 0,
+                db: Session = Depends(get_db),
+                current_user: User = Depends(get_current_user)):
+    """Discover squads: public squads plus the caller's private squads.
+
+    Query params: q (case-insensitive name search), mine (only squads the
+    caller joined), limit (default 20, max 50), offset (default 0).
+    Newest squads first.
+    """
+    limit = max(1, min(limit, 50))
+    offset = max(0, offset)
+    my_squad_ids = db.query(SquadMember.squad_id).filter(
+        SquadMember.user_id == current_user.id)
+    query = db.query(Squad)
+    if q and q.strip():
+        query = query.filter(Squad.name.ilike(f"%{q.strip()}%"))
+    if mine:
+        query = query.filter(Squad.id.in_(my_squad_ids))
+    else:
+        # Public squads, plus private squads the caller belongs to.
+        query = query.filter(or_(Squad.is_private == False,  # noqa: E712
+                                 Squad.id.in_(my_squad_ids)))
+    squads = (query.order_by(Squad.created_at.desc())
+              .offset(offset).limit(limit).all())
+    ids = [s.id for s in squads]
+    counts = dict(db.query(SquadMember.squad_id, func.count(SquadMember.id))
+                  .filter(SquadMember.squad_id.in_(ids))
+                  .group_by(SquadMember.squad_id).all()) if ids else {}
+    roles = dict(db.query(SquadMember.squad_id, SquadMember.role)
+                 .filter(SquadMember.user_id == current_user.id,
+                         SquadMember.squad_id.in_(ids)).all()) if ids else {}
+    return [SquadResponse(
+        id=s.id, name=s.name, description=s.description,
+        avatar_url=s.avatar_url, created_by=s.created_by,
+        is_private=s.is_private, created_at=s.created_at,
+        member_count=counts.get(s.id, 0), my_role=roles.get(s.id),
+    ) for s in squads]
+
+
+# --- Rigs (Epic 1) ---
+@app.post("/rigs", response_model=RigResponse)
+def create_rig(payload: RigCreate, db: Session = Depends(get_db),
+               current_user: User = Depends(get_current_user)):
+    """Create a rig profile for the caller (Ticket 1.1.1)."""
+    make = (payload.make or "").strip()
+    model = (payload.model or "").strip()
+    if not make or not model:
+        raise HTTPException(status_code=400, detail="Make and Model are required fields.")
+    if len(make) > 60 or len(model) > 60:
+        raise HTTPException(status_code=400, detail="Make and Model are too long (max 60 characters).")
+    _require_clean(make, model)
+    rig = RigProfile(
+        user_id=current_user.id,
+        year=payload.year,
+        make=make,
+        model=model,
+    )
+    db.add(rig)
+    db.commit()
+    db.refresh(rig)
+    return RigResponse(
+        id=rig.id, user_id=rig.user_id, year=rig.year,
+        make=rig.make, model=rig.model, created_at=rig.created_at,
+    )
+
+
+@app.get("/rigs", response_model=List[RigResponse])
+def list_my_rigs(db: Session = Depends(get_db),
+                 current_user: User = Depends(get_current_user)):
+    """List the caller's rig profiles, newest first."""
+    rigs = (
+        db.query(RigProfile)
+        .filter(RigProfile.user_id == current_user.id)
+        .order_by(RigProfile.created_at.desc(), RigProfile.id.desc())
+        .all()
+    )
+    return [
+        RigResponse(
+            id=r.id, user_id=r.user_id, year=r.year,
+            make=r.make, model=r.model, created_at=r.created_at,
+        )
+        for r in rigs
+    ]
