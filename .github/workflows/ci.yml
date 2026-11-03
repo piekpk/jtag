@@ -1,20 +1,54 @@
-name: CI
+name: CI/CD Pipeline
 
-# Runs on every pull request and on every push to main.
-# Three independent jobs: backend tests, frontend typecheck, and the
-# repo's buildInfo.js bump convention.
+# Runs automatically on every push to main and on every pull request.
+# Four stages, chained with `needs`, so each stage starts only after
+# the previous one passes: Setup -> Dependencies -> Test -> Deploy.
+# Deploy therefore cannot run unless Test is green.
+#
+# Note: every GitHub Actions job runs on a fresh runner, so the later
+# stages repeat the checkout/toolchain steps they need. Setup proves
+# the repo and toolchains are healthy; Dependencies performs the real
+# installs; Test installs from cache and runs the suites.
 
 on:
   push:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
-  backend-tests:
-    name: Backend tests (pytest)
+  setup:
+    name: Setup
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Show tool versions
+        run: |
+          python --version
+          node --version
+          npm --version
+
+  dependencies:
+    name: Dependencies
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -23,20 +57,8 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
 
-      - name: Install dependencies
+      - name: Install backend dependencies
         run: pip install -r backend/requirements.txt
-
-      - name: Run tests
-        run: pytest backend/tests -q
-
-  frontend-typecheck:
-    name: Frontend typecheck (tsc)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: mobile
-    steps:
-      - uses: actions/checkout@v4
 
       - name: Set up Node 20
         uses: actions/setup-node@v4
@@ -45,27 +67,72 @@ jobs:
           cache: npm
           cache-dependency-path: mobile/package-lock.json
 
-      - name: Install dependencies
+      - name: Install frontend dependencies
+        working-directory: mobile
         run: npm ci
 
-      - name: Typecheck
-        run: npx tsc --noEmit
-
-  build-number:
-    name: buildInfo.js bumped
-    if: github.event_name == 'pull_request'
+  test:
+    name: Test
+    needs: dependencies
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out the repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Check BUILD_NUMBER increased vs the base branch
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Run backend tests
+        run: pytest backend/tests -q
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Typecheck the frontend
+        working-directory: mobile
+        run: npx tsc --noEmit
+
+      - name: Check buildInfo.js was bumped (pull requests only)
+        if: github.event_name == 'pull_request'
         run: |
           base=$(git show "origin/${{ github.base_ref }}:mobile/app/buildInfo.js" | grep -oE 'BUILD_NUMBER = [0-9]+' | grep -oE '[0-9]+')
           head=$(grep -oE 'BUILD_NUMBER = [0-9]+' mobile/app/buildInfo.js | grep -oE '[0-9]+')
-          echo "BUILD_NUMBER — base (${{ github.base_ref }}): $base, this PR: $head"
+          echo "BUILD_NUMBER - base (${{ github.base_ref }}): $base, this PR: $head"
           if [ "$head" -le "$base" ]; then
             echo "::error::mobile/app/buildInfo.js was not bumped. Repo convention: bump BUILD_NUMBER by 1 in every commit."
             exit 1
           fi
+
+  deploy:
+    name: Deploy
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Deploy
+        run: |
+          echo "Deploying JTAG from main @ ${{ github.sha }}"
+          echo "Backend: FastAPI app in backend/ (served with uvicorn from this repo)."
+          echo "Mobile: Expo app in mobile/ (build number $(grep -oE 'BUILD_NUMBER = [0-9]+' mobile/app/buildInfo.js))."
+          echo "No production host is configured yet, so this stage marks the"
+          echo "tested commit on main as the deployable release. Point this step"
+          echo "at a host (e.g. a deploy hook) when the team picks one."
