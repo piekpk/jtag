@@ -23,8 +23,12 @@ const getImageUrl = (imagePath: string) => {
 };
 
 export default function PublicRigScreen() {
-  const { id } = useLocalSearchParams();
+  const { id, preview } = useLocalSearchParams();
   const rigId = Array.isArray(id) ? id[0] : id;
+  // Preview mode: the owner viewing their own profile as a visitor would see
+  // it. Visitor actions (duck, trade, reactions) are hidden/disabled so the
+  // owner can't act on their own profile from the preview.
+  const isPreview = (Array.isArray(preview) ? preview[0] : preview) === '1';
   const router = useRouter();
   const [profile, setProfile] = useState(null);
   const [duckCount, setDuckCount] = useState(0);
@@ -249,6 +253,11 @@ export default function PublicRigScreen() {
   return (
     <View style={styles.container}>
     <ScrollView style={{ flex: 1 }}>
+      {isPreview && (
+        <View style={styles.previewBanner}>
+          <Text style={styles.previewBannerText}>👁 Preview — this is what other Jeepers see on your profile</Text>
+        </View>
+      )}
       {coverPhoto ? (
         <>
           <View style={styles.coverWrap}>
@@ -267,14 +276,16 @@ export default function PublicRigScreen() {
               <TouchableOpacity onPress={() => router.back()} style={styles.coverBackBtn}>
                 <Text style={styles.coverBackText}>‹ Back</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.duckBtn, isDucking && { opacity: 0.6 }]}
-                onPress={openDuckPicker}
-                disabled={isDucking}
-              >
-                <Text style={styles.duckBtnIcon}>🦆</Text>
-                <Text style={styles.duckBtnCount}>{duckCount}</Text>
-              </TouchableOpacity>
+              {!isPreview && (
+                <TouchableOpacity
+                  style={[styles.duckBtn, isDucking && { opacity: 0.6 }]}
+                  onPress={openDuckPicker}
+                  disabled={isDucking}
+                >
+                  <Text style={styles.duckBtnIcon}>🦆</Text>
+                  <Text style={styles.duckBtnCount}>{duckCount}</Text>
+                </TouchableOpacity>
+              )}
             </View>
             <View style={styles.coverTitleWrap}>
               <DuckShowcase ducks={showcaseDucks} onPress={openTheirPond} />
@@ -296,9 +307,11 @@ export default function PublicRigScreen() {
             </View>
           </View>
           <View style={styles.coverTradeWrap}>
-            <TouchableOpacity style={styles.tradeBtn} onPress={openTradeModal}>
-              <Text style={styles.tradeBtnText}>⇄ Propose Duck Trade</Text>
-            </TouchableOpacity>
+            {!isPreview && (
+              <TouchableOpacity style={styles.tradeBtn} onPress={openTradeModal}>
+                <Text style={styles.tradeBtnText}>⇄ Propose Duck Trade</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={[styles.tradeBtn, { marginTop: 8 }]} onPress={openListings}>
               <Text style={styles.tradeBtnText}>🏷️ Marketplace listings</Text>
             </TouchableOpacity>
@@ -331,20 +344,24 @@ export default function PublicRigScreen() {
           </View>
 
           {/* Duck Button */}
-          <TouchableOpacity 
-            style={[styles.duckBtn, isDucking && { opacity: 0.6 }]} 
-            onPress={openDuckPicker}
-            disabled={isDucking}
-          >
-            <Text style={styles.duckBtnIcon}>🦆</Text>
-            <Text style={styles.duckBtnCount}>{duckCount}</Text>
-          </TouchableOpacity>
+          {!isPreview && (
+            <TouchableOpacity 
+              style={[styles.duckBtn, isDucking && { opacity: 0.6 }]} 
+              onPress={openDuckPicker}
+              disabled={isDucking}
+            >
+              <Text style={styles.duckBtnIcon}>🦆</Text>
+              <Text style={styles.duckBtnCount}>{duckCount}</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Propose Trade Button */}
-        <TouchableOpacity style={styles.tradeBtn} onPress={openTradeModal}>
-          <Text style={styles.tradeBtnText}>⇄ Propose Duck Trade</Text>
-        </TouchableOpacity>
+        {!isPreview && (
+          <TouchableOpacity style={styles.tradeBtn} onPress={openTradeModal}>
+            <Text style={styles.tradeBtnText}>⇄ Propose Duck Trade</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Seller's marketplace listings */}
         <TouchableOpacity style={[styles.tradeBtn, { marginTop: 8 }]} onPress={openListings}>
@@ -379,6 +396,7 @@ export default function PublicRigScreen() {
                         key={key}
                         style={[styles.photoReactBtn, isMine && styles.photoReactBtnActive]}
                         onPress={() => togglePhotoReaction(i, key)}
+                        disabled={isPreview}
                       >
                         <Text style={styles.photoReactText}>
                           {emoji}{count > 0 ? ` ${count}` : ''}
@@ -591,6 +609,8 @@ export default function PublicRigScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#121212' },
+  previewBanner: { backgroundColor: '#1e1e1e', borderWidth: 1, borderColor: '#d4af37', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 12, marginHorizontal: 12, marginTop: 12, alignItems: 'center' },
+  previewBannerText: { color: '#d4af37', fontWeight: 'bold', textAlign: 'center' },
   coverWrap: { height: 264 },
   coverImg: { width: '100%', height: '100%' },
   coverDim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.15)' },
