@@ -69,6 +69,13 @@ export default function MyRigScreen() {
 
   const closeAlerts = () => setAlertsVisible(false);
 
+  // Preview: open the public rig profile for the logged-in user, exactly as
+  // another user would see it (preview mode hides visitor actions).
+  const openPreview = () => {
+    if (!userId) return;
+    router.push({ pathname: '/rig/[id]', params: { id: String(userId), preview: '1' } });
+  };
+
   const handleMarkAllRead = async () => {
     try {
       await markAllNotificationsRead();
@@ -350,6 +357,11 @@ export default function MyRigScreen() {
               <Text style={styles.editBtnText}>{isEditing ? 'Save' : 'Edit'}</Text>
             )}
           </TouchableOpacity>
+          {!isEditing && userId && (
+            <TouchableOpacity onPress={openPreview} style={styles.previewBtn} activeOpacity={0.8}>
+              <Text style={styles.previewBtnText}>👁 Preview</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {isEditing ? (
@@ -693,6 +705,8 @@ const styles = StyleSheet.create({
   editTitleInput: { fontSize: 24, fontWeight: '900', color: '#ffffff', backgroundColor: '#333', padding: 5, borderRadius: 6, flex: 1, marginRight: 10 },
   editBtn: { backgroundColor: '#d4af37', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20 },
   editBtnText: { color: '#121212', fontWeight: 'bold' },
+  previewBtn: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#d4af37', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, marginLeft: 8 },
+  previewBtnText: { color: '#d4af37', fontWeight: 'bold' },
   subtitle: { fontSize: 16, color: '#d4af37', marginTop: 8, fontWeight: '600' },
   discoverRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
