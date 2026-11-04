@@ -12,6 +12,7 @@ import { listNotifications, markAllNotificationsRead, markNotificationRead } fro
 import DuckIcon from '../DuckIcon';
 import { BUILD_NUMBER } from '../buildInfo.js';
 import DuckShowcase from '../DuckShowcase';
+import { MOD_CATEGORIES } from '../modCategories.js';
 
 const MAX_SHOWCASE = 5;
 
@@ -31,7 +32,10 @@ export default function MyRigScreen() {
     wheels: '',
     interior: ''
   });
-  const [mods, setMods] = useState('');
+  const [modItems, setModItems] = useState<{ id: string; category: string; name: string }[]>([]);
+  const [newModName, setNewModName] = useState('');
+  const [newModCategory, setNewModCategory] = useState('Suspension');
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [photos, setPhotos] = useState<string[]>(['', '', '', '']);
   const [coverPhoto, setCoverPhoto] = useState('');
   const [socialLinks, setSocialLinks] = useState<{ platform: string; url: string }[]>([]);
@@ -126,7 +130,12 @@ export default function MyRigScreen() {
             if (data.settings.ownerName) setOwnerName(data.settings.ownerName);
             if (data.settings.vehicleTitle) setVehicleTitle(data.settings.vehicleTitle);
             if (data.settings.specs) setSpecs(data.settings.specs);
-            if (data.settings.mods) setMods(data.settings.mods);
+            if (Array.isArray(data.settings.mods)) {
+              setModItems(data.settings.mods.filter((m: any) => m && typeof m.name === 'string' && typeof m.category === 'string'));
+            } else if (typeof data.settings.mods === 'string' && data.settings.mods) {
+              // Legacy free-text mods migrate to one uncategorized item on next save.
+              setModItems([{ id: `legacy-${Date.now()}`, category: 'Other', name: data.settings.mods }]);
+            }
             if (data.settings.photos) setPhotos(data.settings.photos);
             if (data.settings.coverPhoto) setCoverPhoto(data.settings.coverPhoto);
             if (data.settings.socialLinks) setSocialLinks(validSocialLinks(data.settings.socialLinks));
@@ -139,7 +148,6 @@ export default function MyRigScreen() {
             setOwnerName('New User');
             setVehicleTitle('Add your rig details');
             setSpecs({ engine: 'e.g., 2.0L Turbo', wheels: 'e.g., 35" MT', interior: 'e.g., Leather' });
-            setMods('List your active mods here...');
           }
         }
       } catch (error) {
@@ -155,10 +163,6 @@ export default function MyRigScreen() {
   // 2. Save the user's profile to the database when they click "Save"[cite: 9]
   const handleEditToggle = async () => {
     if (isEditing && userId) {
-      if (/(.)\1{5,}/.test(mods)) {
-        showAlert("Save Failed", "Mods can't repeat the same character more than 5 times in a row.");
-        return;
-      }
       setIsSaving(true);
       try {
         const response = await fetch(`${API_URL}/users/${userId}/profile`, {
@@ -169,7 +173,7 @@ export default function MyRigScreen() {
               ownerName,
               vehicleTitle,
               specs,
-              mods,
+              mods: modItems,
               photos,
               coverPhoto,
               socialLinks: validSocialLinks(socialLinks),
@@ -312,6 +316,53 @@ export default function MyRigScreen() {
   const catalogById: Record<number, any> = {};
   catalog.forEach((d) => { catalogById[d.id] = d; });
   const showcaseDuckObjs = showcaseDucks.map((duckId) => catalogById[duckId]).filter(Boolean);
+
+  // Story 1.4: mods are structured items grouped by category, in dropdown order.
+  const groupedMods = (() => {
+    const groups: Record<string, typeof modItems> = {};
+    for (const item of modItems) {
+      const cat = MOD_CATEGORIES.includes(item.category) ? item.category : 'Other';
+      (groups[cat] = groups[cat] || []).push(item);
+    }
+    return MOD_CATEGORIES.filter((c) => groups[c]).map((c) => [c, groups[c]] as const);
+  })();
+
+  // Story 1.4: Add Mod saves immediately so the backend updates at once
+  // and the new item instantly appears under its category header.
+  const handleAddMod = async () => {
+    const name = newModName.trim();
+    if (!name) {
+      showAlert("Add Mod", "Type a part name first.");
+      return;
+    }
+    if (!userId) return;
+    const next = [...modItems, { id: `mod_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, category: newModCategory, name }];
+    try {
+      const response = await fetch(`${API_URL}/users/${userId}/profile`, {
+        method: 'PATCH',
+        headers: await getAuthHeaders(),
+        body: JSON.stringify({ settings: { mods: next } }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data.settings?.mods)) setModItems(data.settings.mods);
+        else setModItems(next);
+        setNewModName('');
+      } else {
+        let message = "Could not add the mod.";
+        try {
+          const err = await response.json();
+          if (err && typeof err.detail === "string" && err.detail) message = err.detail;
+        } catch {
+          // Keep the generic message when the error body isn't JSON.
+        }
+        showAlert("Add Mod Failed", message);
+      }
+    } catch (error) {
+      console.error("Add mod error:", error);
+      showAlert("Network Error", "Could not connect to the server.");
+    }
+  };
 
   return (
     <ScrollView style={styles.container}>
@@ -516,18 +567,62 @@ export default function MyRigScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Active Mods & Gear</Text>
-        {isEditing ? (
-          <TextInput
-            style={[styles.input, styles.multiline]}
-            value={mods}
-            onChangeText={setMods}
-            multiline
-            maxLength={500}
-          />
+        {groupedMods.length === 0 ? (
+          <Text style={styles.modText}>No mods listed.</Text>
         ) : (
-          <Text style={styles.modText}>{mods}</Text>
+          groupedMods.map(([category, items]) => (
+            <View key={category} style={styles.modGroup}>
+              <Text style={styles.modGroupTitle}>{category}</Text>
+              {items.map((item) => (
+                <Text key={item.id} style={styles.modText}>• {item.name}</Text>
+              ))}
+            </View>
+          ))
+        )}
+        {isEditing && (
+          <View style={styles.addModBox}>
+            <TouchableOpacity style={styles.categoryBtn} onPress={() => setShowCategoryPicker(true)} activeOpacity={0.8}>
+              <Text style={styles.categoryBtnText}>{newModCategory} ▾</Text>
+            </TouchableOpacity>
+            <TextInput
+              style={[styles.input, { flex: 1 }]}
+              value={newModName}
+              onChangeText={setNewModName}
+              placeholder="Part name (e.g. 2-inch lift kit)"
+              placeholderTextColor="#888"
+              maxLength={100}
+            />
+            <TouchableOpacity style={styles.addModBtn} onPress={handleAddMod} activeOpacity={0.8}>
+              <Text style={styles.addModBtnText}>Add Mod</Text>
+            </TouchableOpacity>
+            {newModName.length >= 100 && (
+              <Text style={styles.modWarning}>Maximum character limit reached (100 characters).</Text>
+            )}
+          </View>
         )}
       </View>
+
+      {/* Category picker modal (Story 1.4) */}
+      <Modal visible={showCategoryPicker} transparent animationType="slide" onRequestClose={() => setShowCategoryPicker(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Choose category</Text>
+            {MOD_CATEGORIES.map((c) => (
+              <TouchableOpacity
+                key={c}
+                style={styles.platformRow}
+                onPress={() => { setNewModCategory(c); setShowCategoryPicker(false); }}
+              >
+                <Text style={styles.platformName}>{c}</Text>
+                <Text style={styles.platformGo}>{c === newModCategory ? 'Selected ✓' : '›'}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setShowCategoryPicker(false)}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Log Out Button Section */}
       <View style={styles.logoutContainer}>
@@ -756,6 +851,14 @@ const styles = StyleSheet.create({
   input: { flex: 2, backgroundColor: '#2c2c2e', padding: 8, borderRadius: 6, fontSize: 16, color: '#fff', textAlign: 'right' },
   multiline: { textAlign: 'left', minHeight: 80, textAlignVertical: 'top' },
   modText: { fontSize: 16, paddingVertical: 6, color: '#ccc', lineHeight: 24 },
+  modGroup: { marginBottom: 10 },
+  modGroupTitle: { color: '#d4af37', fontSize: 15, fontWeight: '700', marginBottom: 2 },
+  addModBox: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginTop: 10 },
+  categoryBtn: { borderWidth: 1, borderColor: '#d4af37', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 12, marginRight: 8 },
+  categoryBtnText: { color: '#d4af37', fontWeight: '700', fontSize: 14 },
+  addModBtn: { backgroundColor: '#d4af37', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 14 },
+  addModBtnText: { color: '#121212', fontWeight: '700', fontSize: 14 },
+  modWarning: { color: '#d32f2f', fontSize: 13, width: '100%', marginTop: 4 },
   logoutContainer: { marginHorizontal: 15, marginBottom: 30, alignItems: 'center' },
   logoutButton: { backgroundColor: '#d32f2f', width: '100%', padding: 15, borderRadius: 8, alignItems: 'center' },
   logoutButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },

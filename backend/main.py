@@ -619,9 +619,15 @@ def _require_clean_profile_settings(settings: dict) -> None:
     if not isinstance(settings, dict):
         return
     texts = []
-    for key in ("ownerName", "vehicleTitle", "mods"):
+    for key in ("ownerName", "vehicleTitle"):
         if settings.get(key):
             texts.append(settings[key])
+    mods = settings.get("mods")
+    if isinstance(mods, str) and mods:
+        texts.append(mods)
+    elif isinstance(mods, list):
+        texts.extend(item["name"] for item in mods
+                     if isinstance(item, dict) and isinstance(item.get("name"), str) and item["name"])
     specs = settings.get("specs")
     if isinstance(specs, dict):
         texts.extend(v for v in specs.values() if isinstance(v, str) and v)
@@ -664,6 +670,41 @@ def _valid_social_url(platform: str, url: str) -> bool:
     return any(host == d or host.endswith("." + d) for d in domains)
 
 
+# Story 1.4: structured per-item mods. Each mod is {id, category, name}.
+# The category list is the dropdown the app offers; ids are stable so
+# 1.5 (edit) and 1.6 (remove) can address individual items.
+MOD_CATEGORIES = (
+    "Suspension", "Armor", "Lighting", "Wheels & Tires", "Engine",
+    "Exterior", "Interior", "Recovery", "Other",
+)
+
+
+def _validate_mod_items(mods) -> list:
+    """Validate the mods array, normalizing items to {id, category, name}."""
+    if not isinstance(mods, list):
+        raise HTTPException(status_code=400, detail="Mods must be an array.")
+    validated = []
+    for item in mods:
+        if not isinstance(item, dict):
+            raise HTTPException(status_code=400, detail="Each mod must have a category and a name.")
+        category = item.get("category")
+        if category not in MOD_CATEGORIES:
+            raise HTTPException(status_code=400, detail="Unknown mod category.")
+        name = item.get("name")
+        if not isinstance(name, str):
+            raise HTTPException(status_code=400, detail="Each mod must have a name.")
+        name = name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Each mod must have a name.")
+        if len(name) > 100:
+            raise HTTPException(status_code=400, detail="Mod names must be 100 characters or fewer.")
+        item_id = item.get("id")
+        if not isinstance(item_id, str) or not item_id.strip():
+            item_id = uuid4().hex
+        validated.append({"id": item_id, "category": category, "name": name})
+    return validated
+
+
 @app.patch("/users/{user_id}/profile", response_model=UserProfileResponse)
 def update_profile(user_id: int, profile_data: UserProfileUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     require_self(user_id, current_user)
@@ -691,10 +732,8 @@ def update_profile(user_id: int, profile_data: UserProfileUpdate, db: Session = 
                 if isinstance(v, str) and len(v) > 30:
                     raise HTTPException(status_code=400, detail="Spec values must be 30 characters or fewer.")
         mods = profile_data.settings.get("mods") if isinstance(profile_data.settings, dict) else None
-        if isinstance(mods, str) and re.search(r"(.)\1{5,}", mods):
-            raise HTTPException(status_code=400, detail="Mods can't repeat the same character more than 5 times in a row.")
-        if isinstance(mods, str) and len(mods) > 500:
-            raise HTTPException(status_code=400, detail="Mods must be 500 characters or fewer.")
+        if mods is not None:
+            profile_data.settings["mods"] = _validate_mod_items(mods)
         # Merge, don't replace: the app only sends the fields it edits, and
         # server-managed keys (duckCount, ...) must survive a profile save.
         merged = dict(user.settings or {})
