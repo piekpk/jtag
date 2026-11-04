@@ -704,6 +704,35 @@ def update_profile(user_id: int, profile_data: UserProfileUpdate, db: Session = 
     db.refresh(user)
     return user
 
+
+# Story 1.3: delete the vehicle profile (the rig data on the user
+# profile), not the account. Owner name, social links, discoverable
+# flag, and duck showcase survive; the account itself is untouched.
+# Uploaded photo files are left on disk, matching the existing upload
+# behavior, which orphans replaced photos rather than deleting them.
+_VEHICLE_PROFILE_KEYS = ("vehicleTitle", "specs", "mods", "photos", "coverPhoto")
+
+
+@app.delete("/users/{user_id}/rig")
+def delete_vehicle_profile(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    require_self(user_id, current_user)
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    settings = dict(user.settings or {})
+    for key in _VEHICLE_PROFILE_KEYS:
+        settings.pop(key, None)
+    user.settings = settings
+    user.profile_picture_url = None
+    # Reactions pointed at the rig's photo slots; drop them with the rig.
+    db.query(PhotoReaction).filter(PhotoReaction.photo_owner_id == user_id).delete()
+    db.commit()
+    db.refresh(user)
+
+    return {"message": "Vehicle profile deleted", "settings": user.settings, "profile_picture_url": user.profile_picture_url}
+
+
 # --- Photo likes & reactions ---
 @app.get("/users/{user_id}/photos/reactions")
 def get_photo_reactions(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

@@ -209,6 +209,54 @@ export default function MyRigScreen() {
     }
   };
 
+  // Story 1.3: delete the vehicle profile (rig data only, not the
+  // account), behind a confirmation modal. On success the tab resets
+  // to the "No rigs found" empty state.
+  const handleDeleteProfile = () => {
+    showAlert(
+      "Delete Vehicle Profile?",
+      "This permanently deletes your rig's title, specs, mods, photos, and cover photo. Your account, ducks, and social links stay. This can't be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Confirm Delete",
+          style: "destructive",
+          onPress: async () => {
+            if (!userId) return;
+            try {
+              const response = await fetch(`${API_URL}/users/${userId}/rig`, {
+                method: 'DELETE',
+                headers: await getAuthHeaders(),
+              });
+              if (response.ok) {
+                setVehicleTitle('');
+                setSpecs({ engine: '', wheels: '', interior: '' });
+                setMods('');
+                setPhotos(['', '', '', '']);
+                setCoverPhoto('');
+                setIsEditing(false);
+              } else {
+                let message = "Could not delete the vehicle profile.";
+                try {
+                  const err = await response.json();
+                  if (err && typeof err.detail === "string" && err.detail) {
+                    message = err.detail;
+                  }
+                } catch {
+                  // Keep the generic message when the error body isn't JSON.
+                }
+                showAlert("Delete Failed", message);
+              }
+            } catch (error) {
+              console.error("Delete error:", error);
+              showAlert("Network Error", "Could not connect to the server.");
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const uploadPhoto = async (localUri: string) => {
     const filename = localUri.split('/').pop() || `photo_${Date.now()}.jpg`;
     const match = /\.(\w+)$/.exec(filename);
@@ -393,6 +441,15 @@ export default function MyRigScreen() {
         )}
       </View>
 
+      {!isEditing && vehicleTitle.trim() === '' && (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateText}>No rigs found. Add your first vehicle to get started</Text>
+          <TouchableOpacity style={styles.emptyStateBtn} onPress={() => setIsEditing(true)} activeOpacity={0.8}>
+            <Text style={styles.emptyStateBtnText}>Add your first vehicle</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {isEditing && (
         <View style={styles.coverWrap}>
           <Text style={styles.coverLabel}>Cover photo — shown at the top of your public profile</Text>
@@ -528,6 +585,15 @@ export default function MyRigScreen() {
           <Text style={styles.modText}>{mods}</Text>
         )}
       </View>
+
+      {/* Delete Vehicle Profile Section */}
+      {isEditing && (
+        <View style={styles.deleteContainer}>
+          <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteProfile}>
+            <Text style={styles.deleteButtonText}>Delete Profile</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Log Out Button Section */}
       <View style={styles.logoutContainer}>
@@ -759,5 +825,12 @@ const styles = StyleSheet.create({
   logoutContainer: { marginHorizontal: 15, marginBottom: 30, alignItems: 'center' },
   logoutButton: { backgroundColor: '#d32f2f', width: '100%', padding: 15, borderRadius: 8, alignItems: 'center' },
   logoutButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  deleteContainer: { marginHorizontal: 15, marginBottom: 15, alignItems: 'center' },
+  deleteButton: { backgroundColor: '#d32f2f', width: '100%', padding: 15, borderRadius: 8, alignItems: 'center' },
+  deleteButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  emptyState: { marginHorizontal: 15, marginVertical: 20, alignItems: 'center' },
+  emptyStateText: { color: '#888', fontSize: 16, textAlign: 'center', marginBottom: 12 },
+  emptyStateBtn: { borderWidth: 1, borderColor: '#d4af37', borderRadius: 12, padding: 14, alignItems: 'center' },
+  emptyStateBtnText: { color: '#d4af37', fontWeight: '700', fontSize: 14 },
   buildNumber: { color: '#555', fontSize: 12, textAlign: 'center', marginBottom: 30, marginTop: 10 }
 });
