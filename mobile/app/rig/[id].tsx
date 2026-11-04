@@ -7,6 +7,7 @@ import { getInventory, giveDuck, getUserPond, proposeTrade, rarityColor, celebra
 import { listMarketplace, photoUrl } from '../marketApi.js';
 import { showAlert } from '../themedAlert.js';
 import DuckShowcase from '../DuckShowcase';
+import { MOD_CATEGORIES } from '../modCategories.js';
 import DuckIcon from '../DuckIcon';
 import { platformById, validSocialLinks, normalizeSocialUrl, confirmOpenLink } from '../socialLinks.js';
 
@@ -203,7 +204,20 @@ export default function PublicRigScreen() {
   const ownerName = settings.ownerName || 'Fellow Jeeper';
   const vehicleTitle = settings.vehicleTitle || 'Unknown Rig';
   const specs = settings.specs || { engine: 'N/A', wheels: 'N/A', interior: 'N/A' };
-  const mods = settings.mods || 'No mods listed.';
+  // Story 1.4: peer view renders the same structured mods, read-only.
+  // No Add Mod action exists here — that is the permission boundary.
+  const rawMods = settings.mods;
+  const peerModItems: { id: string; category: string; name: string }[] = Array.isArray(rawMods)
+    ? rawMods.filter((m: any) => m && typeof m.name === 'string')
+    : (typeof rawMods === 'string' && rawMods ? [{ id: 'legacy', category: 'Other', name: rawMods }] : []);
+  const peerGroupedMods = (() => {
+    const groups: Record<string, typeof peerModItems> = {};
+    for (const item of peerModItems) {
+      const cat = MOD_CATEGORIES.includes(item.category) ? item.category : 'Other';
+      (groups[cat] = groups[cat] || []).push(item);
+    }
+    return MOD_CATEGORIES.filter((c) => groups[c]).map((c) => [c, groups[c]] as const);
+  })();
   const photos = settings.photos || [];
   const coverPhoto = settings.coverPhoto || null;
   const socialLinks = validSocialLinks(settings.socialLinks);
@@ -500,7 +514,18 @@ export default function PublicRigScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Active Mods & Gear</Text>
-        <Text style={styles.modText}>{mods}</Text>
+        {peerGroupedMods.length === 0 ? (
+          <Text style={styles.modText}>No mods listed.</Text>
+        ) : (
+          peerGroupedMods.map(([category, items]) => (
+            <View key={category} style={styles.modGroup}>
+              <Text style={styles.modGroupTitle}>{category}</Text>
+              {items.map((item) => (
+                <Text key={item.id} style={styles.modText}>• {item.name}</Text>
+              ))}
+            </View>
+          ))
+        )}
       </View>
     </ScrollView>
 
@@ -664,6 +689,8 @@ const styles = StyleSheet.create({
   specLabel: { fontSize: 16, color: '#aaa', flex: 1 },
   specValue: { fontSize: 16, fontWeight: '600', color: '#fff', flex: 2, textAlign: 'right' },
   modText: { fontSize: 16, paddingVertical: 6, color: '#ccc', lineHeight: 24 },
+  modGroup: { marginBottom: 10 },
+  modGroupTitle: { color: '#d4af37', fontSize: 15, fontWeight: '700', marginBottom: 2 },
   tradeBtn: { marginTop: 12, backgroundColor: '#2c2c2e', borderWidth: 1, borderColor: '#d4af37', paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
   tradeBtnText: { color: '#d4af37', fontWeight: 'bold', fontSize: 15 },
   listingsOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
