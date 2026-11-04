@@ -233,7 +233,18 @@ export default function MyRigScreen() {
         const data = await response.json();
         return data.url;
       } else {
-        showAlert("Upload Failed", "Could not upload the image to the server.");
+        // Surface the server's exact reason (e.g. Story 1.2's format/size
+        // errors) instead of a generic failure message.
+        let message = "Could not upload the image to the server.";
+        try {
+          const err = await response.json();
+          if (err && typeof err.detail === "string" && err.detail) {
+            message = err.detail;
+          }
+        } catch {
+          // Keep the generic message when the error body isn't JSON.
+        }
+        showAlert("Upload Failed", message);
       }
     } catch (error) {
       console.error("Upload error:", error);
