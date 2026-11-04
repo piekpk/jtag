@@ -764,26 +764,53 @@ def react_to_photo(user_id: int, photo_index: int, reaction: ReactionCreate,
     return {"status": status, "counts": counts, "mine": mine, "milestones_completed": done}
 
 
+# Story 1.2: profile-photo validation. JPG/PNG only, strict 5MB limit.
+# Format is checked from the file's magic bytes, not the client-supplied
+# content type (the app sends image/jpg for .jpg files) and not the
+# extension alone (a renamed .pdf would otherwise pass).
+MAX_PROFILE_PHOTO_BYTES = 5 * 1024 * 1024
+_PROFILE_PHOTO_MAGIC = {
+    "jpg": b"\xff\xd8\xff",
+    "jpeg": b"\xff\xd8\xff",
+    "png": b"\x89PNG\r\n\x1a\n",
+}
+
+
+def _validate_profile_photo(data: bytes, filename: str) -> str:
+    """Validate a profile-photo upload (Story 1.2). Returns the safe extension."""
+    if len(data) > MAX_PROFILE_PHOTO_BYTES:
+        raise HTTPException(status_code=400, detail="File size exceeds 5MB limit")
+    ext = (filename or "").rsplit(".", 1)[-1].lower() if "." in (filename or "") else ""
+    magic = _PROFILE_PHOTO_MAGIC.get(ext)
+    if magic is None or not data.startswith(magic):
+        raise HTTPException(status_code=400, detail="Invalid file format. Please upload a JPG or PNG")
+    return ext
+
+
 @app.post("/users/{user_id}/profile-picture")
 def upload_profile_picture(user_id: int, file: UploadFile = File(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     require_self(user_id, current_user)
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
-    os.makedirs(os.path.join(UPLOAD_DIR, "profiles"), exist_ok=True)
 
-    file_extension = file.filename.split(".")[-1]
+    # Read at most 1 byte past the limit so an oversized upload is
+    # rejected before anything is written to disk.
+    data = file.file.read(MAX_PROFILE_PHOTO_BYTES + 1)
+    file_extension = _validate_profile_photo(data, file.filename or "")
+
+    os.makedirs(os.path.join(UPLOAD_DIR, "profiles"), exist_ok=True)
     unique_filename = f"user_{user_id}_{uuid4().hex}.{file_extension}"
     file_location = os.path.join(UPLOAD_DIR, "profiles", unique_filename)
-    
+
     with open(file_location, "wb+") as file_object:
-        shutil.copyfileobj(file.file, file_object)
-        
+        file_object.write(data)
+
     user.profile_picture_url = f"/uploads/profiles/{unique_filename}"
     db.commit()
-    
+
     return {"message": "Profile picture updated", "url": user.profile_picture_url}
+
 
 @app.post("/users/{user_id}/duck")
 def duck_user_rig(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
