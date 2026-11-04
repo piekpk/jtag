@@ -65,6 +65,38 @@ Every step serves the Product Goal: see who's around you, connect, wheel togethe
 - **System / acceptance (manual)** — scope: end-to-end on a real build, the way a user experiences it. Tools: release APK installed on a physical Android phone, step-by-step checklist. Concrete case: new-rider onboarding — fresh install, sign up with a new email → lands on the Map tab, pond shows the 10 starter ducks, Send Wave on a nearby rig card delivers a notification to the other device. Other cases: sign in (email + Google), verify nearby rigs appear at a real location, claim a test drop, confirm push arrives with the app closed.
   
 
+## CI/CD
+
+One workflow: `.github/workflows/ci.yml`. It runs on every push to `main`
+and on every pull request, in four chained stages — each stage starts only
+after the previous one passes:
+
+- **Setup** — checks out the repo and sets up Python 3.12 and Node 20.
+- **Dependencies** — installs backend dependencies (`pip install -r backend/requirements.txt`)
+  and frontend dependencies (`npm ci` in `mobile/`).
+- **Test** — runs backend tests (`pytest backend/tests -q`), the frontend
+  typecheck (`npx tsc --noEmit` in `mobile/`), and, on pull requests only,
+  the build-number check: `mobile/app/buildInfo.js` `BUILD_NUMBER` must be
+  higher than the base branch. Bump it by 1 in every commit.
+- **Deploy** — runs only after Test passes. There is no production host
+  configured yet, so this stage marks the tested commit on `main` as the
+  deployable release. Point it at a real deploy hook when the team picks a host.
+
+**Branch protection:** direct pushes to `main` are blocked, and merging
+requires 3 approving reviews from teammates with write access. Test is a
+required status check, so a pull request cannot merge while Test is red.
+
+**Secrets:** the workflow uses no secrets. Any credential a future step
+needs goes in the repo's GitHub Secrets (Settings → Secrets and variables →
+Actions) and is referenced as `${{ secrets.NAME }}` — never written into
+the workflow file or the code. Application secrets are read from environment
+variables, not stored in code: `JTAP_SECRET_KEY` (JWT signing), `OPENAI_API_KEY`,
+and the Google Maps key the mobile config reads from env.
+
+**New-teammate check:** clone the repo, open a pull request with a small
+change, and watch the four stages run in order. The pull request cannot
+merge until Test is green and three teammates have approved it.
+
 ## Setup Instructions
 
 ### 1. Backend Setup
