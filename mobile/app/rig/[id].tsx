@@ -27,6 +27,7 @@ export default function PublicRigScreen() {
   const rigId = Array.isArray(id) ? id[0] : id;
   const router = useRouter();
   const [profile, setProfile] = useState(null);
+  const [isPrivateLocked, setIsPrivateLocked] = useState(false);
   const [duckCount, setDuckCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isDucking, setIsDucking] = useState(false);
@@ -94,6 +95,16 @@ export default function PublicRigScreen() {
           const data = await response.json();
           setProfile(data);
           setDuckCount(data.settings?.duckCount || 0);
+        } else if (response.status === 403) {
+          // Story 1.8: a private rig shows its locked state, never its data.
+          try {
+            const err = await response.json();
+            if (err && err.detail === "This rig profile is private") {
+              setIsPrivateLocked(true);
+            }
+          } catch {
+            // Any other 403 falls through to the not-found screen.
+          }
         }
       } catch (error) {
         console.error("Failed to load profile:", error);
@@ -184,6 +195,18 @@ export default function PublicRigScreen() {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" color="#d4af37" />
+      </View>
+    );
+  }
+
+  if (isPrivateLocked) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ fontSize: 40 }}>🔒</Text>
+        <Text style={{ color: '#d4af37', fontSize: 18, marginTop: 12, textAlign: 'center' }}>This rig profile is private</Text>
+        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 20 }}>
+          <Text style={{ color: '#d4af37', fontSize: 18 }}>Go Back</Text>
+        </TouchableOpacity>
       </View>
     );
   }
