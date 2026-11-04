@@ -612,6 +612,10 @@ def get_profile(user_id: int, db: Session = Depends(get_db), current_user: User 
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    # Story 1.8: a private profile is locked to everyone but its owner.
+    # The whole payload is withheld so no modification data can leak.
+    if (user.settings or {}).get("private") is True and current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="This rig profile is private")
     return user
 
 def _require_clean_profile_settings(settings: dict) -> None:

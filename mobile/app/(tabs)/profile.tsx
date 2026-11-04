@@ -26,6 +26,7 @@ export default function MyRigScreen() {
   const [ownerName, setOwnerName] = useState('');
   const [vehicleTitle, setVehicleTitle] = useState('');
   const [discoverable, setDiscoverable] = useState(true);
+  const [isPrivate, setIsPrivate] = useState(false);
   const [specs, setSpecs] = useState({
     engine: '',
     wheels: '',
@@ -131,6 +132,7 @@ export default function MyRigScreen() {
             if (data.settings.coverPhoto) setCoverPhoto(data.settings.coverPhoto);
             if (data.settings.socialLinks) setSocialLinks(validSocialLinks(data.settings.socialLinks));
             if (data.settings.discoverable === false) setDiscoverable(false);
+            if (data.settings.private === true) setIsPrivate(true);
             if (Array.isArray(data.settings.showcaseDucks)) {
               setShowcaseDucks(data.settings.showcaseDucks.filter((x) => typeof x === 'number').slice(0, MAX_SHOWCASE));
             }
@@ -174,7 +176,8 @@ export default function MyRigScreen() {
               coverPhoto,
               socialLinks: validSocialLinks(socialLinks),
               showcaseDucks,
-              discoverable
+              discoverable,
+              private: isPrivate
             }
           }),
         });
@@ -388,6 +391,17 @@ export default function MyRigScreen() {
               onValueChange={setDiscoverable}
               trackColor={{ false: '#3a3a3c', true: '#d4af37' }}
               thumbColor={discoverable ? '#121212' : '#f4f3f4'}
+            />
+          </View>
+        )}
+        {isEditing && (
+          <View style={styles.discoverRow}>
+            <Text style={styles.discoverLabel}>Private profile — strangers see a locked profile instead of your mods</Text>
+            <Switch
+              value={isPrivate}
+              onValueChange={setIsPrivate}
+              trackColor={{ false: '#3a3a3c', true: '#d4af37' }}
+              thumbColor={isPrivate ? '#121212' : '#f4f3f4'}
             />
           </View>
         )}
