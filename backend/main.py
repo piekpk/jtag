@@ -22,7 +22,7 @@ from pydantic import BaseModel
 from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
 from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, Milestone, PhotoReaction, MarketListing, Notification, Meetup, MeetupRsvp, PlaceSearch, SosRequest, SosResponse, AdminAuditLog, Squad, SquadMember, RigProfile
-from schemas import UserProfileUpdate, UserProfileResponse, UserCreate, SquadCreate, SquadResponse, RigCreate, RigResponse
+from schemas import UserProfileUpdate, UserProfileResponse, UserCreate, SquadCreate, SquadResponse, SquadDetailResponse, SquadMemberDetail, RigCreate, RigResponse
 import duck_ai
 import profanity
 import holiday_ducks
@@ -3650,6 +3650,45 @@ def list_squads(q: Optional[str] = None, mine: bool = False,
         is_private=s.is_private, created_at=s.created_at,
         member_count=counts.get(s.id, 0), my_role=roles.get(s.id),
     ) for s in squads]
+
+
+# --- Squads: profile retrieval (S4.1, #48) ---
+@app.get("/squads/{squad_id}", response_model=SquadDetailResponse)
+def get_squad(squad_id: int, db: Session = Depends(get_db),
+              current_user: User = Depends(get_current_user)):
+    """Squad profile: squad fields + member list + the caller's role.
+
+    Private squads are members-only: a non-member gets 403 with no
+    member data, so the client can show its locked state. Public
+    squads are viewable by any signed-in user. Members are listed
+    leader first, then by join date.
+    """
+    squad = db.query(Squad).filter(Squad.id == squad_id).first()
+    if squad is None:
+        raise HTTPException(status_code=404, detail="Squad not found.")
+    my_membership = db.query(SquadMember).filter(
+        SquadMember.squad_id == squad.id,
+        SquadMember.user_id == current_user.id).first()
+    if squad.is_private and my_membership is None:
+        raise HTTPException(status_code=403, detail="This squad is private.")
+    rows = (db.query(SquadMember, User.profile_picture_url)
+            .join(User, User.id == SquadMember.user_id)
+            .filter(SquadMember.squad_id == squad.id).all())
+    # Leader first, then oldest membership first.
+    rows.sort(key=lambda row: (row[0].role != "leader",
+                               row[0].joined_at or datetime.min))
+    members = [SquadMemberDetail(
+        user_id=m.user_id, role=m.role, joined_at=m.joined_at,
+        profile_picture_url=picture_url,
+    ) for m, picture_url in rows]
+    return SquadDetailResponse(
+        id=squad.id, name=squad.name, description=squad.description,
+        avatar_url=squad.avatar_url, created_by=squad.created_by,
+        is_private=squad.is_private, created_at=squad.created_at,
+        member_count=len(members),
+        my_role=my_membership.role if my_membership else None,
+        members=members,
+    )
 
 
 # --- Rigs (Epic 1) ---
