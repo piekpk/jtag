@@ -3764,3 +3764,19 @@ def leave_squad(squad_id: int, db: Session = Depends(get_db),
     db.delete(mine)
     db.commit()
     return _squad_response(db, squad, current_user)
+
+
+@app.delete("/squads/{squad_id}")
+def delete_squad(squad_id: int, db: Session = Depends(get_db),
+                 current_user: User = Depends(get_current_user)):
+    """Delete a squad and all its memberships. Leader only (S2.8)."""
+    squad = _squad_or_404(db, squad_id)
+    mine = _membership(db, squad.id, current_user.id)
+    if not mine or mine.role != "leader":
+        raise HTTPException(status_code=403,
+                            detail="Only the squad leader can delete this squad.")
+    db.query(SquadMember).filter(
+        SquadMember.squad_id == squad.id).delete()
+    db.delete(squad)
+    db.commit()
+    return {"message": "Squad deleted."}
