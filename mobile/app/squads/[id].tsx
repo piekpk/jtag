@@ -6,6 +6,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { API_URL } from '../config.js';
 import { getAuthHeaders } from '../auth.js';
+import { showAlert } from '../themedAlert.js';
 
 // Same image-URL helper as Browse: rewrite stale local IPs, prefix
 // relative upload paths with the API base.
@@ -20,16 +21,19 @@ const getImageUrl = (imagePath: string) => {
   return `${API_URL}/${imagePath.startsWith('/') ? imagePath.slice(1) : imagePath}`;
 };
 
-// Squad profile screen (S4.2, #49). Display only: header + member
-// grid from GET /squads/{id} (S4.1, #48). Join/Leave actions live in
-// S2.2 (#45). A private squad the caller doesn't belong to answers
-// 403 with no member data, so the screen shows its locked state.
+// Squad profile screen (S4.2, #49): header + member grid from
+// GET /squads/{id} (S4.1, #48). A private squad the caller doesn't
+// belong to answers 403 with no member data, so the screen shows
+// its locked state. Join/Leave actions (S2.2, #45) use the #44
+// membership endpoints and refresh this screen's data afterwards.
 export default function SquadProfileScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const [squad, setSquad] = useState(null);
   const [status, setStatus] = useState('loading'); // loading | ok | locked | notfound | error
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isActing, setIsActing] = useState(false);
+  const [actionError, setActionError] = useState('');
 
   const loadSquad = useCallback(async () => {
     try {
@@ -63,6 +67,62 @@ export default function SquadProfileScreen() {
     setIsRefreshing(true);
     await loadSquad();
     setIsRefreshing(false);
+  };
+
+  // Join/Leave (S2.2, #45). Both endpoints come from #44; after a
+  // successful call the screen reloads GET /squads/{id} so the
+  // member count, the caller's role, and the member grid update
+  // immediately. Backend errors (e.g. the leader's "transfer
+  // leadership first" 400) surface inline -- never silently.
+  const handleJoin = async () => {
+    setActionError('');
+    setIsActing(true);
+    try {
+      const headers = await getAuthHeaders();
+      const response = await fetch(`${API_URL}/squads/${id}/join`, {
+        method: 'POST',
+        headers,
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setActionError(data.detail || 'Could not join this squad. Please try again.');
+        return;
+      }
+      await loadSquad();
+    } catch (e) {
+      setActionError('Network error. Could not reach the server.');
+    } finally {
+      setIsActing(false);
+    }
+  };
+
+  const doLeave = async () => {
+    setActionError('');
+    setIsActing(true);
+    try {
+      const headers = await getAuthHeaders();
+      const response = await fetch(`${API_URL}/squads/${id}/leave`, {
+        method: 'DELETE',
+        headers,
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setActionError(data.detail || 'Could not leave this squad. Please try again.');
+        return;
+      }
+      await loadSquad();
+    } catch (e) {
+      setActionError('Network error. Could not reach the server.');
+    } finally {
+      setIsActing(false);
+    }
+  };
+
+  const confirmLeave = () => {
+    showAlert('Leave this squad?', 'You can rejoin later if the squad is public.', [
+      { text: 'Cancel' },
+      { text: 'Leave', onPress: doLeave },
+    ]);
   };
 
   if (status === 'loading') {
@@ -182,6 +242,34 @@ export default function SquadProfileScreen() {
                 {squad.member_count} {squad.member_count === 1 ? 'member' : 'members'}
                 {squad.my_role ? ` · You are ${squad.my_role === 'leader' ? 'the leader' : 'a member'}` : ''}
               </Text>
+              {/* Membership actions (S2.2, #45). A non-member of a
+                  private squad never reaches this header -- the API
+                  403s and the locked state renders instead -- so the
+                  invite-only note below is a defensive fallback. */}
+              {squad.my_role ? (
+                <TouchableOpacity
+                  style={[styles.leaveBtn, isActing && styles.btnDisabled]}
+                  onPress={confirmLeave}
+                  disabled={isActing}
+                >
+                  {isActing
+                    ? <ActivityIndicator color="#f28b82" />
+                    : <Text style={styles.leaveBtnText}>Leave Squad</Text>}
+                </TouchableOpacity>
+              ) : squad.is_private ? (
+                <Text style={styles.inviteNote}>Invite only — ask a member to invite you.</Text>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.joinBtn, isActing && styles.btnDisabled]}
+                  onPress={handleJoin}
+                  disabled={isActing}
+                >
+                  {isActing
+                    ? <ActivityIndicator color="#121212" />
+                    : <Text style={styles.joinBtnText}>Join Squad</Text>}
+                </TouchableOpacity>
+              )}
+              {actionError ? <Text style={styles.actionError}>{actionError}</Text> : null}
             </View>
             <Text style={styles.sectionHeader}>Members</Text>
           </View>
@@ -208,6 +296,20 @@ const styles = StyleSheet.create({
   squadName: { fontSize: 26, fontWeight: '700', color: '#fff', textAlign: 'center' },
   description: { fontSize: 15, color: '#aaa', textAlign: 'center', marginTop: 8 },
   memberCount: { fontSize: 14, color: '#8e8e93', marginTop: 10 },
+  joinBtn: {
+    backgroundColor: '#D4AF37', borderRadius: 10, alignSelf: 'stretch',
+    paddingVertical: 13, alignItems: 'center', marginTop: 16,
+  },
+  joinBtnText: { color: '#121212', fontSize: 16, fontWeight: '600' },
+  leaveBtn: {
+    backgroundColor: '#1e1e1e', borderRadius: 10, alignSelf: 'stretch',
+    borderWidth: 1, borderColor: '#f28b82',
+    paddingVertical: 13, alignItems: 'center', marginTop: 16,
+  },
+  leaveBtnText: { color: '#f28b82', fontSize: 16, fontWeight: '600' },
+  btnDisabled: { opacity: 0.6 },
+  inviteNote: { fontSize: 14, color: '#8e8e93', marginTop: 16, textAlign: 'center' },
+  actionError: { color: '#f28b82', fontSize: 14, marginTop: 12, textAlign: 'center' },
   sectionHeader: { fontSize: 18, fontWeight: 'bold', color: '#fff', marginBottom: 12 },
   memberRow: { justifyContent: 'space-between', marginBottom: 12 },
   memberCard: {
