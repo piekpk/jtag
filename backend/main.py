@@ -4,6 +4,7 @@ import json
 import random
 import secrets
 import re
+import requests
 import smtplib
 import sqlite3
 from email.message import EmailMessage
@@ -645,7 +646,7 @@ def auth_facebook(body: FacebookAuthRequest, db: Session = Depends(get_db)):
         settings=user.settings,
         is_admin=user.is_admin,
         email_verified=user.email_verified,
-        access_token=create_access_token(data={"sub": str(user.id)}),
+        access_token=create_access_token(user.id),
     )
 
 @app.post("/auth/x", response_model=AuthResponse)
@@ -706,7 +707,7 @@ def auth_x(body: XAuthRequest, db: Session = Depends(get_db)):
         settings=user.settings,
         is_admin=user.is_admin,
         email_verified=user.email_verified,
-        access_token=create_access_token(data={"sub": str(user.id)}),
+        access_token=create_access_token(user.id),
     )
 
 
