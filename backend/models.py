@@ -21,6 +21,24 @@ class User(Base):
     google_sub = Column(String, nullable=True, unique=True)  # Google account ID for Sign in with Google
     facebook_id = Column(String, nullable=True, unique=True)  # Facebook user ID for Login with Facebook
     x_id = Column(String, nullable=True, unique=True)  # X (Twitter) user ID for Sign in with X
+    email_verified = Column(Boolean, nullable=False, default=False, server_default="0")
+
+
+class VerificationPin(Base):
+    """One-time PIN for email verification (purpose='verify') and, later,
+    password reset (purpose='reset'). PINs are bcrypt-hashed, expire after
+    15 minutes, and allow at most 5 verification attempts. A PIN issued for
+    one purpose never verifies for the other."""
+    __tablename__ = "verification_pins"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True, nullable=False)
+    purpose = Column(String, nullable=False, default="verify")  # verify | reset
+    pin_hash = Column(String, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    attempts = Column(Integer, nullable=False, default=0)
+    used_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
 # --- Duck Game Models ---

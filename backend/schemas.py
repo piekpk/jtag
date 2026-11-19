@@ -15,6 +15,7 @@ class UserProfileResponse(BaseModel):
     profile_picture_url: Optional[str] = None
     settings: Optional[Dict[str, Any]] = None
     is_admin: bool = False
+    email_verified: bool = False
 
     class Config:
         from_attributes = True

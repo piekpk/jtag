@@ -4,7 +4,9 @@ import json
 import random
 import secrets
 import re
+import smtplib
 import sqlite3
+from email.message import EmailMessage
 from typing import Optional
 from datetime import datetime, timedelta
 from uuid import uuid4
@@ -21,7 +23,7 @@ from passlib.context import CryptContext
 from pydantic import BaseModel
 from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
-from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, Milestone, PhotoReaction, MarketListing, Notification, Meetup, MeetupRsvp, PlaceSearch, SosRequest, SosResponse, AdminAuditLog, Squad, SquadMember
+from models import Base, User, VerificationPin, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, Milestone, PhotoReaction, MarketListing, Notification, Meetup, MeetupRsvp, PlaceSearch, SosRequest, SosResponse, AdminAuditLog, Squad, SquadMember
 from schemas import UserProfileUpdate, UserProfileResponse, UserCreate, SquadCreate, SquadResponse
 import duck_ai
 import profanity
@@ -173,6 +175,19 @@ def _ensure_x_id_column():
         conn.close()
 
 
+def _ensure_email_verified_column():
+    """Lightweight migration: add users.email_verified to DBs created before the column existed."""
+    conn = get_raw_db()
+    try:
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(users)")]
+        if "email_verified" not in cols:
+            conn.execute("ALTER TABLE users ADD COLUMN email_verified BOOLEAN DEFAULT 0")
+            conn.commit()
+            print("Migration: added users.email_verified column.")
+    finally:
+        conn.close()
+
+
 def _install_duck_sprites():
     """Copy the bundled duck sprite library into the uploads dir.
 
@@ -249,6 +264,7 @@ _ensure_fcm_token_column()
 _ensure_google_sub_column()
 _ensure_facebook_id_column()
 _ensure_x_id_column()
+_ensure_email_verified_column()
 _install_duck_sprites()
 _bootstrap_admins()
 
@@ -384,6 +400,89 @@ class XAuthRequest(BaseModel):
     access_token: str
 
 
+class VerifyEmailCodeRequest(BaseModel):
+    code: str
+
+
+# --- Email verification (SMTP) ---
+# Verification codes are sent from a dedicated Gmail account via SMTP.
+# All settings come from env vars; see backend/.env.example. Nothing is
+# sent until SMTP_HOST/SMTP_USER/SMTP_PASS are set.
+SMTP_HOST = os.environ.get("SMTP_HOST", "").strip()
+SMTP_USER = os.environ.get("SMTP_USER", "").strip()
+SMTP_PASS = os.environ.get("SMTP_PASS", os.environ.get("SMTP_PASSWORD", "")).strip()
+SMTP_FROM = os.environ.get("SMTP_FROM", SMTP_USER or "").strip()
+
+
+def _smtp_port() -> int:
+    try:
+        return int(os.environ.get("SMTP_PORT", "587"))
+    except ValueError:
+        return 587
+
+
+SMTP_PORT = _smtp_port()
+
+
+def _smtp_configured() -> bool:
+    return bool(SMTP_HOST and SMTP_USER and SMTP_PASS)
+
+
+def _send_email(to_email: str, subject: str, body: str) -> None:
+    """Send one plain-text email via the configured SMTP server (STARTTLS).
+
+    Raises HTTPException 500 when SMTP is not configured, 502 when the
+    server rejects the send. Kept as a module-level function so tests can
+    monkeypatch it without touching the network.
+    """
+    if not _smtp_configured():
+        raise HTTPException(status_code=500, detail="Email sending is not configured on the server")
+    msg = EmailMessage()
+    msg["From"] = SMTP_FROM or SMTP_USER
+    msg["To"] = to_email
+    msg["Subject"] = subject
+    msg.set_content(body)
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.send_message(msg)
+    except (smtplib.SMTPException, OSError) as exc:
+        print(f"[email] SMTP send failed: {exc}")
+        raise HTTPException(status_code=502, detail="Could not send email. Please try again later.")
+
+
+# Email verification PINs: 6 digits, bcrypt-hashed, 15-minute expiry,
+# at most 5 verification attempts. One active PIN per user + purpose;
+# re-requesting a code invalidates the previous one.
+VERIFICATION_PIN_TTL_MINUTES = 15
+VERIFICATION_PIN_MAX_ATTEMPTS = 5
+
+
+def _generate_pin() -> str:
+    """A 6-digit numeric code (leading zeros allowed)."""
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def _issue_verification_pin(db: Session, user: User, purpose: str) -> str:
+    """Invalidate any live PIN for this user+purpose, then issue a fresh one.
+    Returns the plain-text PIN (only the bcrypt hash is stored)."""
+    db.query(VerificationPin).filter(
+        VerificationPin.user_id == user.id,
+        VerificationPin.purpose == purpose,
+        VerificationPin.used_at.is_(None),
+    ).delete(synchronize_session=False)
+    pin = _generate_pin()
+    db.add(VerificationPin(
+        user_id=user.id,
+        purpose=purpose,
+        pin_hash=pwd_context.hash(pin),
+        expires_at=datetime.utcnow() + timedelta(minutes=VERIFICATION_PIN_TTL_MINUTES),
+    ))
+    db.commit()
+    return pin
+
+
 # --- Auth Endpoints ---
 @app.post("/signup", response_model=AuthResponse)
 def signup(user: UserCreate, db: Session = Depends(get_db)):
@@ -408,6 +507,7 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
         profile_picture_url=new_user.profile_picture_url,
         settings=new_user.settings,
         is_admin=new_user.is_admin,
+        email_verified=new_user.email_verified,
         access_token=create_access_token(new_user.id),
     )
 
@@ -429,6 +529,7 @@ def login(user_credentials: UserCreate, db: Session = Depends(get_db)):
         profile_picture_url=user.profile_picture_url,
         settings=user.settings,
         is_admin=user.is_admin,
+        email_verified=user.email_verified,
         access_token=create_access_token(user.id),
     )
 
@@ -484,6 +585,7 @@ def auth_google(body: GoogleAuthRequest, db: Session = Depends(get_db)):
         profile_picture_url=user.profile_picture_url,
         settings=user.settings,
         is_admin=user.is_admin,
+        email_verified=user.email_verified,
         access_token=create_access_token(user.id),
     )
 
@@ -542,6 +644,7 @@ def auth_facebook(body: FacebookAuthRequest, db: Session = Depends(get_db)):
         profile_picture_url=user.profile_picture_url,
         settings=user.settings,
         is_admin=user.is_admin,
+        email_verified=user.email_verified,
         access_token=create_access_token(data={"sub": str(user.id)}),
     )
 
@@ -602,8 +705,75 @@ def auth_x(body: XAuthRequest, db: Session = Depends(get_db)):
         profile_picture_url=user.profile_picture_url,
         settings=user.settings,
         is_admin=user.is_admin,
+        email_verified=user.email_verified,
         access_token=create_access_token(data={"sub": str(user.id)}),
     )
+
+
+# --- Email Verification Endpoints ---
+@app.post("/auth/email-verification/request")
+def request_email_verification_code(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Email a 6-digit verification code to the logged-in user's email address.
+
+    Re-requesting a code invalidates the previous one. The code expires
+    after 15 minutes. Returns 400 when the email is already verified.
+    """
+    if getattr(current_user, "email_verified", False):
+        raise HTTPException(status_code=400, detail="Email is already verified")
+    if not _smtp_configured():
+        raise HTTPException(status_code=500, detail="Email sending is not configured on the server")
+    pin = _issue_verification_pin(db, current_user, purpose="verify")
+    _send_email(
+        current_user.email,
+        "Your Jtap verification code",
+        f"Your Jtap verification code is: {pin}\n\n"
+        f"It expires in {VERIFICATION_PIN_TTL_MINUTES} minutes. "
+        "If you didn't ask for this code, you can ignore this email.",
+    )
+    return {"detail": "Verification code sent", "expires_in_minutes": VERIFICATION_PIN_TTL_MINUTES}
+
+
+@app.post("/auth/email-verification/verify")
+def verify_email_verification_code(body: VerifyEmailCodeRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Check a verification code. On success the user's email is marked verified.
+
+    A code issued for another purpose (e.g. a password-reset code) never
+    verifies here. Wrong codes count toward 5 attempts; the 5th wrong
+    attempt invalidates the code, and expired codes must be re-requested.
+    """
+    pin_row = (
+        db.query(VerificationPin)
+        .filter(
+            VerificationPin.user_id == current_user.id,
+            VerificationPin.purpose == "verify",
+            VerificationPin.used_at.is_(None),
+        )
+        .order_by(VerificationPin.created_at.desc())
+        .first()
+    )
+    if not pin_row:
+        raise HTTPException(status_code=400, detail="No verification code found. Request a new code.")
+    if pin_row.expires_at < datetime.utcnow():
+        db.delete(pin_row)
+        db.commit()
+        raise HTTPException(status_code=400, detail="Verification code expired. Request a new code.")
+    if pin_row.attempts >= VERIFICATION_PIN_MAX_ATTEMPTS:
+        db.delete(pin_row)
+        db.commit()
+        raise HTTPException(status_code=400, detail="Too many incorrect attempts. Request a new code.")
+    code = (body.code or "").strip()
+    if not pwd_context.verify(code, pin_row.pin_hash):
+        pin_row.attempts += 1
+        if pin_row.attempts >= VERIFICATION_PIN_MAX_ATTEMPTS:
+            db.delete(pin_row)
+            db.commit()
+            raise HTTPException(status_code=400, detail="Too many incorrect attempts. Request a new code.")
+        db.commit()
+        raise HTTPException(status_code=400, detail="Incorrect code. Please try again.")
+    db.delete(pin_row)
+    current_user.email_verified = True
+    db.commit()
+    return {"email_verified": True}
 
 
 # --- Profile Endpoints ---
