@@ -405,6 +405,16 @@ class VerifyEmailCodeRequest(BaseModel):
     code: str
 
 
+class PasswordResetRequest(BaseModel):
+    email: str
+
+
+class PasswordResetConfirmRequest(BaseModel):
+    email: str
+    code: str
+    new_password: str
+
+
 # --- Email verification (SMTP) ---
 # Verification codes are sent from a dedicated Gmail account via SMTP.
 # All settings come from env vars; see backend/.env.example. Nothing is
@@ -775,6 +785,92 @@ def verify_email_verification_code(body: VerifyEmailCodeRequest, db: Session = D
     current_user.email_verified = True
     db.commit()
     return {"email_verified": True}
+
+
+# --- Password Reset Endpoints (issue #99) ---
+# Reuses the Day 1 verification PIN system (purpose="reset"): the same
+# 6-digit bcrypt-hashed codes, 15-minute expiry, max 5 attempts. These
+# endpoints are unauthenticated (the user is locked out), so the request
+# endpoint never reveals whether an email is registered.
+@app.post("/auth/password-reset/request")
+def request_password_reset(body: PasswordResetRequest, db: Session = Depends(get_db)):
+    """Email a 6-digit password-reset code to the given address.
+
+    Always returns success, even when no account exists for the email
+    (no code is sent in that case), so the endpoint can never be used
+    to probe which emails are registered. Re-requesting a code
+    invalidates the previous one. Returns 500 when SMTP is not
+    configured, same as email verification.
+    """
+    email = (body.email or "").strip().lower()
+    if not _smtp_configured():
+        raise HTTPException(status_code=500, detail="Email sending is not configured on the server")
+    user = db.query(User).filter(User.email == email).first()
+    if user:
+        pin = _issue_verification_pin(db, user, purpose="reset")
+        _send_email(
+            user.email,
+            "Your Jtap password reset code",
+            f"Your Jtap password reset code is: {pin}\n\n"
+            f"It expires in {VERIFICATION_PIN_TTL_MINUTES} minutes. "
+            "If you didn't ask for this code, you can ignore this email.",
+        )
+    return {"detail": "If an account exists for this email, a password reset code has been sent.", "expires_in_minutes": VERIFICATION_PIN_TTL_MINUTES}
+
+
+@app.post("/auth/password-reset/confirm")
+def confirm_password_reset(body: PasswordResetConfirmRequest, db: Session = Depends(get_db)):
+    """Reset the password with a code emailed by /auth/password-reset/request.
+
+    A code issued for another purpose (e.g. an email-verification code)
+    never works here. Wrong codes count toward 5 attempts; the 5th wrong
+    attempt invalidates the code, and expired codes must be re-requested.
+    On success the new password replaces the old one (same bcrypt hashing
+    as signup) and the code is consumed. Signup enforces no password
+    strength rules, so reset does not either — only that the new password
+    is non-empty (and the app asks for it twice).
+    """
+    email = (body.email or "").strip().lower()
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        # Same generic failure as a wrong code: never reveal whether the
+        # account exists.
+        raise HTTPException(status_code=400, detail="Invalid or expired reset code. Request a new code.")
+    pin_row = (
+        db.query(VerificationPin)
+        .filter(
+            VerificationPin.user_id == user.id,
+            VerificationPin.purpose == "reset",
+            VerificationPin.used_at.is_(None),
+        )
+        .order_by(VerificationPin.created_at.desc())
+        .first()
+    )
+    if not pin_row:
+        raise HTTPException(status_code=400, detail="No reset code found. Request a new code.")
+    if pin_row.expires_at < datetime.utcnow():
+        db.delete(pin_row)
+        db.commit()
+        raise HTTPException(status_code=400, detail="Reset code expired. Request a new code.")
+    if pin_row.attempts >= VERIFICATION_PIN_MAX_ATTEMPTS:
+        db.delete(pin_row)
+        db.commit()
+        raise HTTPException(status_code=400, detail="Too many incorrect attempts. Request a new code.")
+    if not (body.new_password or "").strip():
+        raise HTTPException(status_code=400, detail="Enter a new password.")
+    code = (body.code or "").strip()
+    if not pwd_context.verify(code, pin_row.pin_hash):
+        pin_row.attempts += 1
+        if pin_row.attempts >= VERIFICATION_PIN_MAX_ATTEMPTS:
+            db.delete(pin_row)
+            db.commit()
+            raise HTTPException(status_code=400, detail="Too many incorrect attempts. Request a new code.")
+        db.commit()
+        raise HTTPException(status_code=400, detail="Incorrect code. Please try again.")
+    db.delete(pin_row)
+    user.hashed_password = pwd_context.hash(body.new_password)
+    db.commit()
+    return {"detail": "Password has been reset. You can now sign in with your new password."}
 
 
 # --- Profile Endpoints ---
