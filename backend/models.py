@@ -41,6 +41,21 @@ class VerificationPin(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class FailedLoginAttempt(Base):
+    """One row per failed password login, for the CAPTCHA gate (issue #101).
+
+    After CAPTCHA_FAILED_ATTEMPT_THRESHOLD failures for an account (email)
+    or a client IP, /login requires a valid hCaptcha token. A successful
+    login clears the rows for that email and IP.
+    """
+    __tablename__ = "failed_login_attempts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, index=True, nullable=True)
+    ip_address = Column(String, index=True, nullable=True)
+    attempted_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 # --- Duck Game Models ---
 class DuckType(Base):
     """Catalog of collectible ducks."""

@@ -12,7 +12,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 from uuid import uuid4
 from math import radians, cos, sin, asin, sqrt
-from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, Header, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, Header, BackgroundTasks, Request
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import jwt
@@ -24,7 +24,7 @@ from passlib.context import CryptContext
 from pydantic import BaseModel
 from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
-from models import Base, User, VerificationPin, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, Milestone, PhotoReaction, MarketListing, Notification, Meetup, MeetupRsvp, PlaceSearch, SosRequest, SosResponse, AdminAuditLog, Squad, SquadMember
+from models import Base, User, VerificationPin, FailedLoginAttempt, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, Milestone, PhotoReaction, MarketListing, Notification, Meetup, MeetupRsvp, PlaceSearch, SosRequest, SosResponse, AdminAuditLog, Squad, SquadMember
 from schemas import UserProfileUpdate, UserProfileResponse, UserCreate, SquadCreate, SquadResponse
 import duck_ai
 import profanity
@@ -401,6 +401,14 @@ class XAuthRequest(BaseModel):
     access_token: str
 
 
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+    # hCaptcha token, only needed once the account/IP has tripped the
+    # failed-login threshold (issue #101). Omitted otherwise.
+    captcha_token: Optional[str] = None
+
+
 class VerifyEmailCodeRequest(BaseModel):
     code: str
 
@@ -494,6 +502,97 @@ def _issue_verification_pin(db: Session, user: User, purpose: str) -> str:
     return pin
 
 
+# --- Login CAPTCHA (issue #101) ---
+# After CAPTCHA_FAILED_ATTEMPT_THRESHOLD failed password logins for an
+# account (email) or a client IP, /login requires a valid hCaptcha token,
+# verified server-side against hCaptcha's siteverify API. A successful
+# login clears the failed-attempt counter for that email and IP.
+# All settings come from env vars; see backend/.env.example.
+HCAPTCHA_SITE_KEY = os.environ.get("HCAPTCHA_SITE_KEY", "").strip()
+HCAPTCHA_SECRET_KEY = os.environ.get("HCAPTCHA_SECRET_KEY", "").strip()
+CAPTCHA_FAILED_ATTEMPT_THRESHOLD = 5
+HCAPTCHA_VERIFY_URL = "https://hcaptcha.com/siteverify"
+
+
+def _client_ip(request: Optional[Request]) -> str:
+    """Best-effort client IP for the CAPTCHA gate.
+
+    The app sits behind ngrok, so request.client is the tunnel itself;
+    prefer X-Forwarded-For's first hop (the real client) when present.
+    """
+    if request is None:
+        return "unknown"
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        first = forwarded.split(",")[0].strip()
+        if first:
+            return first
+    client = request.client
+    return client.host if client else "unknown"
+
+
+def _failed_login_count(db: Session, email: str, ip_address: str) -> int:
+    """Failed password logins for this account or this IP since the last
+    successful login. Either side tripping the threshold gates the login."""
+    return (
+        db.query(FailedLoginAttempt)
+        .filter(
+            or_(
+                FailedLoginAttempt.email == email,
+                FailedLoginAttempt.ip_address == ip_address,
+            )
+        )
+        .count()
+    )
+
+
+def _record_failed_login(db: Session, email: str, ip_address: str) -> None:
+    db.add(FailedLoginAttempt(email=email, ip_address=ip_address))
+    db.commit()
+
+
+def _clear_failed_logins(db: Session, email: str, ip_address: str) -> None:
+    """Reset the counter for an account and IP after a successful login."""
+    db.query(FailedLoginAttempt).filter(
+        or_(
+            FailedLoginAttempt.email == email,
+            FailedLoginAttempt.ip_address == ip_address,
+        )
+    ).delete(synchronize_session=False)
+    db.commit()
+
+
+def _captcha_configured() -> bool:
+    return bool(HCAPTCHA_SECRET_KEY)
+
+
+def _verify_hcaptcha(token: str, remote_ip: Optional[str]) -> bool:
+    """Verify an hCaptcha token server-side. Fails closed: any transport
+    error, non-200 response, or success=false counts as not verified.
+    Kept as a module-level function so tests can monkeypatch it without
+    touching the network.
+    """
+    if not token:
+        return False
+    try:
+        resp = requests.post(
+            HCAPTCHA_VERIFY_URL,
+            data={
+                "secret": HCAPTCHA_SECRET_KEY,
+                "response": token,
+                "remoteip": remote_ip or "",
+            },
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        print(f"[auth/captcha] siteverify request failed: {exc}")
+        return False
+    if resp.status_code != 200:
+        print(f"[auth/captcha] siteverify rejected: {resp.status_code} {resp.text[:200]}")
+        return False
+    return bool(resp.json().get("success"))
+
+
 # --- Auth Endpoints ---
 @app.post("/signup", response_model=AuthResponse)
 def signup(user: UserCreate, db: Session = Depends(get_db)):
@@ -523,15 +622,47 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
     )
 
 @app.post("/login", response_model=AuthResponse)
-def login(user_credentials: UserCreate, db: Session = Depends(get_db)):
-    normalized_email = user_credentials.email.strip().lower()
+def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
+    """Password login, gated by hCaptcha after repeated failures (issue #101).
+
+    After CAPTCHA_FAILED_ATTEMPT_THRESHOLD failed logins for this account
+    or this client IP, the login is rejected with captcha_required until a
+    valid hCaptcha token is supplied (verified server-side). A successful
+    login clears the failed-attempt counter for the account and the IP.
+    """
+    normalized_email = (body.email or "").strip().lower()
+    ip_address = _client_ip(request)
+
+    if _failed_login_count(db, normalized_email, ip_address) >= CAPTCHA_FAILED_ATTEMPT_THRESHOLD:
+        token = (body.captcha_token or "").strip()
+        if not token:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "message": "Too many failed login attempts. Complete the CAPTCHA and try again.",
+                    "captcha_required": True,
+                },
+            )
+        if not _captcha_configured():
+            raise HTTPException(status_code=500, detail="CAPTCHA verification is not configured on the server")
+        if not _verify_hcaptcha(token, ip_address):
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "message": "CAPTCHA verification failed. Please try again.",
+                    "captcha_required": True,
+                },
+            )
+
     user = db.query(User).filter(User.email == normalized_email).first()
-    
-    if not user or not pwd_context.verify(user_credentials.password, user.hashed_password):
+
+    if not user or not pwd_context.verify(body.password, user.hashed_password):
+        _record_failed_login(db, normalized_email, ip_address)
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if getattr(user, "is_banned", False):
         raise HTTPException(status_code=403, detail="This account has been banned")
 
+    _clear_failed_logins(db, normalized_email, ip_address)
     _check_holiday_ducks(db, user)
 
     return AuthResponse(
@@ -543,6 +674,15 @@ def login(user_credentials: UserCreate, db: Session = Depends(get_db)):
         email_verified=user.email_verified,
         access_token=create_access_token(user.id),
     )
+
+
+@app.get("/auth/captcha/site-key")
+def get_captcha_site_key():
+    """The hCaptcha site key the mobile app needs to render the challenge
+    widget. Null until HCAPTCHA_SITE_KEY is set (see backend/.env.example).
+    The site key is public by design, so this endpoint is unauthenticated;
+    the secret key is never served and is only used server-side."""
+    return {"site_key": HCAPTCHA_SITE_KEY or None, "configured": bool(HCAPTCHA_SITE_KEY)}
 
 @app.post("/auth/google", response_model=AuthResponse)
 def auth_google(body: GoogleAuthRequest, db: Session = Depends(get_db)):
