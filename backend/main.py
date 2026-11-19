@@ -23,6 +23,7 @@ from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
 from models import Base, User, DuckType, UserDuck, DuckGive, DuckDrop, DropClaim, Trade, UserMilestone, Milestone, PhotoReaction, MarketListing, Notification, Meetup, MeetupRsvp, PlaceSearch, SosRequest, SosResponse, AdminAuditLog, Squad, SquadMember, RigProfile
 from schemas import UserProfileUpdate, UserProfileResponse, UserCreate, SquadCreate, SquadResponse, RigCreate, RigResponse
+from meetup_parse import parse_meetup_note
 import duck_ai
 import profanity
 import holiday_ducks
@@ -1879,6 +1880,30 @@ def _as_naive_utc(dt: datetime) -> datetime:
     """Clients send ISO strings with a 'Z' suffix (offset-aware); the DB layer
     uses naive UTC everywhere, so strip tzinfo on the way in."""
     return dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
+
+
+class MeetupParseRequest(BaseModel):
+    note: str
+
+
+@app.post("/meetups/parse")
+def parse_meetup(payload: MeetupParseRequest,
+                 current_user: User = Depends(get_current_user)):
+    """Turn a free-text meetup note into a structured draft (Sprint 3 LLM feature).
+
+    Never creates a meetup: the caller shows the draft in the meetup form
+    for the user to review, then POST /meetups creates it. When the model is
+    unavailable or returns unusable output the response still succeeds with
+    parsed=false and the caller falls back to the manual form with the note
+    pre-filled — that fallback is a normal outcome, not an error.
+    """
+    note = (payload.note or "").strip()
+    if not note:
+        raise HTTPException(status_code=400, detail="Describe your meetup first")
+    if len(note) > 500:
+        raise HTTPException(status_code=400, detail="Keep the note under 500 characters")
+    _require_clean(note)
+    return parse_meetup_note(note)
 
 
 class MeetupCreate(BaseModel):

@@ -32,12 +32,12 @@ def _post_json(url: str, payload: dict, headers: dict | None = None, timeout: in
         return None
 
 
-def _ollama(prompt: str, system: str | None, max_tokens: int) -> str | None:
+def _ollama(prompt: str, system: str | None, max_tokens: int, temperature: float) -> str | None:
     payload = {
         "model": DEFAULT_MODEL,
         "prompt": prompt,
         "stream": False,
-        "options": {"num_predict": max_tokens, "temperature": 0.9},
+        "options": {"num_predict": max_tokens, "temperature": temperature},
     }
     if system:
         payload["system"] = system
@@ -48,7 +48,7 @@ def _ollama(prompt: str, system: str | None, max_tokens: int) -> str | None:
     return text or None
 
 
-def _openai(prompt: str, system: str | None, max_tokens: int) -> str | None:
+def _openai(prompt: str, system: str | None, max_tokens: int, temperature: float) -> str | None:
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         return None
@@ -59,7 +59,7 @@ def _openai(prompt: str, system: str | None, max_tokens: int) -> str | None:
     data = _post_json(
         "https://api.openai.com/v1/chat/completions",
         {"model": os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
-         "messages": messages, "max_tokens": max_tokens, "temperature": 0.9},
+         "messages": messages, "max_tokens": max_tokens, "temperature": temperature},
         headers={"Authorization": f"Bearer {api_key}"},
     )
     try:
@@ -69,12 +69,17 @@ def _openai(prompt: str, system: str | None, max_tokens: int) -> str | None:
         return None
 
 
-def generate(prompt: str, system: str | None = None, max_tokens: int = 220) -> str | None:
-    """Generate text. Returns None when the LLM is unavailable or fails."""
+def generate(prompt: str, system: str | None = None, max_tokens: int = 220,
+             temperature: float = 0.9) -> str | None:
+    """Generate text. Returns None when the LLM is unavailable or fails.
+
+    temperature defaults to 0.9 (the historical behaviour for chat-style
+    callers). Deterministic callers (structured extraction) pass 0.
+    """
     provider = os.environ.get("LLM_PROVIDER", "ollama").lower()
     if provider == "openai":
-        return _openai(prompt, system, max_tokens)
-    return _ollama(prompt, system, max_tokens)
+        return _openai(prompt, system, max_tokens, temperature)
+    return _ollama(prompt, system, max_tokens, temperature)
 
 
 def is_available() -> bool:
