@@ -41,6 +41,7 @@ export default function MyRigScreen() {
   const [alertsVisible, setAlertsVisible] = useState(false);
   const [alerts, setAlerts] = useState<any[]>([]);
   const [unreadAlerts, setUnreadAlerts] = useState(0);
+  const [emailVerified, setEmailVerified] = useState<boolean | null>(null);
   const [inventory, setInventory] = useState<any[]>([]);
   const [showPicker, setShowPicker] = useState(false);
   const [urlPlatform, setUrlPlatform] = useState<string | null>(null);
@@ -120,6 +121,8 @@ export default function MyRigScreen() {
         
         if (response.ok) {
           const data = await response.json();
+
+          if (typeof data.email_verified === 'boolean') setEmailVerified(data.email_verified);
           
           // If the user has saved settings in the database, populate the screen[cite: 9]
           if (data.settings && Object.keys(data.settings).length > 0) {
@@ -315,6 +318,12 @@ export default function MyRigScreen() {
 
   return (
     <ScrollView style={styles.container}>
+      {emailVerified === false && (
+        <TouchableOpacity style={styles.verifyBanner} onPress={() => router.push('/verify-email')}>
+          <Text style={styles.verifyBannerText}>Your email isn't verified yet.</Text>
+          <Text style={styles.verifyBannerAction}>Verify now</Text>
+        </TouchableOpacity>
+      )}
       <View style={styles.header}>
         {!isEditing && <DuckShowcase ducks={showcaseDuckObjs} />}
         <View style={styles.headerTop}>
@@ -661,6 +670,21 @@ export default function MyRigScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#121212' },
   header: { padding: 25, backgroundColor: '#1a1a1a' },
+  verifyBanner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    margin: 16,
+    marginBottom: 0,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#1e1e1e',
+    borderWidth: 1,
+    borderColor: '#d4af37',
+    borderRadius: 8,
+  },
+  verifyBannerText: { color: '#ffffff', fontSize: 14 },
+  verifyBannerAction: { color: '#d4af37', fontSize: 14, fontWeight: '600' },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   bellBtn: {
     width: 40, height: 40, borderRadius: 20, backgroundColor: '#1e1e1e',

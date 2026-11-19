@@ -58,8 +58,9 @@ export default function SignupScreen() {
         // Save the session (user ID + auth token) locally
         await saveSession(data.id, data.access_token);
         
-        // Navigate to the map screen upon successful registration
-        router.push('/(tabs)/map');
+        // New accounts verify their email first: the code screen sends
+        // the first code itself when it opens.
+        router.push({ pathname: '/verify-email', params: { email: normalizedEmail } });
       } else {
         console.error("Sign up failed:", data.detail);
         showAlert("Registration Failed", data.detail || "An error occurred during sign up.");
