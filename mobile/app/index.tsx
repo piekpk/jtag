@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -18,6 +18,7 @@ import * as Facebook from 'expo-auth-session/providers/facebook';
 import { useAuthRequest, exchangeCodeAsync } from 'expo-auth-session';
 import { showAlert } from './themedAlert.js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import ConfirmHcaptcha from '@hcaptcha/react-native-hcaptcha';
 import { API_URL } from './config.js';
 import { saveSession } from './auth.js';
 import {
@@ -46,6 +47,13 @@ export default function LoginScreen() {
   const [isGoogleBusy, setIsGoogleBusy] = useState(false);
   const [isFacebookBusy, setIsFacebookBusy] = useState(false);
   const [isXBusy, setIsXBusy] = useState(false);
+  // hCaptcha (issue #101): after 5 failed logins the backend answers the
+  // login with captcha_required. captchaSiteKey holds the site key fetched
+  // from the backend for the widget; captchaPending tracks a challenge
+  // currently on screen so the Sign In button stays disabled meanwhile.
+  const [captchaSiteKey, setCaptchaSiteKey] = useState(null);
+  const [captchaPending, setCaptchaPending] = useState(false);
+  const captchaRef = useRef(null);
 
   // Google Sign-In request (ID token flow: the token goes to our backend,
   // which verifies it with Google and returns the app's own JWT).
@@ -155,13 +163,17 @@ export default function LoginScreen() {
     finishXLogin();
   }, [xResponse]);
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      showAlert('Missing Fields', 'Please enter your email and password.');
-      return;
+  // Show the hCaptcha challenge as soon as its site key arrives.
+  useEffect(() => {
+    if (captchaSiteKey) {
+      captchaRef.current?.show();
     }
+  }, [captchaSiteKey]);
 
-    setIsSubmitting(true);
+  // One login attempt. captchaToken is only sent after the user passes
+  // the hCaptcha challenge (the backend asks for it with captcha_required
+  // after 5 failed logins for the account or this device's IP).
+  const attemptLogin = async (captchaToken) => {
     const normalizedEmail = email.trim().toLowerCase();
 
     try {
@@ -174,6 +186,7 @@ export default function LoginScreen() {
         body: JSON.stringify({
           email: normalizedEmail,
           password: password,
+          ...(captchaToken ? { captcha_token: captchaToken } : {}),
         }),
       });
 
@@ -182,15 +195,91 @@ export default function LoginScreen() {
       if (response.ok) {
         await saveSession(data.id, data.access_token);
         router.replace('/(tabs)/profile');
-      } else {
-        showAlert("Login Failed", data.detail || "Invalid email or password.");
+        return;
       }
+
+      const detail = data.detail;
+      if (detail && typeof detail === 'object' && detail.captcha_required) {
+        // Too many failed logins: fetch the site key and show the challenge.
+        try {
+          const keyResponse = await fetch(`${API_URL}/auth/captcha/site-key`, {
+            headers: { 'ngrok-skip-browser-warning': 'true' },
+          });
+          const keyData = await keyResponse.json();
+          if (keyData.site_key) {
+            setCaptchaSiteKey(keyData.site_key);
+            setCaptchaPending(true);
+          } else {
+            showAlert(
+              'CAPTCHA Required',
+              'Too many failed login attempts, and CAPTCHA is not set up on the server yet. Please try again later.'
+            );
+          }
+        } catch (keyError) {
+          console.error('Failed to fetch CAPTCHA site key:', keyError);
+          showAlert('Login Failed', 'Too many failed login attempts. Please try again later.');
+        }
+        return;
+      }
+
+      showAlert('Login Failed', (typeof detail === 'string' && detail) || detail?.message || 'Invalid email or password.');
     } catch (error) {
-      console.error("Network error:", error);
-      showAlert("Connection Error", "Failed to connect to the server. Please check your network and try again.");
+      console.error('Network error:', error);
+      showAlert('Connection Error', 'Failed to connect to the server. Please check your network and try again.');
+    }
+  };
+
+  const handleLogin = async () => {
+    if (!email || !password) {
+      showAlert('Missing Fields', 'Please enter your email and password.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await attemptLogin(null);
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // hCaptcha widget result. The token (a long string, success === true)
+  // is sent straight back to the backend as the login's captcha_token.
+  // 'open' just means the challenge appeared; 'challenge-closed'/'cancel'
+  // means the user dismissed it; 'expired' means the token went stale
+  // before it was used; anything else is an error from the widget.
+  const handleCaptchaMessage = (event) => {
+    const data = event?.nativeEvent?.data;
+    if (!data) {
+      return;
+    }
+    if (event.success && data !== 'open') {
+      const token = data;
+      event.markUsed?.();
+      captchaRef.current?.hide();
+      setCaptchaSiteKey(null);
+      setCaptchaPending(false);
+      setIsSubmitting(true);
+      attemptLogin(token).finally(() => setIsSubmitting(false));
+      return;
+    }
+    if (data === 'open') {
+      return;
+    }
+    if (data === 'challenge-closed' || data === 'cancel') {
+      captchaRef.current?.hide();
+      setCaptchaSiteKey(null);
+      setCaptchaPending(false);
+      return;
+    }
+    if (data === 'expired') {
+      setCaptchaPending(false);
+      return;
+    }
+    captchaRef.current?.hide();
+    setCaptchaSiteKey(null);
+    setCaptchaPending(false);
+    showAlert('CAPTCHA Failed', 'Could not verify you are human. Please try again.');
   };
 
   const handleGooglePress = async () => {
@@ -367,9 +456,9 @@ export default function LoginScreen() {
             />
 
             <TouchableOpacity
-              style={[styles.loginButton, isSubmitting && styles.loginButtonDisabled]}
+              style={[styles.loginButton, (isSubmitting || captchaPending) && styles.loginButtonDisabled]}
               onPress={handleLogin}
-              disabled={isSubmitting}
+              disabled={isSubmitting || captchaPending}
             >
               {isSubmitting ? (
                 <ActivityIndicator color="#ffffff" />
@@ -377,6 +466,12 @@ export default function LoginScreen() {
                 <Text style={styles.loginButtonText}>Sign In</Text>
               )}
             </TouchableOpacity>
+
+            {captchaPending && (
+              <Text style={styles.captchaNote}>
+                Too many failed attempts — complete the CAPTCHA below to sign in.
+              </Text>
+            )}
 
             <View style={styles.forgotRow}>
               <TouchableOpacity onPress={() => router.push('/forgot-password')}>
@@ -440,6 +535,17 @@ export default function LoginScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {captchaSiteKey && (
+          <ConfirmHcaptcha
+            ref={captchaRef}
+            siteKey={captchaSiteKey}
+            baseUrl="https://hcaptcha.com"
+            size="normal"
+            languageCode="en"
+            onMessage={handleCaptchaMessage}
+          />
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -521,6 +627,12 @@ const styles = StyleSheet.create({
     color: '#121212',
     fontSize: 16,
     fontWeight: '700',
+  },
+  captchaNote: {
+    color: '#d4af37',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 12,
   },
   forgotRow: {
     alignItems: 'center',
