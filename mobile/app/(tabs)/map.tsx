@@ -9,7 +9,7 @@ import { API_URL } from '../config.js';
 import { getAuthHeaders } from '../auth.js';
 import { showAlert } from '../themedAlert.js';
 import { getActiveDrops, createDrop, claimDrop, getInventory, formatExpiry, rarityColor, celebrateMilestones } from '../duckApi.js';
-import { getActiveMeetups, createMeetup, rsvpMeetup, leaveMeetup, cancelMeetup, formatMeetupTime, formatDistance } from '../meetupApi.js';
+import { getActiveMeetups, createMeetup, parseMeetupNote, rsvpMeetup, leaveMeetup, cancelMeetup, formatMeetupTime, formatDistance } from '../meetupApi.js';
 import { getNearbySos, createSos, respondSos, resolveSos, cancelSos, SOS_ISSUES, formatSosAge } from '../sosApi.js';
 import DuckIcon from '../DuckIcon';
 
@@ -128,6 +128,10 @@ export default function RadarMapScreen() {
   const [pickerMode, setPickerMode] = useState(null); // 'date' | 'time' | null
   const [meetupDuration, setMeetupDuration] = useState(4);
   const [isCreatingMeetup, setIsCreatingMeetup] = useState(false);
+  // "Describe it in words" — AI draft state for the meetup form
+  const [meetupNote, setMeetupNote] = useState('');
+  const [isParsingNote, setIsParsingNote] = useState(false);
+  const [meetupParseHint, setMeetupParseHint] = useState(null);
   const [isRsvping, setIsRsvping] = useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   // SOS / help requests
@@ -348,6 +352,62 @@ export default function RadarMapScreen() {
     }
   };
 
+  // "Describe it in words": ask the backend to parse the free-text note
+  // into a meetup draft and pre-fill the form. parsed=false (or a network
+  // failure) is the normal fallback: keep the note as the description so
+  // the user completes the meetup by hand. The map pin stays user-picked —
+  // the parsed location is shown as a hint only, never geocoded.
+  const handleParseMeetupNote = async () => {
+    const note = meetupNote.trim();
+    if (!note || isParsingNote) return;
+    setIsParsingNote(true);
+    setMeetupParseHint(null);
+    try {
+      const result = await parseMeetupNote(note);
+      if (result?.parsed && result.draft) {
+        const draft = result.draft;
+        if (draft.title) setMeetupTitle(draft.title);
+        if (draft.date || draft.time) {
+          setMeetupStartDate((cur) => {
+            const next = new Date(cur);
+            if (draft.date) {
+              const [y, m, d] = draft.date.split('-').map(Number);
+              if (Number.isInteger(y) && Number.isInteger(m) && m >= 1 && m <= 12
+                && Number.isInteger(d) && d >= 1 && d <= 31) {
+                next.setFullYear(y, m - 1, d);
+              }
+            }
+            if (draft.time) {
+              const [hh, mm] = draft.time.split(':').map(Number);
+              if (Number.isInteger(hh) && hh >= 0 && hh <= 23
+                && Number.isInteger(mm) && mm >= 0 && mm <= 59) {
+                next.setHours(hh, mm, 0, 0);
+              }
+            }
+            return next;
+          });
+        }
+        setMeetupDesc(note);
+        const bits = [];
+        if (draft.location) bits.push(draft.location);
+        if (typeof draft.expected_attendees === 'number') bits.push(`~${draft.expected_attendees} rigs`);
+        setMeetupParseHint(bits.length
+          ? `✨ AI draft: ${bits.join(' · ')}`
+          : '✨ AI draft filled in — check the details below.');
+      } else {
+        setMeetupDesc(note);
+        setMeetupParseHint("Couldn't parse that — fill in the form below.");
+      }
+    } catch (e) {
+      // Same fallback as parsed=false: the note is kept as the description
+      // and the user finishes the form manually.
+      setMeetupDesc(note);
+      setMeetupParseHint("Couldn't parse that — fill in the form below.");
+    } finally {
+      setIsParsingNote(false);
+    }
+  };
+
   const handleCreateMeetup = async () => {
     if (!meetupTitle.trim() || !meetupCoord || isCreatingMeetup) return;
     setIsCreatingMeetup(true);
@@ -366,6 +426,8 @@ export default function RadarMapScreen() {
       setMeetupModalVisible(false);
       setMeetupTitle('');
       setMeetupDesc('');
+      setMeetupNote('');
+      setMeetupParseHint(null);
       await refreshMeetups();
       showAlert("📍 Meetup planned!", `"${title}" is on the map for nearby Jeepers.`);
     } catch (e) {
@@ -933,6 +995,8 @@ export default function RadarMapScreen() {
                   setMeetupCoord(chooserCoord);
                   setMeetupStartDate(defaultMeetupStart());
                   setMeetupDuration(4);
+                  setMeetupNote('');
+                  setMeetupParseHint(null);
                   setMeetupModalVisible(true);
                 }
               }}
@@ -971,6 +1035,28 @@ export default function RadarMapScreen() {
           <View style={styles.modalBox}>
             <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               <Text style={styles.modalTitle}>📍 Plan a meetup</Text>
+
+              <Text style={styles.modalLabel}>Describe it in words</Text>
+              <TextInput
+                style={[styles.labelInput, { marginTop: 0, minHeight: 70, textAlignVertical: 'top' }]}
+                placeholder="e.g. Trail ride Saturday 10am at Bethpage, about 12 rigs"
+                placeholderTextColor="#757575"
+                value={meetupNote}
+                onChangeText={setMeetupNote}
+                maxLength={500}
+                multiline
+              />
+              <TouchableOpacity
+                style={[styles.parseBtn, (!meetupNote.trim() || isParsingNote) && { opacity: 0.5 }]}
+                onPress={handleParseMeetupNote}
+                disabled={!meetupNote.trim() || isParsingNote}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.parseBtnText}>{isParsingNote ? '✨ Parsing…' : '✨ Fill in from my words'}</Text>
+              </TouchableOpacity>
+              {meetupParseHint ? (
+                <Text style={[styles.dropHint, { marginTop: 8, color: '#d4af37' }]}>{meetupParseHint}</Text>
+              ) : null}
 
               <TextInput
                 style={styles.labelInput}
@@ -1406,6 +1492,8 @@ const styles = StyleSheet.create({
   labelInput: { backgroundColor: '#2c2c2e', borderRadius: 10, color: '#fff', padding: 12, marginTop: 14, fontSize: 15 },
   dropBtn: { backgroundColor: '#d4af37', borderRadius: 10, padding: 14, alignItems: 'center', marginTop: 16 },
   dropBtnText: { color: '#121212', fontWeight: 'bold', fontSize: 16 },
+  parseBtn: { backgroundColor: '#2c2c2e', borderRadius: 10, borderWidth: 1, borderColor: '#d4af37', padding: 12, alignItems: 'center', marginTop: 10 },
+  parseBtnText: { color: '#d4af37', fontWeight: 'bold', fontSize: 15 },
   modalClose: { marginTop: 8, padding: 12, alignItems: 'center' },
   modalCloseText: { color: '#888', fontSize: 16 },
   chooserBackdrop: {

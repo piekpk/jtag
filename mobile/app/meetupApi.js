@@ -27,6 +27,8 @@ export const getActiveMeetups = (lat, lng, radiusM = 50000) =>
   req(`/meetups/active?lat=${lat}&lng=${lng}&radius_m=${radiusM}`);
 export const createMeetup = (payload) =>
   req('/meetups', { body: JSON.stringify(payload) });
+export const parseMeetupNote = (note) =>
+  req('/meetups/parse', { body: JSON.stringify({ note }) });
 export const rsvpMeetup = (meetupId) =>
   req(`/meetups/${meetupId}/rsvp`, { method: 'POST' });
 export const leaveMeetup = (meetupId) =>
