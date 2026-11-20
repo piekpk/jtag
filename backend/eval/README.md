@@ -25,9 +25,11 @@ it measures the real model + prompt, so a provider model change shows up
 here as a threshold failure.
 
 - Provider comes from `LLM_PROVIDER` (default `ollama`).
-- With `LLM_PROVIDER=openai` you need `OPENAI_API_KEY` set; the runner
-  fails fast with a clear message (exit 2) if it is missing.
-- Model is `OPENAI_MODEL` (default `gpt-4o-mini`) or `LLM_MODEL`
+- The configured provider is Claude: `LLM_PROVIDER=anthropic` needs
+  `ANTHROPIC_API_KEY` set; the runner fails fast with a clear message
+  (exit 2) if it is missing.
+- Model is `ANTHROPIC_MODEL` (default `claude-sonnet-4-5`), `OPENAI_MODEL`
+  (default `gpt-4o-mini`) for OpenAI, or `LLM_MODEL`
   (default `llama3.2:3b`) for Ollama.
 
 ## The golden set (`golden.json`, 18 cases)
@@ -74,7 +76,7 @@ run green.
 - `0` — every check met its threshold.
 - `1` — one or more checks fell below threshold (the per-check table
   shows which, with `numerator/denominator`).
-- `2` — configuration error (missing `OPENAI_API_KEY`, unreadable or
+- `2` — configuration error (missing `ANTHROPIC_API_KEY`, unreadable or
   invalid golden file).
 
 The full report — per-case results plus every check's score, threshold,

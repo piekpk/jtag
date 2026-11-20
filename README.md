@@ -79,9 +79,9 @@ after the previous one passes:
   the build-number check: `mobile/app/buildInfo.js` `BUILD_NUMBER` must be
   higher than the base branch. Bump it by 1 in every commit.
 - **Eval** — runs the meetup-parser evaluation suite against the real
-  OpenAI API (`python backend/eval/run_eval.py`, 18 golden cases, five
+  Claude API (Anthropic) (`python backend/eval/run_eval.py`, 18 golden cases, five
   checks with pass thresholds) and fails the pipeline when any check falls
-  below its threshold. Needs `OPENAI_API_KEY` in GitHub Secrets; unit tests
+  below its threshold. Needs `ANTHROPIC_API_KEY` in GitHub Secrets; unit tests
   mock the LLM and never call the real API. See the Sprint 3 section below.
 - **Deploy** — runs only after Test and Eval pass. There is no production host
   configured yet, so this stage marks the tested commit on `main` as the
@@ -91,11 +91,11 @@ after the previous one passes:
 requires 3 approving reviews from teammates with write access. Test is a
 required status check, so a pull request cannot merge while Test is red.
 
-**Secrets:** the workflow uses one secret, `OPENAI_API_KEY`, for the Eval stage. Any other credential a future step
+**Secrets:** the workflow uses one secret, `ANTHROPIC_API_KEY`, for the Eval stage. Any other credential a future step
 needs goes in the repo's GitHub Secrets (Settings → Secrets and variables →
 Actions) and is referenced as `${{ secrets.NAME }}` — never written into
 the workflow file or the code. Application secrets are read from environment
-variables, not stored in code: `JTAP_SECRET_KEY` (JWT signing), `OPENAI_API_KEY`,
+variables, not stored in code: `JTAP_SECRET_KEY` (JWT signing), `ANTHROPIC_API_KEY`,
 and the Google Maps key the mobile config reads from env.
 
 **New-teammate check:** clone the repo, open a pull request with a small
@@ -152,8 +152,8 @@ form pre-fills for review; nothing is created until the user taps Create
 meetup, and `POST /meetups` still validates everything. The prompt is
 versioned in `prompts/meetup_parse_v1.txt` (see `prompts/README.md` — a
 prompt change is a new file, never an edit in place). The provider is
-OpenAI (`LLM_PROVIDER=openai`, model `gpt-4o-mini` via `OPENAI_MODEL`); the
-key comes from `OPENAI_API_KEY` — in GitHub Secrets for CI, never in code.
+Claude (Anthropic) (`LLM_PROVIDER=anthropic`, model `claude-sonnet-4-5` via `ANTHROPIC_MODEL`); the
+key comes from `ANTHROPIC_API_KEY` — in GitHub Secrets for CI, never in code.
 Extraction runs at temperature 0 so the same note parses the same way every
 time. The mobile UI is the "Describe it in words" box at the top of the
 "Plan a meetup" form (Map tab); the parsed location is shown as a hint
@@ -183,13 +183,13 @@ fields, 1.00). The runner prints a per-check table, writes the full report
 to `backend/eval/results/latest.json`, and exits non-zero below any
 threshold. It calls the real API by design; unit tests
 (`backend/tests/test_eval.py`, `test_meetup_parse.py`) mock the LLM and
-never call it. Run the eval locally with `LLM_PROVIDER=openai
-OPENAI_API_KEY=... python backend/eval/run_eval.py`, then commit the
+never call it. Run the eval locally with `LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=... python backend/eval/run_eval.py`, then commit the
 results file with the PR.
 
 ### Pipeline
 The Eval stage runs `python backend/eval/run_eval.py` on every pull
-request (after Test passes) with `OPENAI_API_KEY` from GitHub Secrets, and
+request (after Test passes) with `ANTHROPIC_API_KEY` from GitHub Secrets, and
 fails the pipeline when any check falls below its threshold. The workflow
 is now five stages: Setup → Dependencies → Test → Eval → Deploy.
 Follow-up: add `Eval` as a required status check in the branch protection

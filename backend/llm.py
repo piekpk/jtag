@@ -6,6 +6,8 @@ One function: generate(prompt) -> str | None.
   override with OLLAMA_HOST). Model via LLM_MODEL (default "llama3.2:3b",
   a good CPU-friendly pick).
 - "openai" uses the chat completions API with OPENAI_API_KEY.
+- "anthropic" uses the Claude Messages API with ANTHROPIC_API_KEY
+  (model via ANTHROPIC_MODEL, default "claude-sonnet-4-5").
 - Any failure (server down, timeout, bad response) returns None so callers
   can fall back gracefully. No new pip dependencies: stdlib urllib only.
 """
@@ -69,6 +71,34 @@ def _openai(prompt: str, system: str | None, max_tokens: int, temperature: float
         return None
 
 
+def _anthropic(prompt: str, system: str | None, max_tokens: int, temperature: float) -> str | None:
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        return None
+    payload = {
+        "model": os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5"),
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    if system:
+        payload["system"] = system
+    data = _post_json(
+        "https://api.anthropic.com/v1/messages",
+        payload,
+        headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"},
+    )
+    try:
+        blocks = data["content"]
+        text = "".join(
+            block.get("text", "") for block in blocks
+            if isinstance(block, dict) and block.get("type") == "text"
+        ).strip()
+        return text or None
+    except Exception:
+        return None
+
+
 def generate(prompt: str, system: str | None = None, max_tokens: int = 220,
              temperature: float = 0.9) -> str | None:
     """Generate text. Returns None when the LLM is unavailable or fails.
@@ -79,13 +109,18 @@ def generate(prompt: str, system: str | None = None, max_tokens: int = 220,
     provider = os.environ.get("LLM_PROVIDER", "ollama").lower()
     if provider == "openai":
         return _openai(prompt, system, max_tokens, temperature)
+    if provider == "anthropic":
+        return _anthropic(prompt, system, max_tokens, temperature)
     return _ollama(prompt, system, max_tokens, temperature)
 
 
 def is_available() -> bool:
     """Cheap check: is the configured provider reachable?"""
-    if os.environ.get("LLM_PROVIDER", "ollama").lower() == "openai":
+    provider = os.environ.get("LLM_PROVIDER", "ollama").lower()
+    if provider == "openai":
         return bool(os.environ.get("OPENAI_API_KEY"))
+    if provider == "anthropic":
+        return bool(os.environ.get("ANTHROPIC_API_KEY"))
     try:
         req = urllib.request.Request(f"{OLLAMA_HOST}/api/tags", method="GET")
         with urllib.request.urlopen(req, timeout=5):

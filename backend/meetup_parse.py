@@ -2,9 +2,10 @@
 
 Sprint 3 LLM feature. The prompt is versioned in
 ``prompts/meetup_parse_v1.txt`` (loaded at runtime, never edited in place);
-the provider is ``llm.generate`` — OpenAI when ``LLM_PROVIDER=openai``
-(``OPENAI_API_KEY``, model via ``OPENAI_MODEL``, default ``gpt-4o-mini``),
-Ollama otherwise. Extraction runs at temperature 0 so the same note parses
+the provider is ``llm.generate`` — Claude (Anthropic) when
+``LLM_PROVIDER=anthropic`` (``ANTHROPIC_API_KEY``, model via
+``ANTHROPIC_MODEL``, default ``claude-sonnet-4-5``), OpenAI when
+``LLM_PROVIDER=openai``, Ollama otherwise. Extraction runs at temperature 0 so the same note parses
 the same way every time.
 
 The parser NEVER raises for model problems. It returns a result dict:

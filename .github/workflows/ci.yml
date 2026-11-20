@@ -124,10 +124,10 @@ jobs:
     name: Eval
     needs: test
     # Sprint 3: runs the meetup-parser evaluation suite against the REAL
-    # OpenAI API (23 calls: 18 golden cases + 5 consistency re-runs) and
+    # Claude API (23 calls: 18 golden cases + 5 consistency re-runs) and
     # fails the pipeline when any check falls below its threshold. Unit
     # tests mock the LLM and never call it; this stage measures the live
-    # model + prompt, so it needs OPENAI_API_KEY in GitHub Secrets.
+    # model + prompt, so it needs ANTHROPIC_API_KEY in GitHub Secrets.
     # Same-repo pull requests and pushes to main can read repo secrets;
     # a missing key fails fast (exit 2) instead of passing silently.
     runs-on: ubuntu-latest
@@ -147,8 +147,8 @@ jobs:
 
       - name: Run the evaluation suite (real API)
         env:
-          LLM_PROVIDER: openai
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          LLM_PROVIDER: anthropic
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python backend/eval/run_eval.py
 
       - name: Upload evaluation results

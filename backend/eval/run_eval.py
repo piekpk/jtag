@@ -10,7 +10,7 @@ Unlike the unit tests (``backend/tests/test_eval.py`` and
 ``test_meetup_parse.py``), which mock the LLM, this runner CALLS THE REAL
 API by design — that is the point of an evaluation suite: it measures the
 live model + prompt. Provider comes from the environment (``LLM_PROVIDER``,
-default ``ollama``); with ``LLM_PROVIDER=openai`` an ``OPENAI_API_KEY``
+default ``ollama``); with ``LLM_PROVIDER=anthropic`` an ``ANTHROPIC_API_KEY``
 must be set, and the runner fails fast with a clear message if it is not.
 
 Usage (from the repo root):
@@ -18,7 +18,7 @@ Usage (from the repo root):
     python backend/eval/run_eval.py [--golden PATH] [--out PATH]
 
 Exit codes: 0 = every check passed; 1 = one or more checks fell below
-threshold; 2 = configuration error (e.g. missing OPENAI_API_KEY).
+threshold; 2 = configuration error (e.g. missing ANTHROPIC_API_KEY).
 """
 
 import argparse
@@ -218,6 +218,14 @@ def check_provider_key():
                   file=sys.stderr)
             raise SystemExit(2)
         model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+    elif provider == "anthropic":
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            print("ERROR: LLM_PROVIDER=anthropic but ANTHROPIC_API_KEY is not set.\n"
+                  "Set ANTHROPIC_API_KEY in your environment before running the eval.\n"
+                  "The eval calls the real API by design; unit tests mock it.",
+                  file=sys.stderr)
+            raise SystemExit(2)
+        model = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5")
     else:
         model = os.environ.get("LLM_MODEL", "llama3.2:3b")
     return provider, model
