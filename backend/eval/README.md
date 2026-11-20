@@ -28,7 +28,7 @@ here as a threshold failure.
 - The configured provider is Claude: `LLM_PROVIDER=anthropic` needs
   `ANTHROPIC_API_KEY` set; the runner fails fast with a clear message
   (exit 2) if it is missing.
-- Model is `ANTHROPIC_MODEL` (default `claude-sonnet-4-5`), `OPENAI_MODEL`
+- Model is `ANTHROPIC_MODEL` (default `claude-sonnet-5`), `OPENAI_MODEL`
   (default `gpt-4o-mini`) for OpenAI, or `LLM_MODEL`
   (default `llama3.2:3b`) for Ollama.
 

@@ -225,7 +225,7 @@ def check_provider_key():
                   "The eval calls the real API by design; unit tests mock it.",
                   file=sys.stderr)
             raise SystemExit(2)
-        model = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5")
+        model = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5")
     else:
         model = os.environ.get("LLM_MODEL", "llama3.2:3b")
     return provider, model

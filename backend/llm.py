@@ -7,7 +7,7 @@ One function: generate(prompt) -> str | None.
   a good CPU-friendly pick).
 - "openai" uses the chat completions API with OPENAI_API_KEY.
 - "anthropic" uses the Claude Messages API with ANTHROPIC_API_KEY
-  (model via ANTHROPIC_MODEL, default "claude-sonnet-4-5").
+  (model via ANTHROPIC_MODEL, default "claude-sonnet-5").
 - Any failure (server down, timeout, bad response) returns None so callers
   can fall back gracefully. No new pip dependencies: stdlib urllib only.
 """
@@ -76,7 +76,7 @@ def _anthropic(prompt: str, system: str | None, max_tokens: int, temperature: fl
     if not api_key:
         return None
     payload = {
-        "model": os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-5"),
+        "model": os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5"),
         "max_tokens": max_tokens,
         "temperature": temperature,
         "messages": [{"role": "user", "content": prompt}],

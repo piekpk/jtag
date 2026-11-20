@@ -26,7 +26,7 @@ def test_anthropic_parses_text_blocks(monkeypatch):
     monkeypatch.setattr(llm, "_post_json", fake_post)
     assert llm.generate("note", system="sys", max_tokens=220, temperature=0) == '{"title": "x"}'
     assert seen["url"] == "https://api.anthropic.com/v1/messages"
-    assert seen["payload"]["model"] == "claude-sonnet-4-5"
+    assert seen["payload"]["model"] == "claude-sonnet-5"
     assert seen["payload"]["temperature"] == 0
     assert seen["payload"]["system"] == "sys"
     assert seen["headers"]["anthropic-version"] == "2023-06-01"
