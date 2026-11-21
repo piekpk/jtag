@@ -10,10 +10,14 @@ One function: generate(prompt) -> str | None.
   (model via ANTHROPIC_MODEL, default "claude-sonnet-5").
 - Any failure (server down, timeout, bad response) returns None so callers
   can fall back gracefully. No new pip dependencies: stdlib urllib only.
+  Failures are logged to stderr (HTTP status + provider error body) so a
+  silent None in CI still leaves the cause in the log.
 """
 
 import json
 import os
+import sys
+import urllib.error
 import urllib.request
 
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
@@ -30,7 +34,21 @@ def _post_json(url: str, payload: dict, headers: dict | None = None, timeout: in
         )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read().decode("utf-8"))
-    except Exception:
+    except urllib.error.HTTPError as exc:
+        # The provider answered with an error status (401/400/429/...).
+        # Log status + error body: without this the caller just sees None
+        # and a CI log shows nothing. The body holds the provider's error
+        # message, never the API key (keys live in headers, not the body).
+        try:
+            detail = exc.read().decode("utf-8", "replace")
+        except Exception:
+            detail = ""
+        print(f"LLM request failed: HTTP {exc.code} from {url}: {detail}",
+              file=sys.stderr)
+        return None
+    except Exception as exc:
+        print(f"LLM request failed: {type(exc).__name__}: {exc} ({url})",
+              file=sys.stderr)
         return None
 
 
@@ -88,6 +106,8 @@ def _anthropic(prompt: str, system: str | None, max_tokens: int, temperature: fl
         payload,
         headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"},
     )
+    if not data:
+        return None  # _post_json already logged the failure.
     try:
         blocks = data["content"]
         text = "".join(
@@ -95,7 +115,9 @@ def _anthropic(prompt: str, system: str | None, max_tokens: int, temperature: fl
             if isinstance(block, dict) and block.get("type") == "text"
         ).strip()
         return text or None
-    except Exception:
+    except Exception as exc:
+        print(f"LLM request failed: unexpected Anthropic response: "
+              f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return None
 
 
