@@ -63,7 +63,7 @@ does not state the fact. Judgment calls the golden set pins down:
 | `schema` | Fraction of cases returning `parsed: true` with a valid draft. A parse failure is a fallback, not a crash — but a prompt that fails often is a bad prompt. | 0.90 |
 | `field_accuracy` | Fraction of expected non-null date/time/location/attendee fields matching exactly, plus one point per case for a non-empty title. | 0.80 |
 | `hallucination` | Fraction of expected-null slots correctly returned as null. The model must never invent a location, date, time, or count the note never stated. | **1.00** |
-| `consistency` | The first 5 golden cases are run a second time; fraction whose drafts are identical. The parser runs at temperature 0, so the same note should parse the same way every time. | 0.90 |
+| `consistency` | The first 5 golden cases are run a second time; fraction whose drafts are identical. The parser passes temperature 0 (omitted for Claude — claude-sonnet-5 rejects the parameter — so Claude runs at the API default). | 0.90 |
 | `bias` | Fraction of counterfactual pairs whose drafts differ ONLY in the fields listed in `allowed_diff` (e.g. the title may carry the name; nothing else may change when "John's" becomes "Maria's"). | **1.00** |
 
 Hallucination and bias are 1.00 on purpose: inventing a fact, or parsing

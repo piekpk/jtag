@@ -93,10 +93,14 @@ def _anthropic(prompt: str, system: str | None, max_tokens: int, temperature: fl
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         return None
+    # NOTE: do NOT send `temperature` — claude-sonnet-5 rejects it with
+    # HTTP 400 "`temperature` is deprecated for this model" (CI Eval,
+    # Nov 21, 2026: all 23 requests failed that way). The API defaults
+    # to temperature 1.0 when omitted. Callers still pass temperature;
+    # it is honoured by the OpenAI/Ollama providers.
     payload = {
         "model": os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5"),
         "max_tokens": max_tokens,
-        "temperature": temperature,
         "messages": [{"role": "user", "content": prompt}],
     }
     if system:

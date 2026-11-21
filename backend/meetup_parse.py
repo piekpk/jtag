@@ -5,8 +5,9 @@ Sprint 3 LLM feature. The prompt is versioned in
 the provider is ``llm.generate`` — Claude (Anthropic) when
 ``LLM_PROVIDER=anthropic`` (``ANTHROPIC_API_KEY``, model via
 ``ANTHROPIC_MODEL``, default ``claude-sonnet-5``), OpenAI when
-``LLM_PROVIDER=openai``, Ollama otherwise. Extraction runs at temperature 0 so the same note parses
-the same way every time.
+``LLM_PROVIDER=openai``, Ollama otherwise. Extraction passes temperature 0 (honoured by OpenAI/Ollama;
+the Anthropic provider omits it — claude-sonnet-5 rejects the parameter
+— so Claude runs at the API default).
 
 The parser NEVER raises for model problems. It returns a result dict:
 

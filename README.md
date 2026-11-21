@@ -154,8 +154,9 @@ versioned in `prompts/meetup_parse_v1.txt` (see `prompts/README.md` — a
 prompt change is a new file, never an edit in place). The provider is
 Claude (Anthropic) (`LLM_PROVIDER=anthropic`, model `claude-sonnet-5` via `ANTHROPIC_MODEL`); the
 key comes from `ANTHROPIC_API_KEY` — in GitHub Secrets for CI, never in code.
-Extraction runs at temperature 0 so the same note parses the same way every
-time. The mobile UI is the "Describe it in words" box at the top of the
+Extraction passes temperature 0 (honoured by OpenAI/Ollama; the Anthropic
+provider omits it — claude-sonnet-5 rejects the parameter — so Claude runs
+at the API default). The mobile UI is the "Describe it in words" box at the top of the
 "Plan a meetup" form (Map tab); the parsed location is shown as a hint
 only — the map pin stays user-picked, the place name is never geocoded.
 
