@@ -39,7 +39,7 @@
     "expected": {
       "date": "2026-11-07",
       "expected_attendees": 8,
-      "location": "the trailhead",
+      "location": "trailhead",
       "time": "10:00",
       "title": "Trail ride"
     },

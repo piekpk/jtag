@@ -81,5 +81,7 @@ run green.
 
 The full report — per-case results plus every check's score, threshold,
 and pass/fail — is written to `backend/eval/results/latest.json` (or
-`--out`). The CI Eval stage runs this command on PRs to main and fails
+`--out`). Failed parses record the model's last raw output (`raw_text`)
+in their result, so a failure can be diagnosed from the report instead
+of guessed at. The CI Eval stage runs this command on PRs to main and fails
 the pipeline when it exits non-zero.

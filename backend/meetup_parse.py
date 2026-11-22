@@ -20,7 +20,13 @@ or, when the model is unavailable or its output is unusable:
 
     {"parsed": False, "prompt_version": "meetup_parse_v2",
      "draft": None, "reason": "llm_unavailable" | "invalid_json" |
-     "invalid_schema" | "prompt_unavailable", "note": <original note>}
+     "invalid_schema" | "prompt_unavailable", "note": <original note>,
+     "raw_text": <the model's last raw output, or None if it sent none>}
+
+``raw_text`` is only present on failed parses: it records what the model
+actually returned, so the evaluation report shows the failure instead of
+leaving it to guesswork. On success the draft is the output, so no
+``raw_text`` is included.
 
 Callers treat ``parsed: False`` as the fallback path: show the manual
 meetup form with the note pre-filled. Nothing is ever created from a
@@ -127,6 +133,7 @@ def parse_meetup_note(note: str, today: date | None = None) -> dict:
     if system is None:
         return {**base, "parsed": False, "reason": "prompt_unavailable"}
     reason = "llm_unavailable"
+    raw_text = None
     for _attempt in range(2):
         raw_text = generate(note, system=system, max_tokens=220, temperature=0)
         if raw_text is None:
@@ -139,6 +146,7 @@ def parse_meetup_note(note: str, today: date | None = None) -> dict:
             continue
         draft, schema_reason = _validate_draft(raw)
         if draft is None:
-            return {**base, "parsed": False, "reason": schema_reason}
+            return {**base, "parsed": False, "reason": schema_reason,
+                    "raw_text": raw_text}
         return {**base, "parsed": True, "draft": draft}
-    return {**base, "parsed": False, "reason": reason}
+    return {**base, "parsed": False, "reason": reason, "raw_text": raw_text}

@@ -104,6 +104,29 @@ def test_invalid_schema_does_not_retry(monkeypatch):
     assert calls["n"] == 1
 
 
+def test_failed_parse_records_raw_text(monkeypatch):
+    _mock_generate(monkeypatch, "Sure! Here's your meetup, sounds fun!")
+    result = parse_meetup_note(V1_NOTE)
+    assert result["parsed"] is False
+    assert result["reason"] == "invalid_json"
+    assert result["raw_text"] == "Sure! Here's your meetup, sounds fun!"
+
+
+def test_empty_response_records_raw_text_none(monkeypatch):
+    _mock_generate(monkeypatch, None)
+    result = parse_meetup_note(V1_NOTE)
+    assert result["parsed"] is False
+    assert result["reason"] == "llm_unavailable"
+    assert result["raw_text"] is None
+
+
+def test_success_has_no_raw_text(monkeypatch):
+    _mock_generate(monkeypatch, V1)
+    result = parse_meetup_note(V1_NOTE, today=date(2026, 11, 2))
+    assert result["parsed"] is True
+    assert "raw_text" not in result
+
+
 def test_fenced_json_tolerated(monkeypatch):
     _mock_generate(monkeypatch, "```json\n" + V1 + "\n```")
     result = parse_meetup_note(V1_NOTE)
