@@ -164,8 +164,38 @@ def test_consistency_identical_and_changed():
 
     second[3] = _result({**DRAFT, "time": "10:00"})
     detail = score_consistency(first, second)
-    assert detail == {"score": 0.8, "numerator": 4, "denominator": 5}
+    assert detail["score"] == 0.8
+    assert (detail["numerator"], detail["denominator"]) == (4, 5)
     assert detail["score"] < THRESHOLDS["consistency"]
+
+
+def test_consistency_details_name_the_difference():
+    ids = ["case-a", "case-b", "case-c"]
+    first = [_result(dict(DRAFT)) for _ in range(3)]
+    second = [_result(dict(DRAFT)) for _ in range(3)]
+    second[1] = _result({**DRAFT, "time": "10:00", "location": "Montauk dunes"})
+    detail = score_consistency(first, second, ids)
+    assert detail["score"] == 2 / 3
+    by_id = {d["id"]: d for d in detail["details"]}
+    assert by_id["case-a"]["consistent"] is True
+    assert by_id["case-a"]["differing_fields"] == []
+    changed = by_id["case-b"]
+    assert changed["consistent"] is False
+    assert changed["differing_fields"] == ["time", "location"]
+    assert changed["first"] == {"time": "09:00", "location": "Bethpage State Park"}
+    assert changed["second"] == {"time": "10:00", "location": "Montauk dunes"}
+    assert changed["first_parsed"] is True
+    assert changed["second_parsed"] is True
+
+
+def test_consistency_details_flag_unparsed_run():
+    detail = score_consistency([_result(dict(DRAFT))],
+                               [_result(None, parsed=False)], ["case-a"])
+    entry = detail["details"][0]
+    assert entry["consistent"] is False
+    assert entry["first_parsed"] is True
+    assert entry["second_parsed"] is False
+    assert entry["differing_fields"] == []
 
 
 def test_consistency_unparsed_run_counts_as_mismatch():

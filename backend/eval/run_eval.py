@@ -137,6 +137,37 @@ def _normalize_location(value):
     return kept or None
 
 
+def consistency_detail(a, b):
+    """Per-case consistency detail, for the report and the log.
+
+    Names what differed so a failed consistency check is diagnosable
+    instead of a bare 4/5: the fields that moved, with each run's value
+    for them (raw draft values, before location normalization), and
+    whether each run parsed at all. A case that fails to parse in
+    either run has no differing fields — the miss is the unparsed run.
+    """
+    if not a.get("parsed") or not b.get("parsed"):
+        return {"consistent": False,
+                "first_parsed": bool(a.get("parsed")),
+                "second_parsed": bool(b.get("parsed")),
+                "differing_fields": [], "first": {}, "second": {}}
+    da, db = a.get("draft") or {}, b.get("draft") or {}
+    differing, first_vals, second_vals = [], {}, {}
+    for field in SCORED_FIELDS:
+        va, vb = da.get(field), db.get(field)
+        if field == "location":
+            same = _normalize_location(va) == _normalize_location(vb)
+        else:
+            same = va == vb
+        if not same:
+            differing.append(field)
+            first_vals[field] = va
+            second_vals[field] = vb
+    return {"consistent": not differing, "first_parsed": True,
+            "second_parsed": True, "differing_fields": differing,
+            "first": first_vals, "second": second_vals}
+
+
 def drafts_consistent(a, b):
     """True when two parse results agree on the facts.
 
@@ -149,19 +180,10 @@ def drafts_consistent(a, b):
     specificity is not. A case that fails to parse in either run never
     counts as consistent.
     """
-    if not a.get("parsed") or not b.get("parsed"):
-        return False
-    da, db = a.get("draft") or {}, b.get("draft") or {}
-    for field in SCORED_FIELDS:
-        if field == "location":
-            if _normalize_location(da.get(field)) != _normalize_location(db.get(field)):
-                return False
-        elif da.get(field) != db.get(field):
-            return False
-    return True
+    return consistency_detail(a, b)["consistent"]
 
 
-def score_consistency(first, second):
+def score_consistency(first, second, case_ids=None):
     """Fraction of re-run cases whose drafts agree on the facts.
 
     The parser passes temperature 0, but Claude runs at the API default
@@ -171,12 +193,20 @@ def score_consistency(first, second):
     location, expected_attendees) are compared, and location is compared
     wording-insensitively (see _normalize_location). A case that fails to
     parse in either run counts as a mismatch.
+
+    The result also carries per-case "details" (see consistency_detail)
+    so a failing check names the case, the field, and both runs' values.
     """
-    identical = sum(1 for a, b in zip(first, second)
-                    if drafts_consistent(a, b))
+    details = []
+    for i, (a, b) in enumerate(zip(first, second)):
+        entry = {"id": case_ids[i] if case_ids else None}
+        entry.update(consistency_detail(a, b))
+        details.append(entry)
+    identical = sum(1 for d in details if d["consistent"])
     total = len(first)
     return {"score": identical / total if total else 0.0,
-            "numerator": identical, "denominator": total}
+            "numerator": identical, "denominator": total,
+            "details": details}
 
 
 def bias_pair_pass(draft_a, draft_b, allowed_diff):
@@ -313,7 +343,8 @@ def main(argv=None):
         "schema": score_schema(results),
         "field_accuracy": score_field_accuracy(results, cases),
         "hallucination": score_hallucination(results, cases),
-        "consistency": score_consistency(results[:CONSISTENCY_CASES], second),
+        "consistency": score_consistency(results[:CONSISTENCY_CASES], second,
+                                         [c["id"] for c in subset]),
         "bias": score_bias(collect_bias_pairs(cases, results)),
     }
 
@@ -343,6 +374,17 @@ def main(argv=None):
               f"  ({detail['numerator']}/{detail['denominator']})")
     if failed_cases:
         print(f"\nFailed to parse ({len(failed_cases)}): {', '.join(failed_cases)}")
+    for d in checks["consistency"]["details"]:
+        if d["consistent"]:
+            continue
+        if not d["first_parsed"] or not d["second_parsed"]:
+            missing = "first" if not d["first_parsed"] else "second"
+            print(f"Consistency mismatch: {d['id']} — unparsed in {missing} run")
+        else:
+            diffs = ", ".join(
+                f"{f}: {d['first'][f]!r} vs {d['second'][f]!r}"
+                for f in d["differing_fields"])
+            print(f"Consistency mismatch: {d['id']} — {diffs}")
 
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
