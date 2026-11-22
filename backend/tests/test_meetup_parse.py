@@ -28,7 +28,7 @@ def test_valid_output_parsed(monkeypatch):
     _mock_generate(monkeypatch, V1)
     result = parse_meetup_note(V1_NOTE, today=date(2026, 11, 2))
     assert result["parsed"] is True
-    assert result["prompt_version"] == "meetup_parse_v1"
+    assert result["prompt_version"] == "meetup_parse_v2"
     assert result["draft"] == {
         "title": "Trail run at Bethpage State Park",
         "date": "2026-11-07", "time": "09:00",
@@ -58,6 +58,50 @@ def test_garbage_output_invalid_json(monkeypatch):
     result = parse_meetup_note(V1_NOTE)
     assert result["parsed"] is False
     assert result["reason"] == "invalid_json"
+
+
+def _mock_generate_sequence(monkeypatch, texts):
+    """Mock generate() to return each text in turn; count the calls."""
+    calls = {"n": 0}
+
+    def fake(*a, **k):
+        text = texts[min(calls["n"], len(texts) - 1)]
+        calls["n"] += 1
+        return text
+
+    monkeypatch.setattr(meetup_parse, "generate", fake)
+    return calls
+
+
+def test_retry_recovers_after_empty_response(monkeypatch):
+    calls = _mock_generate_sequence(monkeypatch, [None, V1])
+    result = parse_meetup_note(V1_NOTE, today=date(2026, 11, 2))
+    assert result["parsed"] is True
+    assert result["draft"]["title"] == "Trail run at Bethpage State Park"
+    assert calls["n"] == 2
+
+
+def test_retry_recovers_after_invalid_json(monkeypatch):
+    calls = _mock_generate_sequence(monkeypatch, ["not json at all", V1])
+    result = parse_meetup_note(V1_NOTE, today=date(2026, 11, 2))
+    assert result["parsed"] is True
+    assert calls["n"] == 2
+
+
+def test_retry_exhausted_keeps_last_reason(monkeypatch):
+    _mock_generate_sequence(monkeypatch, [None, "still not json"])
+    result = parse_meetup_note(V1_NOTE)
+    assert result["parsed"] is False
+    assert result["reason"] == "invalid_json"
+
+
+def test_invalid_schema_does_not_retry(monkeypatch):
+    calls = _mock_generate_sequence(
+        monkeypatch, [V1[:-1] + ', "vibe": "chill"}', V1])
+    result = parse_meetup_note(V1_NOTE)
+    assert result["parsed"] is False
+    assert result["reason"] == "invalid_schema"
+    assert calls["n"] == 1
 
 
 def test_fenced_json_tolerated(monkeypatch):
@@ -135,7 +179,7 @@ def test_parse_endpoint_success(client, user_a, monkeypatch):
     body = response.json()
     assert body["parsed"] is True
     assert body["draft"]["title"] == "Trail run at Bethpage State Park"
-    assert body["prompt_version"] == "meetup_parse_v1"
+    assert body["prompt_version"] == "meetup_parse_v2"
 
 
 def test_parse_endpoint_fallback_when_llm_down(client, user_a, monkeypatch):

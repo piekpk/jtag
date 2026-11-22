@@ -1,7 +1,7 @@
 """Parse a free-text meetup note into a structured draft with the LLM.
 
 Sprint 3 LLM feature. The prompt is versioned in
-``prompts/meetup_parse_v1.txt`` (loaded at runtime, never edited in place);
+``prompts/meetup_parse_v2.txt`` (loaded at runtime, never edited in place);
 the provider is ``llm.generate`` — Claude (Anthropic) when
 ``LLM_PROVIDER=anthropic`` (``ANTHROPIC_API_KEY``, model via
 ``ANTHROPIC_MODEL``, default ``claude-sonnet-5``), OpenAI when
@@ -11,14 +11,14 @@ the Anthropic provider omits it — claude-sonnet-5 rejects the parameter
 
 The parser NEVER raises for model problems. It returns a result dict:
 
-    {"parsed": True, "prompt_version": "meetup_parse_v1",
+    {"parsed": True, "prompt_version": "meetup_parse_v2",
      "draft": {"title": ..., "date": ..., "time": ...,
                "location": ..., "expected_attendees": ...},
      "reason": None, "note": <original note>}
 
 or, when the model is unavailable or its output is unusable:
 
-    {"parsed": False, "prompt_version": "meetup_parse_v1",
+    {"parsed": False, "prompt_version": "meetup_parse_v2",
      "draft": None, "reason": "llm_unavailable" | "invalid_json" |
      "invalid_schema" | "prompt_unavailable", "note": <original note>}
 
@@ -35,7 +35,7 @@ from pathlib import Path
 
 from llm import generate
 
-PROMPT_VERSION = "meetup_parse_v1"
+PROMPT_VERSION = "meetup_parse_v2"
 PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / f"{PROMPT_VERSION}.txt"
 MAX_NOTE_CHARS = 500
 MAX_TITLE_CHARS = 80
@@ -107,7 +107,14 @@ def _validate_draft(raw) -> tuple[dict | None, str | None]:
 
 
 def parse_meetup_note(note: str, today: date | None = None) -> dict:
-    """Parse one meetup note. Never raises for model failures."""
+    """Parse one meetup note. Never raises for model failures.
+
+    Retries once when the model returns nothing or unparseable output:
+    at temperature 1.0 (Claude's default — it rejects the temperature
+    parameter) an empty or malformed reply is usually a flaky sample,
+    not a bad note. A structurally invalid draft (wrong keys/types) is
+    not retried — that is a prompt problem, not flakiness.
+    """
     note = (note or "").strip()
     if not note:
         raise ValueError("note must not be empty")
@@ -119,14 +126,19 @@ def parse_meetup_note(note: str, today: date | None = None) -> dict:
     system = _load_prompt(today)
     if system is None:
         return {**base, "parsed": False, "reason": "prompt_unavailable"}
-    raw_text = generate(note, system=system, max_tokens=220, temperature=0)
-    if raw_text is None:
-        return {**base, "parsed": False, "reason": "llm_unavailable"}
-    try:
-        raw = json.loads(_strip_fences(raw_text))
-    except (json.JSONDecodeError, ValueError):
-        return {**base, "parsed": False, "reason": "invalid_json"}
-    draft, reason = _validate_draft(raw)
-    if draft is None:
-        return {**base, "parsed": False, "reason": reason}
-    return {**base, "parsed": True, "draft": draft}
+    reason = "llm_unavailable"
+    for _attempt in range(2):
+        raw_text = generate(note, system=system, max_tokens=220, temperature=0)
+        if raw_text is None:
+            reason = "llm_unavailable"
+            continue
+        try:
+            raw = json.loads(_strip_fences(raw_text))
+        except (json.JSONDecodeError, ValueError):
+            reason = "invalid_json"
+            continue
+        draft, schema_reason = _validate_draft(raw)
+        if draft is None:
+            return {**base, "parsed": False, "reason": schema_reason}
+        return {**base, "parsed": True, "draft": draft}
+    return {**base, "parsed": False, "reason": reason}
