@@ -188,3 +188,38 @@ def test_consistency_fact_difference_counts_as_mismatch():
     second = [_result({**DRAFT, "location": "Bethpage State Park trails"})]
     assert drafts_consistent(first[0], second[0]) is False
     assert score_consistency(first, second)["score"] == 0.0
+
+
+def test_consistency_location_wording_variants_count():
+    # Same place, different words: "the dunes in Montauk" is "Montauk
+    # dunes" rephrased, and "the trailhead" is "trailhead" with an
+    # article — wording, not a different fact.
+    first = [_result({**DRAFT, "location": "Montauk dunes"})]
+    second = [_result({**DRAFT, "location": "the dunes in Montauk"})]
+    assert drafts_consistent(first[0], second[0]) is True
+    first = [_result({**DRAFT, "location": "the trailhead"})]
+    second = [_result({**DRAFT, "location": "trailhead"})]
+    assert drafts_consistent(first[0], second[0]) is True
+    # Case and punctuation don't matter either.
+    first = [_result({**DRAFT, "location": "Bethpage!"})]
+    second = [_result({**DRAFT, "location": "bethpage"})]
+    assert drafts_consistent(first[0], second[0]) is True
+
+
+def test_consistency_location_wording_still_catches_real_differences():
+    # Different place, or different specificity, is still a mismatch —
+    # normalization forgives wording, not different facts.
+    first = [_result({**DRAFT, "location": "Bethpage"})]
+    second = [_result({**DRAFT, "location": "Montauk dunes"})]
+    assert drafts_consistent(first[0], second[0]) is False
+    first = [_result({**DRAFT, "location": "Bethpage"})]
+    second = [_result({**DRAFT, "location": "Bethpage State Park"})]
+    assert drafts_consistent(first[0], second[0]) is False
+    # A location in one run and none in the other is a mismatch;
+    # none in both is consistent.
+    first = [_result({**DRAFT, "location": None})]
+    second = [_result({**DRAFT, "location": "Bethpage"})]
+    assert drafts_consistent(first[0], second[0]) is False
+    first = [_result({**DRAFT, "location": None})]
+    second = [_result({**DRAFT, "location": None})]
+    assert drafts_consistent(first[0], second[0]) is True

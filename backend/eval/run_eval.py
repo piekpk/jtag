@@ -24,6 +24,7 @@ threshold; 2 = configuration error (e.g. missing ANTHROPIC_API_KEY).
 import argparse
 import json
 import os
+import re
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -113,18 +114,51 @@ def score_hallucination(results, cases):
             "numerator": correct, "denominator": total}
 
 
+# Words dropped when normalizing a location for the consistency check:
+# articles, plus "in", the preposition that joins place words
+# ("the dunes in Montauk"). They carry no location information.
+_LOCATION_FILLERS = frozenset({"the", "a", "an", "in"})
+
+
+def _normalize_location(value):
+    """Normalize a location string for wording-insensitive comparison.
+
+    Lowercase, strip punctuation, drop filler words, and compare the
+    remaining words as a set, so "Montauk dunes" and "the dunes in
+    Montauk" count as the same place in different words. A different
+    word set — a different place, or different specificity such as
+    "Bethpage" vs "Bethpage State Park" — still counts as a mismatch.
+    None stays None; a value that normalizes to nothing becomes None.
+    """
+    if value is None:
+        return None
+    words = re.sub(r"[^a-z0-9 ]", " ", str(value).lower()).split()
+    kept = frozenset(w for w in words if w not in _LOCATION_FILLERS)
+    return kept or None
+
+
 def drafts_consistent(a, b):
     """True when two parse results agree on the facts.
 
     Title is wording, not a fact (the eval scores it non-empty only), so
     it is excluded: at temperature 1.0 two runs of the same note often
-    title it differently while agreeing on every fact. A case that fails
-    to parse in either run never counts as consistent.
+    title it differently while agreeing on every fact. Location is
+    compared wording-insensitively (see _normalize_location): the same
+    place phrased differently — "Montauk dunes" vs "the dunes in
+    Montauk" — is the same fact, while a different place or different
+    specificity is not. A case that fails to parse in either run never
+    counts as consistent.
     """
     if not a.get("parsed") or not b.get("parsed"):
         return False
     da, db = a.get("draft") or {}, b.get("draft") or {}
-    return all(da.get(field) == db.get(field) for field in SCORED_FIELDS)
+    for field in SCORED_FIELDS:
+        if field == "location":
+            if _normalize_location(da.get(field)) != _normalize_location(db.get(field)):
+                return False
+        elif da.get(field) != db.get(field):
+            return False
+    return True
 
 
 def score_consistency(first, second):
@@ -134,7 +168,8 @@ def score_consistency(first, second):
     (it rejects the temperature parameter), so two runs of the same note
     can differ in wording. Comparing whole drafts would fail a run for
     re-titling the same meetup; only the fact fields (date, time,
-    location, expected_attendees) are compared. A case that fails to
+    location, expected_attendees) are compared, and location is compared
+    wording-insensitively (see _normalize_location). A case that fails to
     parse in either run counts as a mismatch.
     """
     identical = sum(1 for a, b in zip(first, second)
