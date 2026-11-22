@@ -14,6 +14,7 @@ import run_eval
 from run_eval import (
     THRESHOLDS,
     bias_pair_pass,
+    drafts_consistent,
     score_bias,
     score_consistency,
     score_field_accuracy,
@@ -170,4 +171,20 @@ def test_consistency_identical_and_changed():
 def test_consistency_unparsed_run_counts_as_mismatch():
     first = [_result(dict(DRAFT))]
     second = [_result(None, parsed=False)]
+    assert score_consistency(first, second)["score"] == 0.0
+
+
+def test_consistency_title_only_difference_still_counts():
+    # Same facts, re-titled: wording is not a fact, so this is consistent.
+    first = [_result(dict(DRAFT))]
+    second = [_result({**DRAFT, "title": "Trail Run"})]
+    assert drafts_consistent(first[0], second[0]) is True
+    assert score_consistency(first, second)["score"] == 1.0
+
+
+def test_consistency_fact_difference_counts_as_mismatch():
+    # Same title, different location wording: the facts moved, so it is not.
+    first = [_result(dict(DRAFT))]
+    second = [_result({**DRAFT, "location": "Bethpage State Park trails"})]
+    assert drafts_consistent(first[0], second[0]) is False
     assert score_consistency(first, second)["score"] == 0.0

@@ -113,16 +113,32 @@ def score_hallucination(results, cases):
             "numerator": correct, "denominator": total}
 
 
-def score_consistency(first, second):
-    """Fraction of re-run cases whose drafts are identical.
+def drafts_consistent(a, b):
+    """True when two parse results agree on the facts.
 
-    Both runs use temperature 0, so the same note should parse the same way
-    every time. A case that fails to parse in either run counts as a
-    mismatch (its drafts are not identical).
+    Title is wording, not a fact (the eval scores it non-empty only), so
+    it is excluded: at temperature 1.0 two runs of the same note often
+    title it differently while agreeing on every fact. A case that fails
+    to parse in either run never counts as consistent.
+    """
+    if not a.get("parsed") or not b.get("parsed"):
+        return False
+    da, db = a.get("draft") or {}, b.get("draft") or {}
+    return all(da.get(field) == db.get(field) for field in SCORED_FIELDS)
+
+
+def score_consistency(first, second):
+    """Fraction of re-run cases whose drafts agree on the facts.
+
+    The parser passes temperature 0, but Claude runs at the API default
+    (it rejects the temperature parameter), so two runs of the same note
+    can differ in wording. Comparing whole drafts would fail a run for
+    re-titling the same meetup; only the fact fields (date, time,
+    location, expected_attendees) are compared. A case that fails to
+    parse in either run counts as a mismatch.
     """
     identical = sum(1 for a, b in zip(first, second)
-                    if a.get("parsed") and b.get("parsed")
-                    and a.get("draft") == b.get("draft"))
+                    if drafts_consistent(a, b))
     total = len(first)
     return {"score": identical / total if total else 0.0,
             "numerator": identical, "denominator": total}
