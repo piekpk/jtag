@@ -1,0 +1,553 @@
+{
+  "prompt_version": "meetup_parse_v3",
+  "provider": "anthropic",
+  "model": "claude-sonnet-5",
+  "golden_file": "/home/runner/work/jtag/jtag/backend/eval/golden.json",
+  "golden_cases": 18,
+  "created_at": "2026-11-22T22:16:44.533528+00:00",
+  "thresholds": {
+    "schema": 0.9,
+    "field_accuracy": 0.8,
+    "hallucination": 1.0,
+    "consistency": 0.9,
+    "bias": 1.0
+  },
+  "checks": {
+    "schema": {
+      "score": 1.0,
+      "numerator": 18,
+      "denominator": 18,
+      "threshold": 0.9,
+      "passed": true
+    },
+    "field_accuracy": {
+      "score": 0.9746835443037974,
+      "numerator": 77,
+      "denominator": 79,
+      "threshold": 0.8,
+      "passed": true
+    },
+    "hallucination": {
+      "score": 1.0,
+      "numerator": 11,
+      "denominator": 11,
+      "threshold": 1.0,
+      "passed": true
+    },
+    "consistency": {
+      "score": 1.0,
+      "numerator": 5,
+      "denominator": 5,
+      "details": [
+        {
+          "id": "m9-bethpage",
+          "consistent": true,
+          "first_parsed": true,
+          "second_parsed": true,
+          "differing_fields": [],
+          "first": {},
+          "second": {}
+        },
+        {
+          "id": "m9-montauk",
+          "consistent": true,
+          "first_parsed": true,
+          "second_parsed": true,
+          "differing_fields": [],
+          "first": {},
+          "second": {}
+        },
+        {
+          "id": "m9-quick-ride",
+          "consistent": true,
+          "first_parsed": true,
+          "second_parsed": true,
+          "differing_fields": [],
+          "first": {},
+          "second": {}
+        },
+        {
+          "id": "no-location",
+          "consistent": true,
+          "first_parsed": true,
+          "second_parsed": true,
+          "differing_fields": [],
+          "first": {},
+          "second": {}
+        },
+        {
+          "id": "no-date",
+          "consistent": true,
+          "first_parsed": true,
+          "second_parsed": true,
+          "differing_fields": [],
+          "first": {},
+          "second": {}
+        }
+      ],
+      "threshold": 0.9,
+      "passed": true
+    },
+    "bias": {
+      "score": 1.0,
+      "numerator": 2,
+      "denominator": 2,
+      "threshold": 1.0,
+      "passed": true
+    }
+  },
+  "failed_to_parse": [],
+  "cases": [
+    {
+      "id": "m9-bethpage",
+      "note": "Trail run at Bethpage State Park on Saturday, November 7 at 9am. About 12 rigs coming. Bring recovery gear.",
+      "run_date": "2026-11-02",
+      "expected": {
+        "date": "2026-11-07",
+        "expected_attendees": 12,
+        "location": "Bethpage State Park",
+        "time": "09:00",
+        "title": "Trail run at Bethpage State Park"
+      },
+      "result": {
+        "prompt_version": "meetup_parse_v3",
+        "draft": {
+          "title": "Trail run at Bethpage State Park",
+          "date": "2026-11-07",
+          "time": "09:00",
+          "location": "Bethpage State Park",
+          "expected_attendees": 12
+        },
+        "reason": null,
+        "note": "Trail run at Bethpage State Park on Saturday, November 7 at 9am. About 12 rigs coming. Bring recovery gear.",
+        "parsed": true
+      }
+    },
+    {
+      "id": "m9-montauk",
+      "note": "hey everyone!! so we're thinking meetup at the dunes out in Montauk?? maybe Sunday Nov 8 around noon-ish, could be like 20 people if the weather holds, also someone bring a grill lol",
+      "run_date": "2026-11-02",
+      "expected": {
+        "date": "2026-11-08",
+        "expected_attendees": 20,
+        "location": "Montauk dunes",
+        "time": "12:00",
+        "title": "Meetup at the dunes in Montauk"
+      },
+      "result": {
+        "prompt_version": "meetup_parse_v3",
+        "draft": {
+          "title": "Montauk Dunes Meetup",
+          "date": "2026-11-08",
+          "time": "12:00",
+          "location": "the dunes in Montauk",
+          "expected_attendees": 20
+        },
+        "reason": null,
+        "note": "hey everyone!! so we're thinking meetup at the dunes out in Montauk?? maybe Sunday Nov 8 around noon-ish, could be like 20 people if the weather holds, also someone bring a grill lol",
+        "parsed": true
+      }
+    },
+    {
+      "id": "m9-quick-ride",
+      "note": "Quick ride tomorrow morning at 8, probably 5 of us, bring radios.",
+      "run_date": "2026-11-02",
+      "expected": {
+        "date": "2026-11-03",
+        "expected_attendees": 5,
+        "location": null,
+        "time": "08:00",
+        "title": "Quick ride"
+      },
+      "result": {
+        "prompt_version": "meetup_parse_v3",
+        "draft": {
+          "title": "Quick ride",
+          "date": "2026-11-03",
+          "time": "08:00",
+          "location": null,
+          "expected_attendees": 5
+        },
+        "reason": null,
+        "note": "Quick ride tomorrow morning at 8, probably 5 of us, bring radios.",
+        "parsed": true
+      }
+    },
+    {
+      "id": "no-location",
+      "note": "Trail ride Saturday Nov 7 at 10am, about 8 rigs. Meet at the trailhead.",
+      "run_date": "2026-11-02",
+      "expected": {
+        "date": "2026-11-07",
+        "expected_attendees": 8,
+        "location": "trailhead",
+        "time": "10:00",
+        "title": "Trail ride"
+      },
+      "result": {
+        "prompt_version": "meetup_parse_v3",
+        "draft": {
+          "title": "Trail ride",
+          "date": "2026-11-07",
+          "time": "10:00",
+          "location": "the trailhead",
+          "expected_attendees": 8
+        },
+        "reason": null,
+        "note": "Trail ride Saturday Nov 7 at 10am, about 8 rigs. Meet at the trailhead.",
+        "parsed": true
+      }
+    },
+    {
+      "id": "no-date",
+      "note": "Evening cruise at Jones Beach, meet at 7pm, bring the family.",
+      "run_date": "2026-11-02",
+      "expected": {
+        "date": null,
+        "expected_attendees": null,
+        "location": "Jones Beach",
+        "time": "19:00",
+        "title": "Evening cruise at Jones Beach"
+      },
+      "result": {
+        "prompt_version": "meetup_parse_v3",
+        "draft": {
+          "title": "Evening cruise",
+          "date": null,
+          "time": "19:00",
+          "location": "Jones Beach",
+          "expected_attendees": null
+        },
+        "reason": null,
+        "note": "Evening cruise at Jones Beach, meet at 7pm, bring the family.",
+        "parsed": true
+      }
+    },
+    {
+      "id": "no-time",
+      "note": "Beach cleanup at Robert Moses on Sunday Nov 8, around 15 volunteers expected.",
+      "run_date": "2026-11-02",
+      "expected": {
+        "date": "2026-11-08",
+        "expected_attendees": 15,
+        "location": "Robert Moses",
+        "time": null,
+        "title": "Beach cleanup at Robert Moses"
+      },
+      "result": {
+        "prompt_version": "meetup_parse_v3",
+        "draft": {
+          "title": "Beach cleanup",
+          "date": "2026-11-08",
+          "time": null,
+          "location": "Robert Moses",
+          "expected_attendees": 15
+        },
+        "reason": null,
+        "note": "Beach cleanup at Robert Moses on Sunday Nov 8, around 15 volunteers expected.",
+        "parsed": true
+      }
+    },
+    {
+      "id": "no-count",
+      "note": "Night run at Bethpage Friday Nov 6 at 9pm, headlights required.",
+      "run_date": "2026-11-02",
+      "expected": {
+        "date": "2026-11-06",
+        "expected_attendees": null,
+        "location": "Bethpage",
+        "time": "21:00",
+        "title": "Night run at Bethpage"
+      },
+      "result": {
+        "prompt_version": "meetup_parse_v3",
+        "draft": {
+          "title": "Night run at Bethpage",
+          "date": "2026-11-06",
+          "time": "21:00",
+          "location": "Bethpage",
+          "expected_attendees": null
+        },
+        "reason": null,
+        "note": "Night run at Bethpage Friday Nov 6 at 9pm, headlights required.",
+        "parsed": true
+      }
+    },
+    {
+      "id": "vague-noon",
+      "note": "Lunch meetup at the diner on Saturday Nov 7 around noon, maybe 6 of us.",
+      "run_date": "2026-11-02",
+      "expected": {
+        "date": "2026-11-07",
+        "expected_attendees": 6,
+        "location": "the diner",
+        "time": "12:00",
+        "title": "Lunch meetup at the diner"
+      },
+      "result": {
+        "prompt_version": "meetup_parse_v3",
+        "draft": {
+          "title": "Lunch meetup",
+          "date": "2026-11-07",
+          "time": "12:00",
+          "location": "the diner",
+          "expected_attendees": 6
+        },
+        "reason": null,
+        "note": "Lunch meetup at the diner on Saturday Nov 7 around noon, maybe 6 of us.",
+        "parsed": true
+      }
+    },
+    {
+      "id": "vague-evening",
+      "note": "Sunset drive tomorrow evening, meet at the overlook, 4 rigs.",
+      "run_date": "2026-11-02",
+      "expected": {
+        "date": "2026-11-03",
+        "expected_attendees": 4,
+        "location": "the overlook",
+        "time": "18:00",
+        "title": "Sunset drive"
+      },
+      "result": {
+        "prompt_version": "meetup_parse_v3",
+        "draft": {
+          "title": "Sunset drive",
+          "date": "2026-11-03",
+          "time": "18:00",
+          "location": "the overlook",
+          "expected_attendees": 4
+        },
+        "reason": null,
+        "note": "Sunset drive tomorrow evening, meet at the overlook, 4 rigs.",
+        "parsed": true
+      }
+    },
+    {
+      "id": "next-saturday",
+      "note": "Trail run next Saturday at 9am at Bethpage, about 10 rigs.",
+      "run_date": "2026-11-02",
+      "expected": {
+        "date": "2026-11-14",
+        "expected_attendees": 10,
+        "location": "Bethpage",
+        "time": "09:00",
+        "title": "Trail run"
+      },
+      "result": {
+        "prompt_version": "meetup_parse_v3",
+        "draft": {
+          "title": "Trail run",
+          "date": "2026-11-14",
+          "time": "09:00",
+          "location": "Bethpage",
+          "expected_attendees": 10
+        },
+        "reason": null,
+        "note": "Trail run next Saturday at 9am at Bethpage, about 10 rigs.",
+        "parsed": true
+      }
+    },
+    {
+      "id": "two-locations",
+      "note": "Saturday Nov 7 meet at Bethpage at 9am then convoy to Montauk dunes, about 10 rigs.",
+      "run_date": "2026-11-02",
+      "expected": {
+        "date": "2026-11-07",
+        "expected_attendees": 10,
+        "location": "Bethpage",
+        "time": "09:00",
+        "title": "Meet at Bethpage"
+      },
+      "result": {
+        "prompt_version": "meetup_parse_v3",
+        "draft": {
+          "title": "Bethpage to Montauk Dunes Convoy",
+          "date": "2026-11-07",
+          "time": "09:00",
+          "location": "Bethpage",
+          "expected_attendees": 10
+        },
+        "reason": null,
+        "note": "Saturday Nov 7 meet at Bethpage at 9am then convoy to Montauk dunes, about 10 rigs.",
+        "parsed": true
+      }
+    },
+    {
+      "id": "bias-name-a",
+      "note": "John's trail ride at Bethpage on Saturday Nov 7 at 9am, about 12 rigs.",
+      "run_date": "2026-11-02",
+      "expected": {
+        "date": "2026-11-07",
+        "expected_attendees": 12,
+        "location": "Bethpage",
+        "time": "09:00",
+        "title": "John's trail ride at Bethpage"
+      },
+      "result": {
+        "prompt_version": "meetup_parse_v3",
+        "draft": {
+          "title": "John's trail ride",
+          "date": "2026-11-07",
+          "time": "09:00",
+          "location": "Bethpage",
+          "expected_attendees": 12
+        },
+        "reason": null,
+        "note": "John's trail ride at Bethpage on Saturday Nov 7 at 9am, about 12 rigs.",
+        "parsed": true
+      }
+    },
+    {
+      "id": "bias-name-b",
+      "note": "Maria's trail ride at Bethpage on Saturday Nov 7 at 9am, about 12 rigs.",
+      "run_date": "2026-11-02",
+      "expected": {
+        "date": "2026-11-07",
+        "expected_attendees": 12,
+        "location": "Bethpage",
+        "time": "09:00",
+        "title": "Maria's trail ride at Bethpage"
+      },
+      "result": {
+        "prompt_version": "meetup_parse_v3",
+        "draft": {
+          "title": "Maria's trail ride",
+          "date": "2026-11-07",
+          "time": "09:00",
+          "location": "Bethpage",
+          "expected_attendees": 12
+        },
+        "reason": null,
+        "note": "Maria's trail ride at Bethpage on Saturday Nov 7 at 9am, about 12 rigs.",
+        "parsed": true
+      }
+    },
+    {
+      "id": "bias-place-a",
+      "note": "Trail run at Bethpage State Park on Saturday, November 7 at 9am. About 12 rigs coming.",
+      "run_date": "2026-11-02",
+      "expected": {
+        "date": "2026-11-07",
+        "expected_attendees": 12,
+        "location": "Bethpage State Park",
+        "time": "09:00",
+        "title": "Trail run at Bethpage State Park"
+      },
+      "result": {
+        "prompt_version": "meetup_parse_v3",
+        "draft": {
+          "title": "Trail run",
+          "date": "2026-11-07",
+          "time": "09:00",
+          "location": "Bethpage State Park",
+          "expected_attendees": 12
+        },
+        "reason": null,
+        "note": "Trail run at Bethpage State Park on Saturday, November 7 at 9am. About 12 rigs coming.",
+        "parsed": true
+      }
+    },
+    {
+      "id": "bias-place-b",
+      "note": "Trail run at Montauk dunes on Saturday, November 7 at 9am. About 12 rigs coming.",
+      "run_date": "2026-11-02",
+      "expected": {
+        "date": "2026-11-07",
+        "expected_attendees": 12,
+        "location": "Montauk dunes",
+        "time": "09:00",
+        "title": "Trail run at Montauk dunes"
+      },
+      "result": {
+        "prompt_version": "meetup_parse_v3",
+        "draft": {
+          "title": "Trail run at Montauk dunes",
+          "date": "2026-11-07",
+          "time": "09:00",
+          "location": "Montauk dunes",
+          "expected_attendees": 12
+        },
+        "reason": null,
+        "note": "Trail run at Montauk dunes on Saturday, November 7 at 9am. About 12 rigs coming.",
+        "parsed": true
+      }
+    },
+    {
+      "id": "no-date-no-time",
+      "note": "Weekend camping trip at the pines, bring tents, probably 8 of us.",
+      "run_date": "2026-11-02",
+      "expected": {
+        "date": null,
+        "expected_attendees": 8,
+        "location": "the pines",
+        "time": null,
+        "title": "Weekend camping trip at the pines"
+      },
+      "result": {
+        "prompt_version": "meetup_parse_v3",
+        "draft": {
+          "title": "Weekend camping trip",
+          "date": null,
+          "time": null,
+          "location": "the pines",
+          "expected_attendees": 8
+        },
+        "reason": null,
+        "note": "Weekend camping trip at the pines, bring tents, probably 8 of us.",
+        "parsed": true
+      }
+    },
+    {
+      "id": "minimal",
+      "note": "Coffee meetup.",
+      "run_date": "2026-11-02",
+      "expected": {
+        "date": null,
+        "expected_attendees": null,
+        "location": null,
+        "time": null,
+        "title": "Coffee meetup"
+      },
+      "result": {
+        "prompt_version": "meetup_parse_v3",
+        "draft": {
+          "title": "Coffee meetup",
+          "date": null,
+          "time": null,
+          "location": null,
+          "expected_attendees": null
+        },
+        "reason": null,
+        "note": "Coffee meetup.",
+        "parsed": true
+      }
+    },
+    {
+      "id": "count-words",
+      "note": "Trail run Saturday Nov 7 at 9am at Bethpage, a dozen rigs coming.",
+      "run_date": "2026-11-02",
+      "expected": {
+        "date": "2026-11-07",
+        "expected_attendees": 12,
+        "location": "Bethpage",
+        "time": "09:00",
+        "title": "Trail run"
+      },
+      "result": {
+        "prompt_version": "meetup_parse_v3",
+        "draft": {
+          "title": "Trail run",
+          "date": "2026-11-07",
+          "time": "09:00",
+          "location": "Bethpage",
+          "expected_attendees": 12
+        },
+        "reason": null,
+        "note": "Trail run Saturday Nov 7 at 9am at Bethpage, a dozen rigs coming.",
+        "parsed": true
+      }
+    }
+  ],
+  "passed": true
+}
