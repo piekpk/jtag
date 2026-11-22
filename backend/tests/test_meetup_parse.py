@@ -28,12 +28,21 @@ def test_valid_output_parsed(monkeypatch):
     _mock_generate(monkeypatch, V1)
     result = parse_meetup_note(V1_NOTE, today=date(2026, 11, 2))
     assert result["parsed"] is True
-    assert result["prompt_version"] == "meetup_parse_v2"
+    assert result["prompt_version"] == "meetup_parse_v3"
     assert result["draft"] == {
         "title": "Trail run at Bethpage State Park",
         "date": "2026-11-07", "time": "09:00",
         "location": "Bethpage State Park", "expected_attendees": 12,
     }
+
+
+def test_prompt_v3_guards_empty_and_multi_location():
+    prompt = meetup_parse._load_prompt(date(2026, 11, 2))
+    assert prompt is not None
+    assert "MUST always output the JSON object" in prompt
+    assert "never output nothing" in prompt
+    assert "use the first one" in prompt
+    assert '"evening" -> 18:00' in prompt
 
 
 def test_missing_location_stays_null(monkeypatch):
@@ -202,7 +211,7 @@ def test_parse_endpoint_success(client, user_a, monkeypatch):
     body = response.json()
     assert body["parsed"] is True
     assert body["draft"]["title"] == "Trail run at Bethpage State Park"
-    assert body["prompt_version"] == "meetup_parse_v2"
+    assert body["prompt_version"] == "meetup_parse_v3"
 
 
 def test_parse_endpoint_fallback_when_llm_down(client, user_a, monkeypatch):

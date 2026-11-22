@@ -1,7 +1,7 @@
 # Meetup-note parser — evaluation suite (Sprint 3)
 
 Golden-set evaluation for the LLM feature (`POST /meetups/parse`, backed by
-`backend/meetup_parse.py`, prompt `prompts/meetup_parse_v2.txt`).
+`backend/meetup_parse.py`, prompt `prompts/meetup_parse_v3.txt`).
 
 ## Run it (one command, from the repo root)
 

@@ -1,7 +1,7 @@
 """Parse a free-text meetup note into a structured draft with the LLM.
 
 Sprint 3 LLM feature. The prompt is versioned in
-``prompts/meetup_parse_v2.txt`` (loaded at runtime, never edited in place);
+``prompts/meetup_parse_v3.txt`` (loaded at runtime, never edited in place);
 the provider is ``llm.generate`` — Claude (Anthropic) when
 ``LLM_PROVIDER=anthropic`` (``ANTHROPIC_API_KEY``, model via
 ``ANTHROPIC_MODEL``, default ``claude-sonnet-5``), OpenAI when
@@ -11,14 +11,14 @@ the Anthropic provider omits it — claude-sonnet-5 rejects the parameter
 
 The parser NEVER raises for model problems. It returns a result dict:
 
-    {"parsed": True, "prompt_version": "meetup_parse_v2",
+    {"parsed": True, "prompt_version": "meetup_parse_v3",
      "draft": {"title": ..., "date": ..., "time": ...,
                "location": ..., "expected_attendees": ...},
      "reason": None, "note": <original note>}
 
 or, when the model is unavailable or its output is unusable:
 
-    {"parsed": False, "prompt_version": "meetup_parse_v2",
+    {"parsed": False, "prompt_version": "meetup_parse_v3",
      "draft": None, "reason": "llm_unavailable" | "invalid_json" |
      "invalid_schema" | "prompt_unavailable", "note": <original note>,
      "raw_text": <the model's last raw output, or None if it sent none>}
@@ -41,7 +41,7 @@ from pathlib import Path
 
 from llm import generate
 
-PROMPT_VERSION = "meetup_parse_v2"
+PROMPT_VERSION = "meetup_parse_v3"
 PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / f"{PROMPT_VERSION}.txt"
 MAX_NOTE_CHARS = 500
 MAX_TITLE_CHARS = 80

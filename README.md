@@ -150,7 +150,7 @@ Type a meetup in plain words ("Trail ride Saturday 10am at Bethpage, about
 draft — title, date, time, location, expected attendees — which the meetup
 form pre-fills for review; nothing is created until the user taps Create
 meetup, and `POST /meetups` still validates everything. The prompt is
-versioned in `prompts/meetup_parse_v2.txt` (see `prompts/README.md` — a
+versioned in `prompts/meetup_parse_v3.txt` (see `prompts/README.md` — a
 prompt change is a new file, never an edit in place). The provider is
 Claude (Anthropic) (`LLM_PROVIDER=anthropic`, model `claude-sonnet-5` via `ANTHROPIC_MODEL`); the
 key comes from `ANTHROPIC_API_KEY` — in GitHub Secrets for CI, never in code.

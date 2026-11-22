@@ -16,4 +16,11 @@ version it ran against.
 - `meetup_parse_v2.txt` — v1 plus the "next Saturday" rule: "next Saturday"
   (or "next Sunday", etc.) means the Saturday of next week, not the coming
   one. Fixes the eval's next-saturday case, which v1 parsed as the coming
-  Saturday. Current version (see `backend/meetup_parse.py`).
+  Saturday.
+- `meetup_parse_v3.txt` — v2 plus three rules for the eval's repeat
+  offenders: always output the JSON object (never empty, never explain,
+  never ask — null for uncertain fields); "evening" -> 18:00 alongside the
+  noon example; if the note names more than one place, use the first one
+  (the meeting point, not a later destination). Fixes vague-evening
+  (failed all three eval runs) and two-locations (failed two of three).
+  Current version (see `backend/meetup_parse.py`).
