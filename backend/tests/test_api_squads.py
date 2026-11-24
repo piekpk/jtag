@@ -136,3 +136,67 @@ def test_leave_squad_leader_400(client, user_a):
         "DELETE", f"/squads/{squad['id']}/leave", headers=a_headers
     )
     assert response.status_code == 400
+
+
+# --- Delete squad (S2.8, #102): DELETE /squads/{id}, leader only ---
+
+
+def test_delete_squad_leader_success_gone_from_discovery(client, user_a, user_b):
+    _a_id, a_headers = user_a
+    _b_id, b_headers = user_b
+    squad = _make_squad(client, a_headers)
+    response = client.delete(f"/squads/{squad['id']}", headers=a_headers)
+    assert response.status_code == 200, response.text
+    listing = client.get("/squads", headers=b_headers)
+    assert listing.status_code == 200, listing.text
+    assert all(s["id"] != squad["id"] for s in listing.json())
+    join = client.post(f"/squads/{squad['id']}/join", headers=b_headers)
+    assert join.status_code == 404
+
+
+def test_delete_squad_member_403_squad_unchanged(client, user_a, user_b):
+    _a_id, a_headers = user_a
+    _b_id, b_headers = user_b
+    squad = _make_squad(client, a_headers)
+    joined = client.post(f"/squads/{squad['id']}/join", headers=b_headers)
+    assert joined.status_code == 200, joined.text
+    response = client.delete(f"/squads/{squad['id']}", headers=b_headers)
+    assert response.status_code == 403
+    listing = client.get("/squads", headers=a_headers)
+    assert any(s["id"] == squad["id"] for s in listing.json())
+
+
+def test_delete_squad_non_member_403(client, user_a, user_b):
+    _a_id, a_headers = user_a
+    _b_id, b_headers = user_b
+    squad = _make_squad(client, a_headers)
+    response = client.delete(f"/squads/{squad['id']}", headers=b_headers)
+    assert response.status_code == 403
+    listing = client.get("/squads", headers=a_headers)
+    assert any(s["id"] == squad["id"] for s in listing.json())
+
+
+def test_delete_squad_former_member_mine_empty(client, user_a, user_b):
+    _a_id, a_headers = user_a
+    _b_id, b_headers = user_b
+    squad = _make_squad(client, a_headers)
+    joined = client.post(f"/squads/{squad['id']}/join", headers=b_headers)
+    assert joined.status_code == 200, joined.text
+    deleted = client.delete(f"/squads/{squad['id']}", headers=a_headers)
+    assert deleted.status_code == 200, deleted.text
+    mine = client.get("/squads?mine=true", headers=b_headers)
+    assert mine.status_code == 200, mine.text
+    assert all(s["id"] != squad["id"] for s in mine.json())
+
+
+def test_delete_squad_not_found_404(client, user_a):
+    _a_id, a_headers = user_a
+    response = client.delete("/squads/999999", headers=a_headers)
+    assert response.status_code == 404
+
+
+def test_delete_squad_unauthenticated_401(client, user_a):
+    _a_id, a_headers = user_a
+    squad = _make_squad(client, a_headers)
+    response = client.delete(f"/squads/{squad['id']}")
+    assert response.status_code == 401
