@@ -53,6 +53,28 @@ class SquadResponse(BaseModel):
         from_attributes = True
 
 
+class SquadMemberDetail(BaseModel):
+    """One member in a squad detail payload.
+
+    Deliberately carries no email: member lists are visible to other
+    users, and email exposure in list/profile responses is a known
+    open issue the team has not decided to widen.
+    """
+
+    user_id: int
+    display_name: Optional[str] = None
+    role: str
+    joined_at: Optional[datetime] = None
+    profile_picture_url: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class SquadDetailResponse(SquadResponse):
+    members: list[SquadMemberDetail] = []
+
+
 class RigCreate(BaseModel):
     year: Optional[int] = None
     make: Optional[str] = None
